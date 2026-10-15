@@ -44,7 +44,7 @@ class MainActivity : Activity() {
         window.statusBarColor = bg
         window.navigationBarColor = bg
         buildUi()
-        val saved = getSharedPreferences("forcarede", MODE_PRIVATE).getString("btc_address", "") ?: ""
+        val saved = getSharedPreferences("forcarede", MODE_PRIVATE).getString("public_address", "") ?: ""
         addressInput.setText(saved)
         if (saved.isNotBlank()) connectAddress()
     }
@@ -86,7 +86,7 @@ class MainActivity : Activity() {
         addressCard.addView(text("Cole um endereço público de recebimento. Nunca cole frase-semente, chave privada ou senha.", 12f, muted, false))
         addressCard.addView(space(12))
         addressInput = EditText(this).apply {
-            hint = "Endereço BTC (bc1…, 1… ou 3…)"
+            hint = "BTC, ETH/EVM (0x…), Solana, LTC…"
             setHintTextColor(Color.rgb(91, 111, 130)); setTextColor(white); textSize = 13f
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             maxLines = 3; setPadding(dp(12), dp(12), dp(12), dp(12))
@@ -132,9 +132,9 @@ class MainActivity : Activity() {
         root.addView(space(12))
 
         val metrics = card()
-        metrics.addView(text("SALDO BTC CONFIRMADO", 11f, muted, true))
+        metrics.addView(text("SALDO PÚBLICO DA REDE", 11f, muted, true))
         metrics.addView(space(7))
-        balanceView = text("— BTC", 30f, cyan, true)
+        balanceView = text("—", 30f, cyan, true)
         metrics.addView(balanceView)
         metrics.addView(space(4))
         txView = text("Transações confirmadas: —", 12f, white, false)
@@ -172,7 +172,7 @@ class MainActivity : Activity() {
         logs.addView(logView)
         root.addView(logs)
         root.addView(space(18))
-        root.addView(text("ForçaRede • APIs públicas Bitcoin/NiceHash • sem chaves privadas", 10f, muted, false))
+        root.addView(text("ForçaRede • leitura pública multirrede • sem chaves privadas", 10f, muted, false))
     }
 
     private fun scanPublicProviders() {
@@ -276,22 +276,35 @@ class MainActivity : Activity() {
         return count + sample + metrics
     }
 
-    private data class AddressInfo(val network: String, val type: String)
+    private data class AddressInfo(val network: String, val type: String, val kind: String)
 
-    private fun identifyBitcoinAddress(address: String): AddressInfo? {
-        if (address.any { it.isWhitespace() }) return null
+    // Detecta formatos comuns. Endereços EVM (0x...) são compartilhados por várias redes,
+    // por isso consultamos várias redes EVM em vez de adivinhar uma só.
+    private fun identifyAddress(address: String): AddressInfo? {
+        if (address.isBlank() || address.any { it.isWhitespace() }) return null
         val lower = address.lowercase(Locale.ROOT)
         return when {
             lower.startsWith("bc1p") && address.length in 58..62 ->
-                AddressInfo("Bitcoin Mainnet", "SegWit v1 / Taproot (bc1p)")
+                AddressInfo("Bitcoin", "SegWit v1 / Taproot", "btc")
             lower.startsWith("bc1q") && address.length in 42..62 ->
-                AddressInfo("Bitcoin Mainnet", "SegWit v0 (bc1q)")
-            address.startsWith("1") && address.length in 26..35 ->
-                AddressInfo("Bitcoin Mainnet", "Legacy P2PKH (1…)")
-            address.startsWith("3") && address.length in 26..35 ->
-                AddressInfo("Bitcoin Mainnet", "Script P2SH (3…)")
+                AddressInfo("Bitcoin", "SegWit v0", "btc")
+            (address.startsWith("1") || address.startsWith("3")) && address.length in 26..35 ->
+                AddressInfo("Bitcoin", "Legacy / P2SH", "btc")
+            address.matches(Regex("^0x[0-9a-fA-F]{40}$")) ->
+                AddressInfo("Redes EVM compatíveis", "Endereço hexadecimal 0x; rede não é dedutível só pelo endereço", "evm")
+            address.matches(Regex("^[1-9A-HJ-NP-Za-km-z]{32,44}$")) ->
+                AddressInfo("Solana ou outra rede Base58", "Formato Base58; Solana será testada", "sol")
+            lower.startsWith("ltc1") || (address.startsWith("L") && address.length in 26..35) ||
+                (address.startsWith("M") && address.length in 26..35) ->
+                AddressInfo("Litecoin", "Formato provável Litecoin", "unsupported")
+            address.startsWith("D") && address.length in 26..35 ->
+                AddressInfo("Dogecoin", "Formato provável Dogecoin", "unsupported")
+            address.startsWith("T") && address.length == 34 ->
+                AddressInfo("TRON", "Formato provável TRON", "unsupported")
+            address.startsWith("r") && address.length in 25..35 ->
+                AddressInfo("XRP Ledger", "Formato provável XRP", "unsupported")
             lower.startsWith("tb1") || address.startsWith("m") || address.startsWith("n") || address.startsWith("2") ->
-                AddressInfo("Possível Bitcoin Testnet", "Endereço de teste; consulta mainnet desativada")
+                AddressInfo("Bitcoin Testnet", "Endereço de teste", "testnet")
             else -> null
         }
     }
@@ -299,65 +312,123 @@ class MainActivity : Activity() {
     private fun connectAddress() {
         val address = addressInput.text.toString().trim()
         if (address.isBlank()) {
-            statusView.text = "Estado: cole um endereço público Bitcoin."
+            statusView.text = "Estado: cole um endereço público de uma rede compatível."
             return
         }
-        val info = identifyBitcoinAddress(address)
+        val info = identifyAddress(address)
         if (info == null) {
-            networkView.text = "Rede: endereço não reconhecido"
-            statusView.text = "Não foi possível reconhecer um formato Bitcoin compatível."
-            logView.text = "• Nenhuma conexão foi iniciada.\n• Confira se colou um endereço público BTC completo.\n• Endereços de outras moedas ainda não são suportados."
+            networkView.text = "Rede: formato ainda não reconhecido"
+            statusView.text = "Não reconheci esse formato entre as redes implementadas."
+            logView.text = "• Nenhuma conexão foi iniciada.\n• Confira o endereço público e a rede de origem.\n• Não cole seed phrase, chave privada ou senha."
             return
         }
         networkView.text = "Rede: ${info.network}\nTipo: ${info.type}"
-        if (info.network != "Bitcoin Mainnet") {
-            statusView.text = "Endereço de teste detectado; nenhum saldo mainnet consultado."
-            logView.text = "• Formato identificado como rede de teste.\n• Para evitar exibir dados da rede errada, a consulta foi interrompida."
-            return
-        }
-        getSharedPreferences("forcarede", MODE_PRIVATE).edit().putString("btc_address", address).apply()
+        getSharedPreferences("forcarede", MODE_PRIVATE).edit().putString("public_address", address).apply()
         connectButton.isEnabled = false
-        connectButton.text = "CONECTANDO À API PÚBLICA…"
-        statusView.text = "Estado: endereço reconhecido; consultando blockchain pública…"
-        logView.text = "• Rede identificada: Bitcoin Mainnet.\n• Consultando mempool.space.\n• Isso não inicia mineração ou pagamento."
+        connectButton.text = "CONSULTANDO REDES PÚBLICAS…"
+        statusView.text = "Estado: formato reconhecido; consultando APIs públicas…"
+        balanceView.text = "Consultando…"
+        txView.text = "Transações: consultando…"
+        logView.text = "• Consulta somente de leitura iniciada.\n• O endereço público não dá acesso à carteira.\n• Nenhuma mineração, compra ou transferência foi iniciada."
         executor.execute {
-            var conn: HttpURLConnection? = null
             try {
-                conn = (URL("https://mempool.space/api/address/" + address).openConnection() as HttpURLConnection).apply {
-                    requestMethod = "GET"; connectTimeout = 12000; readTimeout = 12000
-                    setRequestProperty("Accept", "application/json")
+                val result = when (info.kind) {
+                    "btc" -> queryBitcoinAddress(address)
+                    "evm" -> queryEvmAddress(address)
+                    "sol" -> querySolanaAddress(address)
+                    "testnet" -> "Rede de teste detectada. Saldo mainnet não consultado."
+                    else -> "Formato reconhecido como provável ${info.network}, mas a consulta de saldo dessa rede ainda não foi implementada. Nenhum saldo foi inventado."
                 }
-                val code = conn.responseCode
-                val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-                val body = stream.bufferedReader().use { it.readText() }
-                if (code !in 200..299) throw IllegalStateException("API respondeu HTTP $code")
-                val json = JSONObject(body)
-                val chain = json.getJSONObject("chain_stats")
-                val funded = chain.optLong("funded_txo_sum", 0L)
-                val spent = chain.optLong("spent_txo_sum", 0L)
-                val sats = (funded - spent).coerceAtLeast(0L)
-                val txs = chain.optInt("tx_count", 0)
-                val btc = sats / 100_000_000.0
                 val time = SimpleDateFormat("dd/MM HH:mm:ss", Locale("pt", "BR")).format(Date())
                 runOnUiThread {
-                    balanceView.text = DecimalFormat("0.00000000").format(btc).replace(',', '.') + " BTC"
-                    statusView.text = "Estado: consulta pública concluída"
-                    txView.text = "Transações confirmadas: $txs"
+                    balanceView.text = if (result.startsWith("Consulta falhou")) "Não confirmado" else "Veja abaixo"
+                    txView.text = result
+                    statusView.text = if (result.startsWith("Consulta falhou")) "Estado: API não confirmou" else "Estado: análise concluída"
                     updatedView.text = "Atualização: $time"
-                    logView.text = "• Bitcoin Mainnet reconhecida.\n• Dados recebidos de mempool.space.\n• Saldo confirmado não representa lucro ou rendimento de mineração.\n• Provedor remunerado: não conectado."
+                    logView.text = "• Formato analisado: ${info.network}.\n• Dados são de APIs públicas, quando disponíveis.\n• EVM: mesmo endereço pode existir em várias redes.\n• Consulta de saldo não significa renda ou mineração."
                     connectButton.isEnabled = true
-                    connectButton.text = "CONECTAR E IDENTIFICAR"
+                    connectButton.text = "CONSULTAR OUTRO ENDEREÇO"
                 }
             } catch (e: Exception) {
                 runOnUiThread {
-                    statusView.text = "Estado: consulta não confirmada • ${e.message ?: "erro de rede"}"
-                    logView.text = "• O endereço foi reconhecido pelo formato, mas a API não confirmou a consulta.\n• Verifique a conexão e tente novamente.\n• Nenhum saldo ou rendimento foi inventado."
+                    balanceView.text = "Não confirmado"
+                    statusView.text = "Estado: consulta não confirmada"
+                    txView.text = e.message ?: "Falha de rede"
+                    updatedView.text = "Atualização: —"
+                    logView.text = "• A API não confirmou os dados.\n• Nenhum saldo foi simulado.\n• Tente novamente mais tarde."
                     connectButton.isEnabled = true
                     connectButton.text = "TENTAR NOVAMENTE"
                 }
-            } finally {
-                conn?.disconnect()
             }
+        }
+    }
+
+    private fun queryBitcoinAddress(address: String): String {
+        val json = fetchPublicJson("https://mempool.space/api/address/" + address)
+        val chain = json.getJSONObject("chain_stats")
+        val sats = (chain.optLong("funded_txo_sum", 0L) - chain.optLong("spent_txo_sum", 0L)).coerceAtLeast(0L)
+        val txs = chain.optInt("tx_count", 0)
+        return "Bitcoin confirmado: " + DecimalFormat("0.00000000").format(sats / 100_000_000.0).replace(',', '.') +
+            " BTC\nTransações confirmadas: $txs"
+    }
+
+    private fun queryEvmAddress(address: String): String {
+        val networks = listOf(
+            "Ethereum" to "https://cloudflare-eth.com",
+            "Base" to "https://mainnet.base.org",
+            "Polygon" to "https://polygon-rpc.com",
+            "BNB Chain" to "https://bsc-dataseed.binance.org",
+            "Arbitrum One" to "https://arb1.arbitrum.io/rpc",
+            "Optimism" to "https://mainnet.optimism.io"
+        )
+        val lines = ArrayList<String>()
+        for ((name, endpoint) in networks) {
+            try {
+                val request = JSONObject().put("jsonrpc", "2.0").put("method", "eth_getBalance")
+                    .put("params", org.json.JSONArray().put(address).put("latest")).put("id", 1)
+                val response = postJson(endpoint, request)
+                val hex = response.optString("result")
+                if (hex.startsWith("0x")) {
+                    val wei = java.math.BigInteger(hex.substring(2).ifBlank { "0" }, 16)
+                    val eth = java.math.BigDecimal(wei).divide(java.math.BigDecimal("1000000000000000000"), 8, java.math.RoundingMode.DOWN)
+                    lines.add("$name: $eth moeda nativa")
+                } else lines.add("$name: resposta sem saldo")
+            } catch (_: Exception) {
+                lines.add("$name: API indisponível")
+            }
+        }
+        return lines.joinToString("\n") + "\nObservação: tokens ERC-20 e histórico detalhado não estão incluídos nesta leitura."
+    }
+
+    private fun querySolanaAddress(address: String): String {
+        val request = JSONObject().put("jsonrpc", "2.0").put("id", 1)
+            .put("method", "getBalance").put("params", org.json.JSONArray().put(address))
+        val response = postJson("https://api.mainnet-beta.solana.com", request)
+        val lamports = response.optJSONObject("result")?.optLong("value", -1L) ?: -1L
+        if (lamports < 0L) return "Consulta falhou: a API Solana não devolveu saldo."
+        val sol = java.math.BigDecimal(lamports).divide(java.math.BigDecimal("1000000000"), 9, java.math.RoundingMode.DOWN)
+        return "Solana: $sol SOL\nConsulta de saldo nativo; tokens SPL não incluídos."
+    }
+
+    private fun postJson(endpoint: String, payload: JSONObject): JSONObject {
+        var conn: HttpURLConnection? = null
+        try {
+            conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                doOutput = true
+                connectTimeout = 10000
+                readTimeout = 12000
+                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("Accept", "application/json")
+            }
+            conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+            val code = conn.responseCode
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            val body = stream.bufferedReader().use { it.readText() }
+            if (code !in 200..299) throw IllegalStateException("API respondeu HTTP $code")
+            return JSONObject(body)
+        } finally {
+            conn?.disconnect()
         }
     }
 
