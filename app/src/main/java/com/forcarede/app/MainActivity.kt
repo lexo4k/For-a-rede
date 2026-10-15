@@ -89,6 +89,84 @@ class MainActivity : Activity() {
         root.addView(hero)
         root.addView(space(12))
 
+        // Dashboard visual: indicators honestos, sem inventar hashrate ou recompensas.
+        val dashboard = card().apply {
+            background = rounded(Color.rgb(10, 28, 43), 20, Color.rgb(48, 91, 111))
+        }
+        val dashTop = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val dashTitle = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+        }
+        dashTitle.addView(text("PAINEL DE CONTROLE", 11f, cyan, true))
+        dashTitle.addView(space(4))
+        dashTitle.addView(text("Tudo sob controle. Dados reais.", 17f, white, true))
+        val liveBadge = TextView(this).apply {
+            text = "●  PRONTO"
+            textSize = 10f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.rgb(128, 240, 176))
+            setPadding(dp(10), dp(7), dp(10), dp(7))
+            background = rounded(Color.rgb(18, 49, 45), 99, Color.rgb(41, 105, 89))
+        }
+        dashTop.addView(dashTitle)
+        dashTop.addView(liveBadge)
+        dashboard.addView(dashTop)
+        dashboard.addView(space(14))
+
+        val statRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        fun statTile(label: String, value: String, accent: Int): LinearLayout {
+            val tile = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(11), dp(12), dp(8), dp(12))
+                background = rounded(Color.rgb(7, 21, 34), 13, Color.rgb(34, 59, 77))
+            }
+            tile.addView(text(label, 10f, muted, false))
+            tile.addView(space(7))
+            tile.addView(text(value, 16f, accent, true))
+            return tile
+        }
+        val connectionTile = statTile("CONEXAO", "Desligada", Color.rgb(255, 210, 122))
+        val workTile = statTile("TRABALHO", "Nao iniciado", white)
+        statRow.addView(connectionTile, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = dp(7) })
+        statRow.addView(workTile, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(7) })
+        dashboard.addView(statRow)
+        dashboard.addView(space(10))
+        dashboard.addView(text("Nenhum provedor esta executando trabalho remunerado neste momento. Use as acoes abaixo para consultar fontes reais.", 12f, muted, false))
+        dashboard.addView(space(12))
+        val quickActions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val quickWallet = Button(this).apply {
+            text = "CONSULTAR SALDO"
+            isAllCaps = false
+            textSize = 11f
+            setTextColor(bg)
+            typeface = Typeface.DEFAULT_BOLD
+            background = rounded(cyan, 12)
+            elevation = dp(3).toFloat()
+            setOnClickListener { hideKeyboard(); connectAddress() }
+        }
+        val quickProviders = Button(this).apply {
+            text = "ANALISAR PROVEDORES"
+            isAllCaps = false
+            textSize = 11f
+            setTextColor(white)
+            typeface = Typeface.DEFAULT_BOLD
+            background = rounded(Color.rgb(24, 49, 70), 12, Color.rgb(61, 103, 127))
+            elevation = dp(2).toFloat()
+            setOnClickListener { scanPublicProviders() }
+        }
+        quickActions.addView(quickWallet, LinearLayout.LayoutParams(0, dp(46), 1f).apply { marginEnd = dp(5) })
+        quickActions.addView(quickProviders, LinearLayout.LayoutParams(0, dp(46), 1f).apply { marginStart = dp(5) })
+        dashboard.addView(quickActions)
+        root.addView(dashboard)
+        root.addView(space(12))
+
         val addressCard = card()
         addressCard.addView(text("ENDEREÇO PÚBLICO", 13f, white, true))
         addressCard.addView(space(5))
@@ -104,7 +182,7 @@ class MainActivity : Activity() {
         addressCard.addView(addressInput, LinearLayout.LayoutParams(-1, dp(58)))
         addressCard.addView(space(10))
         connectButton = Button(this).apply {
-            text = "CONECTAR E IDENTIFICAR"
+            text = "⚡  CONECTAR E IDENTIFICAR"
             isAllCaps = false; textSize = 14f; setTextColor(bg); typeface = Typeface.DEFAULT_BOLD
             background = rounded(cyan, 12)
             setOnClickListener { hideKeyboard(); connectAddress() }
@@ -162,7 +240,7 @@ class MainActivity : Activity() {
         provider.addView(text("O endereço é apenas o destino de pagamento. Esta tela consulta dados públicos da NiceHash, sem login e sem comprar potência. A consulta não inicia mineração.", 12f, muted, false))
         provider.addView(space(10))
         scanButton = Button(this).apply {
-            text = "ANALISAR SERVIÇOS REAIS"
+            text = "✦  ANALISAR SERVIÇOS REAIS"
             isAllCaps = false; textSize = 14f; setTextColor(bg); typeface = Typeface.DEFAULT_BOLD
             background = rounded(cyan, 12)
             setOnClickListener { scanPublicProviders() }
@@ -228,7 +306,7 @@ class MainActivity : Activity() {
         }
         direct.addView(stratumTlsCheck)
         stratumButton = Button(this).apply {
-            text = "TESTAR LIGAÇÃO DIRETA"
+            text = "↗  TESTAR LIGAÇÃO DIRETA"
             isAllCaps = false; textSize = 14f; setTextColor(bg); typeface = Typeface.DEFAULT_BOLD
             background = rounded(cyan, 12)
             setOnClickListener { testDirectStratum() }
