@@ -230,7 +230,13 @@ class MainActivity : Activity() {
 
     private fun summarizePublicJson(json: JSONObject): String {
         val names = ArrayList<String>()
+        val details = ArrayList<String>()
         var itemCount = 0
+        val usefulFields = setOf(
+            "algorithm", "market", "name", "symbol", "paying", "profitability",
+            "price", "speed", "hashrate", "marketFactor", "minSpeedLimit",
+            "maxSpeedLimit", "a", "p", "s"
+        )
         fun walk(value: Any?) {
             when (value) {
                 is JSONObject -> {
@@ -240,6 +246,20 @@ class MainActivity : Activity() {
                         }
                     }
                     if (label.isNotBlank() && label != "null" && names.size < 6 && !names.contains(label)) names.add(label)
+                    if (details.size < 5) {
+                        val fields = ArrayList<String>()
+                        val keys = value.keys()
+                        while (keys.hasNext()) {
+                            val key = keys.next()
+                            if (key in usefulFields) {
+                                val raw = value.opt(key)
+                                if (raw is String || raw is Number || raw is Boolean) {
+                                    fields.add("$key=$raw")
+                                }
+                            }
+                        }
+                        if (fields.isNotEmpty()) details.add(fields.take(5).joinToString(", "))
+                    }
                     val keys = value.keys()
                     while (keys.hasNext()) walk(value.opt(keys.next()))
                 }
@@ -250,9 +270,10 @@ class MainActivity : Activity() {
             }
         }
         walk(json)
-        val count = if (itemCount > 0) "$itemCount itens no conjunto principal" else "resposta JSON recebida"
+        val count = if (itemCount > 0) "$itemCount itens encontrados" else "resposta JSON recebida"
         val sample = if (names.isNotEmpty()) "\nExemplos: " + names.take(6).joinToString(", ") else ""
-        return count + sample
+        val metrics = if (details.isNotEmpty()) "\nDados da API: " + details.joinToString(" | ") else ""
+        return count + sample + metrics
     }
 
     private data class AddressInfo(val network: String, val type: String)
