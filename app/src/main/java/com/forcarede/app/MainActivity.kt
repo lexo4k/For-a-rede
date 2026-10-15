@@ -36,6 +36,8 @@ class MainActivity : Activity() {
     private lateinit var connectButton: Button
     private lateinit var logView: TextView
     private lateinit var providerView: TextView
+    private lateinit var marketView: TextView
+    private lateinit var scanButton: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -148,7 +150,18 @@ class MainActivity : Activity() {
         providerView = text("Estado: nenhum provedor conectado.", 15f, Color.rgb(255, 210, 122), true)
         provider.addView(providerView)
         provider.addView(space(6))
-        provider.addView(text("Importante: um endereço de carteira identifica o destino de pagamento, não o provedor nem o servidor de mineração. Para iniciar trabalho real, o serviço precisa oferecer um endpoint/protocolo ou API e, quando exigido, credenciais autorizadas. Esta versão ainda não inicia mineração nem compra computação.", 12f, muted, false))
+        provider.addView(text("O endereço é apenas o destino de pagamento. Esta tela consulta dados públicos da NiceHash, sem login e sem comprar potência. A consulta não inicia mineração.", 12f, muted, false))
+        provider.addView(space(10))
+        scanButton = Button(this).apply {
+            text = "ANALISAR SERVIÇOS REAIS"
+            isAllCaps = false; textSize = 14f; setTextColor(bg); typeface = Typeface.DEFAULT_BOLD
+            background = rounded(cyan, 12)
+            setOnClickListener { scanPublicProviders() }
+        }
+        provider.addView(scanButton, LinearLayout.LayoutParams(-1, dp(48)))
+        provider.addView(space(9))
+        marketView = text("Mercado: ainda não consultado.\nCredenciais privadas: não configuradas.\nMineração ativa: não confirmada.", 13f, white, false)
+        provider.addView(marketView)
         root.addView(provider)
         root.addView(space(12))
 
@@ -159,7 +172,87 @@ class MainActivity : Activity() {
         logs.addView(logView)
         root.addView(logs)
         root.addView(space(18))
-        root.addView(text("ForçaRede • consulta pública mempool.space • sem chaves privadas", 10f, muted, false))
+        root.addView(text("ForçaRede • APIs públicas Bitcoin/NiceHash • sem chaves privadas", 10f, muted, false))
+    }
+
+    private fun scanPublicProviders() {
+        scanButton.isEnabled = false
+        scanButton.text = "CONSULTANDO DADOS PÚBLICOS…"
+        providerView.text = "Consulta pública em andamento"
+        marketView.text = "Consultando catálogo de algoritmos e mercados da NiceHash…"
+        logView.text = "• Iniciada consulta somente de leitura à API pública NiceHash.\n• Nenhuma ordem foi criada e nenhum saldo foi movimentado."
+        executor.execute {
+            try {
+                val algorithms = fetchPublicJson("https://api2.nicehash.com/main/api/v2/mining/algorithms/")
+                val markets = fetchPublicJson("https://api2.nicehash.com/main/api/v2/mining/markets/")
+                val global = fetchPublicJson("https://api2.nicehash.com/main/api/v2/public/stats/global/current/")
+                val algoSummary = summarizePublicJson(algorithms)
+                val marketSummary = summarizePublicJson(markets)
+                val globalSummary = summarizePublicJson(global)
+                runOnUiThread {
+                    providerView.text = "NiceHash: API pública respondeu"
+                    marketView.text = "ALGORITMOS DISPONÍVEIS\n$algoSummary\n\nMERCADOS PUBLICADOS\n$marketSummary\n\nESTATÍSTICAS PÚBLICAS\n$globalSummary\n\nConta autenticada: não conectada\nMineração ativa: não confirmada"
+                    logView.text = "• Consulta real concluída na API pública NiceHash.\n• Dados de catálogo/mercado não significam lucro garantido.\n• Nenhuma máquina foi iniciada e nenhuma compra foi feita.\n• Para ler saldo e rigs da conta, é necessário backend seguro com credenciais autorizadas."
+                    scanButton.isEnabled = true
+                    scanButton.text = "ATUALIZAR ANÁLISE"
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    providerView.text = "NiceHash: consulta não confirmada"
+                    marketView.text = "Não foi possível concluir a consulta pública.\n${e.message ?: "Erro de rede"}\n\nNenhuma mineração foi iniciada."
+                    logView.text = "• A API pública não confirmou a consulta.\n• Confira a internet e tente novamente.\n• Nenhum dado foi simulado."
+                    scanButton.isEnabled = true
+                    scanButton.text = "TENTAR CONSULTAR NOVAMENTE"
+                }
+            }
+        }
+    }
+
+    private fun fetchPublicJson(endpoint: String): JSONObject {
+        var conn: HttpURLConnection? = null
+        try {
+            conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 10000
+                readTimeout = 10000
+                setRequestProperty("Accept", "application/json")
+                setRequestProperty("User-Agent", "ForcaRede-Android/1.1")
+            }
+            val code = conn.responseCode
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            val body = stream.bufferedReader().use { it.readText() }
+            if (code !in 200..299) throw IllegalStateException("HTTP $code em ${URL(endpoint).path}")
+            return JSONObject(body)
+        } finally {
+            conn?.disconnect()
+        }
+    }
+
+    private fun summarizePublicJson(json: JSONObject): String {
+        val names = ArrayList<String>()
+        var itemCount = 0
+        fun walk(value: Any?) {
+            when (value) {
+                is JSONObject -> {
+                    val label = value.optString("name").ifBlank {
+                        value.optString("algorithm").ifBlank {
+                            value.optString("market").ifBlank { value.optString("symbol") }
+                        }
+                    }
+                    if (label.isNotBlank() && label != "null" && names.size < 6 && !names.contains(label)) names.add(label)
+                    val keys = value.keys()
+                    while (keys.hasNext()) walk(value.opt(keys.next()))
+                }
+                is org.json.JSONArray -> {
+                    itemCount = maxOf(itemCount, value.length())
+                    for (i in 0 until minOf(value.length(), 30)) walk(value.opt(i))
+                }
+            }
+        }
+        walk(json)
+        val count = if (itemCount > 0) "$itemCount itens no conjunto principal" else "resposta JSON recebida"
+        val sample = if (names.isNotEmpty()) "\nExemplos: " + names.take(6).joinToString(", ") else ""
+        return count + sample
     }
 
     private data class AddressInfo(val network: String, val type: String)
