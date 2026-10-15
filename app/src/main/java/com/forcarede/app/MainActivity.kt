@@ -106,7 +106,7 @@ class MainActivity : Activity() {
             text = "Apagar endereço salvo"; isAllCaps = false; textSize = 12f; setTextColor(white)
             background = rounded(Color.rgb(23, 44, 64), 12, Color.rgb(43, 69, 91))
             setOnClickListener {
-                getSharedPreferences("forcarede", MODE_PRIVATE).edit().remove("btc_address").apply()
+                getSharedPreferences("forcarede", MODE_PRIVATE).edit().remove("public_address").remove("btc_address").apply()
                 addressInput.setText("")
                 balanceView.text = "— BTC"
                 statusView.text = "Nenhum endereço consultado"
@@ -292,8 +292,6 @@ class MainActivity : Activity() {
                 AddressInfo("Bitcoin", "Legacy / P2SH", "btc")
             address.matches(Regex("^0x[0-9a-fA-F]{40}$")) ->
                 AddressInfo("Redes EVM compatíveis", "Endereço hexadecimal 0x; rede não é dedutível só pelo endereço", "evm")
-            address.matches(Regex("^[1-9A-HJ-NP-Za-km-z]{32,44}$")) ->
-                AddressInfo("Solana ou outra rede Base58", "Formato Base58; Solana será testada", "sol")
             lower.startsWith("ltc1") || (address.startsWith("L") && address.length in 26..35) ||
                 (address.startsWith("M") && address.length in 26..35) ->
                 AddressInfo("Litecoin", "Formato provável Litecoin", "unsupported")
@@ -303,6 +301,8 @@ class MainActivity : Activity() {
                 AddressInfo("TRON", "Formato provável TRON", "unsupported")
             address.startsWith("r") && address.length in 25..35 ->
                 AddressInfo("XRP Ledger", "Formato provável XRP", "unsupported")
+            address.matches(Regex("^[1-9A-HJ-NP-Za-km-z]{32,44}$")) ->
+                AddressInfo("Solana ou outra rede Base58", "Formato Base58; Solana será testada", "sol")
             lower.startsWith("tb1") || address.startsWith("m") || address.startsWith("n") || address.startsWith("2") ->
                 AddressInfo("Bitcoin Testnet", "Endereço de teste", "testnet")
             else -> null
