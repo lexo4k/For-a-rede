@@ -1,6 +1,15 @@
 # ForçaRede ⚡
 
+**Versão Android: 1.3.0**
+
 Aplicativo Android nativo para identificar endereços Bitcoin públicos, consultar dados confirmados da blockchain e servir de base para integrações verificáveis com redes de computação distribuída.
+
+## Novidades da versão 1.3.0
+
+- Painel inicial redesenhado com cartões de estado e botões de ação destacados.
+- Ações rápidas para consultar saldo público e analisar os dados públicos da NiceHash.
+- Indicadores deixam explícito quando a conexão e o trabalho remunerado não foram iniciados.
+- O visual não apresenta hashrate, saldo ou rendimento fictícios.
 
 ## O que funciona nesta versão
 
