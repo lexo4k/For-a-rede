@@ -105,7 +105,6 @@ class MainActivity : Activity() {
             setTextColor(white)
             textSize = 13f
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-            singleLine = false
             maxLines = 3
             setPadding(dp(12), dp(12), dp(12), dp(12))
             background = rounded(Color.rgb(7, 21, 34), 12, Color.rgb(43, 69, 91))
