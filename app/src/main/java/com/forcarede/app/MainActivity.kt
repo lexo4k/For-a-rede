@@ -310,7 +310,7 @@ class MainActivity : Activity() {
                     linesRead++
                     val response = try { JSONObject(line) } catch (_: Exception) { continue }
                     if (response.optInt("id", -1) == 1) {
-                        subscribed = response.opt("result") != null && response.opt("error") == org.json.JSONObject.NULL
+                        subscribed = response.opt("result") != null && response.isNull("error")
                         break
                     }
                 }
