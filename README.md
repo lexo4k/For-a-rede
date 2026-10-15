@@ -5,22 +5,22 @@ Aplicativo Android nativo para identificar endereços Bitcoin públicos, consult
 ## O que funciona nesta versão
 
 - Interface Android nativa adaptada para celular.
-- Botão **Conectar e identificar** para reconhecer formatos comuns de endereços Bitcoin mainnet: Legacy (1…), P2SH (3…), SegWit (bc1q…) e Taproot (bc1p…).
-- Recusa consulta mainnet quando reconhece formatos comuns de testnet, evitando misturar redes.
-- Consulta saldo confirmado e contagem de transações pela API pública mempool.space.
+- Identificação inicial de formatos comuns de Bitcoin, endereços EVM (0x…), Solana e reconhecimento de formatos prováveis de Litecoin, Dogecoin, TRON e XRP.
+- Consulta saldo público nativo de Bitcoin, Solana e redes EVM selecionadas quando as APIs públicas respondem; tokens e históricos completos ainda não estão incluídos.
 - Salva o endereço público somente no armazenamento local do aparelho.
+- **Teste de ligação direta Stratum V1 por TCP/TLS**, com host, porta e credenciais de worker informados pelo usuário. A senha não é salva.
 - Mensagens de erro de rede; não inventa saldo, hashrate, conexão de mineração nem rendimento.
 - Compilação automática do APK com GitHub Actions.
 
 ## O que ainda NÃO está implementado
 
-- **Não minera Bitcoin ou outras moedas.**
-- **Não conecta a um provedor de computação remunerada nem aluga máquinas.**
+- **Ainda não minera Bitcoin ou outras moedas.** O teste Stratum verifica o handshake e a autorização, mas não faz hashing nem envia shares.
+- **Ainda não conecta automaticamente a vários provedores nem aluga máquinas.**
 - Não envia transações e não faz pagamentos por conta própria.
-- Não consulta saldos de outras moedas além de BTC.
-- Não há integração autenticada com a API NiceHash ou com um marketplace de hashrate.
+- O suporte multirrede é parcial e a identificação do formato não garante que o endereço seja válido.
+- Não há integração autenticada com a conta NiceHash nem seleção automática de provedores.
 
-Um endereço de carteira informa onde os pagamentos podem ser recebidos; ele não identifica por si só o provedor, o endpoint de mineração, o algoritmo, a conta do serviço nem as credenciais necessárias. Para iniciar processamento remunerado, cada provedor precisa ser integrado por meio da API ou protocolo que oferece. Algumas operações exigem conta, chaves de API ou saldo disponível. O aplicativo não deve iniciar compras ou cobranças sem consentimento explícito.
+Um endereço de carteira informa onde os pagamentos podem ser recebidos; ele não identifica por si só o provedor, o endpoint de mineração, o algoritmo, a conta do serviço nem as credenciais necessárias. Para iniciar processamento remunerado sem API HTTP, um caminho possível é integrar diretamente um protocolo de mineração como Stratum V1, com endpoint, credenciais e um motor de hashing compatível. O teste direto atual só confirma a comunicação e a autorização; não executa o motor de mineração. Cada provedor usa protocolos e regras próprios. Algumas operações exigem conta, chaves de API ou saldo disponível. O aplicativo não deve iniciar compras ou cobranças sem consentimento explícito.
 
 ## Baixar o APK
 
