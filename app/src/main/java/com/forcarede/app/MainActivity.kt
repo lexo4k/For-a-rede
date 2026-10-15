@@ -296,11 +296,17 @@ class MainActivity : Activity() {
                     Socket(host, port)
                 }
                 socket.soTimeout = 7000
+                if (socket is javax.net.ssl.SSLSocket) {
+                    socket.sslParameters = socket.sslParameters.apply {
+                        endpointIdentificationAlgorithm = "HTTPS"
+                    }
+                    socket.startHandshake()
+                }
                 val reader = socket.getInputStream().bufferedReader(Charsets.UTF_8)
                 val writer = socket.getOutputStream().bufferedWriter(Charsets.UTF_8)
                 writer.write(JSONObject().put("id", 1).put("method", "mining.subscribe")
                     .put("params", org.json.JSONArray().put("ForcaRede/1.2")).toString())
-                writer.write("\\n")
+                writer.write("\n")
                 writer.flush()
 
                 var subscribed = false
@@ -317,7 +323,7 @@ class MainActivity : Activity() {
                 if (!subscribed) throw IllegalStateException("Servidor não confirmou mining.subscribe. Confira host, porta, TLS e compatibilidade Stratum V1.")
                 writer.write(JSONObject().put("id", 2).put("method", "mining.authorize")
                     .put("params", org.json.JSONArray().put(worker).put(password)).toString())
-                writer.write("\\n")
+                writer.write("\n")
                 writer.flush()
                 var authorized: Boolean? = null
                 linesRead = 0
@@ -326,7 +332,7 @@ class MainActivity : Activity() {
                     linesRead++
                     val response = try { JSONObject(line) } catch (_: Exception) { continue }
                     if (response.optInt("id", -1) == 2) {
-                        authorized = response.optBoolean("result", false) && response.opt("error") == org.json.JSONObject.NULL
+                        authorized = response.optBoolean("result", false) && response.isNull("error")
                         break
                     }
                 }
