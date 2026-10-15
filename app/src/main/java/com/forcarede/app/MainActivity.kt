@@ -14,6 +14,8 @@ import android.widget.*
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.Socket
+import javax.net.ssl.SSLSocketFactory
 import java.text.DecimalFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -38,6 +40,13 @@ class MainActivity : Activity() {
     private lateinit var providerView: TextView
     private lateinit var marketView: TextView
     private lateinit var scanButton: Button
+    private lateinit var stratumHostInput: EditText
+    private lateinit var stratumPortInput: EditText
+    private lateinit var stratumUserInput: EditText
+    private lateinit var stratumPasswordInput: EditText
+    private lateinit var stratumTlsCheck: CheckBox
+    private lateinit var stratumButton: Button
+    private lateinit var stratumStatusView: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -171,6 +180,64 @@ class MainActivity : Activity() {
         logView = text("• Aplicativo iniciado.\n• A identificação consulta apenas dados públicos.\n• Nenhum trabalho remunerado foi iniciado.", 12f, muted, false)
         logs.addView(logView)
         root.addView(logs)
+        root.addView(space(12))
+
+        val direct = card()
+        direct.addView(text("LIGAÇÃO DIRETA • STRATUM V1", 13f, white, true))
+        direct.addView(space(6))
+        direct.addView(text("Este modo tenta falar diretamente com um servidor de mineração por TCP/TLS, sem consultar API HTTP. Informe um servidor e credenciais aceitos por ele. Nesta etapa, o teste confirma apenas o protocolo e a autorização, não inicia hashing nem gera ganhos.", 12f, muted, false))
+        direct.addView(space(10))
+        stratumHostInput = EditText(this).apply {
+            hint = "Servidor (ex.: stratum.exemplo.net)"
+            setHintTextColor(Color.rgb(91, 111, 130)); setTextColor(white); textSize = 13f
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            setSingleLine(true); setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = rounded(Color.rgb(7, 21, 34), 12, Color.rgb(43, 69, 91))
+        }
+        direct.addView(stratumHostInput, LinearLayout.LayoutParams(-1, dp(48)))
+        direct.addView(space(7))
+        stratumPortInput = EditText(this).apply {
+            hint = "Porta (ex.: 3333 ou 443)"
+            setHintTextColor(Color.rgb(91, 111, 130)); setTextColor(white); textSize = 13f
+            inputType = InputType.TYPE_CLASS_NUMBER; setSingleLine(true)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = rounded(Color.rgb(7, 21, 34), 12, Color.rgb(43, 69, 91))
+        }
+        direct.addView(stratumPortInput, LinearLayout.LayoutParams(-1, dp(48)))
+        direct.addView(space(7))
+        stratumUserInput = EditText(this).apply {
+            hint = "Usuário/worker autorizado (às vezes endereço.moeda.worker)"
+            setHintTextColor(Color.rgb(91, 111, 130)); setTextColor(white); textSize = 13f
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            setSingleLine(true); setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = rounded(Color.rgb(7, 21, 34), 12, Color.rgb(43, 69, 91))
+        }
+        direct.addView(stratumUserInput, LinearLayout.LayoutParams(-1, dp(48)))
+        direct.addView(space(7))
+        stratumPasswordInput = EditText(this).apply {
+            hint = "Senha do worker (se exigida pelo pool)"
+            setHintTextColor(Color.rgb(91, 111, 130)); setTextColor(white); textSize = 13f
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true); setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = rounded(Color.rgb(7, 21, 34), 12, Color.rgb(43, 69, 91))
+        }
+        direct.addView(stratumPasswordInput, LinearLayout.LayoutParams(-1, dp(48)))
+        stratumTlsCheck = CheckBox(this).apply {
+            text = "Usar TLS/SSL (somente se a porta oferecer TLS)"
+            setTextColor(white); textSize = 12f; isChecked = true
+        }
+        direct.addView(stratumTlsCheck)
+        stratumButton = Button(this).apply {
+            text = "TESTAR LIGAÇÃO DIRETA"
+            isAllCaps = false; textSize = 14f; setTextColor(bg); typeface = Typeface.DEFAULT_BOLD
+            background = rounded(cyan, 12)
+            setOnClickListener { testDirectStratum() }
+        }
+        direct.addView(stratumButton, LinearLayout.LayoutParams(-1, dp(48)))
+        direct.addView(space(8))
+        stratumStatusView = text("Estado: nenhum servidor testado. Senha não será salva.", 12f, muted, false)
+        direct.addView(stratumStatusView)
+        root.addView(direct)
         root.addView(space(18))
         root.addView(text("ForçaRede • leitura pública multirrede • sem chaves privadas", 10f, muted, false))
     }
@@ -203,6 +270,82 @@ class MainActivity : Activity() {
                     logView.text = "• A API pública não confirmou a consulta.\n• Confira a internet e tente novamente.\n• Nenhum dado foi simulado."
                     scanButton.isEnabled = true
                     scanButton.text = "TENTAR CONSULTAR NOVAMENTE"
+                }
+            }
+        }
+    }
+
+    private fun testDirectStratum() {
+        val host = stratumHostInput.text.toString().trim()
+        val port = stratumPortInput.text.toString().trim().toIntOrNull()
+        val worker = stratumUserInput.text.toString().trim()
+        val password = stratumPasswordInput.text.toString()
+        if (host.isBlank() || port == null || port !in 1..65535 || worker.isBlank()) {
+            stratumStatusView.text = "Informe servidor, porta válida e usuário/worker."
+            return
+        }
+        stratumButton.isEnabled = false
+        stratumButton.text = "TESTANDO PROTOCOLO…"
+        stratumStatusView.text = "Abrindo conexão direta. Nenhum trabalho de hashing será iniciado."
+        executor.execute {
+            var socket: Socket? = null
+            try {
+                socket = if (stratumTlsCheck.isChecked) {
+                    SSLSocketFactory.getDefault().createSocket(host, port)
+                } else {
+                    Socket(host, port)
+                }
+                socket.soTimeout = 7000
+                val reader = socket.getInputStream().bufferedReader(Charsets.UTF_8)
+                val writer = socket.getOutputStream().bufferedWriter(Charsets.UTF_8)
+                writer.write(JSONObject().put("id", 1).put("method", "mining.subscribe")
+                    .put("params", org.json.JSONArray().put("ForcaRede/1.2")).toString())
+                writer.write("\\n")
+                writer.flush()
+
+                var subscribed = false
+                var linesRead = 0
+                while (linesRead < 8) {
+                    val line = reader.readLine() ?: break
+                    linesRead++
+                    val response = try { JSONObject(line) } catch (_: Exception) { continue }
+                    if (response.optInt("id", -1) == 1) {
+                        subscribed = response.opt("result") != null && response.opt("error") == org.json.JSONObject.NULL
+                        break
+                    }
+                }
+                if (!subscribed) throw IllegalStateException("Servidor não confirmou mining.subscribe. Confira host, porta, TLS e compatibilidade Stratum V1.")
+                writer.write(JSONObject().put("id", 2).put("method", "mining.authorize")
+                    .put("params", org.json.JSONArray().put(worker).put(password)).toString())
+                writer.write("\\n")
+                writer.flush()
+                var authorized: Boolean? = null
+                linesRead = 0
+                while (linesRead < 8) {
+                    val line = reader.readLine() ?: break
+                    linesRead++
+                    val response = try { JSONObject(line) } catch (_: Exception) { continue }
+                    if (response.optInt("id", -1) == 2) {
+                        authorized = response.optBoolean("result", false) && response.opt("error") == org.json.JSONObject.NULL
+                        break
+                    }
+                }
+                if (authorized == true) {
+                    runOnUiThread {
+                        stratumStatusView.text = "Conexão direta e autorização Stratum confirmadas. ATENÇÃO: hashing ainda não está implementado nesta etapa."
+                    }
+                } else {
+                    throw IllegalStateException("TCP/TLS e subscribe responderam, mas autorização não foi confirmada. Confira usuário, senha e formato exigido pelo pool.")
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    stratumStatusView.text = "Ligação não confirmada: ${e.message ?: "erro de conexão"}. Nenhuma mineração foi iniciada."
+                }
+            } finally {
+                try { socket?.close() } catch (_: Exception) {}
+                runOnUiThread {
+                    stratumButton.isEnabled = true
+                    stratumButton.text = "TESTAR LIGAÇÃO DIRETA"
                 }
             }
         }
