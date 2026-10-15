@@ -1,25 +1,36 @@
 # ForçaRede ⚡
 
-**Painel para acompanhar computação distribuída e recompensas verificadas.**
+Aplicativo Android nativo para acompanhar um endereço público Bitcoin e servir de base para integrações verificáveis com redes de computação distribuída.
 
-O ForçaRede está sendo desenvolvido para reunir, em uma interface simples, integrações legítimas com redes de computação distribuída e serviços que forneçam dados reais.
+## O que já funciona no APK
 
-## Estado atual
+- Interface Android nativa, adaptada para celular.
+- Consulta de saldo Bitcoin confirmado por endereço usando a API pública do mempool.space.
+- Exibe saldo confirmado e contagem de transações confirmadas retornadas pela API.
+- Salva o endereço público somente no armazenamento local do aparelho.
+- Tratamento de erro de rede e formato de endereço.
+- Compilação automática do APK com GitHub Actions.
 
-- [x] Interface web responsiva, pensada primeiro para celular.
-- [x] Campo para endereço público de recebimento, salvo apenas neste navegador.
-- [x] Painel de status, atividade, confirmações e eventos.
-- [x] Indicadores deixam claro quando uma integração ainda não está conectada.
-- [ ] Conector real de provedor: ainda precisa ser implementado e configurado.
-- [ ] Leitura de saldo/recompensas por API oficial ou explorador compatível.
-- [ ] Testes com dados reais antes de declarar qualquer operação ativa.
+## O que ainda não está conectado
 
-**Importante:** o painel não minera sozinho e não gera recompensas por abrir a página. Não mostra hashrate, ganhos ou confirmações inventadas. Um endereço de recebimento é específico para uma moeda/rede; um endereço público não serve necessariamente para todas elas.
+- Não minera Bitcoin ou outras moedas.
+- Não aluga nem inicia processamento em provedores externos.
+- Não envia transações e não recebe pagamentos por conta própria.
+- Não consulta saldo de outras moedas além de BTC.
+- Não há uma integração ativa de computação remunerada.
 
-### Segurança
-- Nunca cole frase-semente, chave privada, senha ou token secreto no painel.
-- Use somente APIs oficiais e serviços para os quais você tenha autorização.
-- A versão atual salva o endereço público localmente no navegador e não o envia a um servidor.
+Para receber pagamentos, use um endereço compatível com a rede/moeda do pagamento. O saldo consultado é o saldo confirmado daquele endereço, não um rendimento gerado pelo app.
 
-## Abrir
-Abra `index.html` no navegador ou publique o repositório com GitHub Pages. A interface atual é uma base visual; integrações reais ainda não estão ativas.
+## Baixar o APK
+
+A compilação mais recente bem-sucedida fica nos artefatos da execução do workflow **Build ForçaRede APK** na aba Actions do repositório. O artefato tem o nome `ForcaRede-debug-apk` e contém `app-debug.apk`. Artefatos de workflow expiram após 30 dias.
+
+## Compilar
+
+O workflow `.github/workflows/android-apk.yml` instala Java 17, Android SDK e Gradle, executa `assembleDebug` e publica o APK como artefato.
+
+## Segurança
+
+- Nunca informe frase-semente, chave privada, senha de carteira ou token secreto.
+- A consulta de saldo usa somente o endereço público.
+- Os valores exibidos vêm da resposta da API; se a API falhar, o app mostra erro e não inventa saldo.
