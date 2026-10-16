@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 API = "https://api.github.com/search/issues"
 QUERIES = ['is:issue is:open bounty', 'is:issue is:open "paid bounty"']
-# Leads observed in the first search; preserved as historical examples, not current offers.
+# Leads observed in the initial search, retained as historical leads only.
 HISTORICAL_LEADS = [
  {"title":"Accessibility and motion-preference fixes","url":"https://github.com/Parabola-org/parabola/issues/16","stated_reward":"$75 (unverified)"},
  {"title":"n8n + Claude weekly developer summary","url":"https://github.com/claude-builders-bounty/claude-builders-bounty/issues/5","stated_reward":"$200 (unverified)"},
@@ -26,11 +26,12 @@ def parse_items(items):
   if not url or url in seen: continue
   seen.add(url)
   out.append({"title":title,"url":url,"repository":url.split("/issues/")[0] if "/issues/" in url else "unknown",
-              "stated_reward":amount(title+"\n"+body),"status":"CANDIDATE_UNVERIFIED"})
+              "stated_reward":amount(title+"\n"+body),"status":"CANDIDATE_UNVERIFIED",
+              "note":"Public text only; current availability, funding and payout are not verified."})
  return out
 def fetch(q):
  params=urllib.parse.urlencode({"q":q,"per_page":30,"sort":"updated","order":"desc"})
- req=urllib.request.Request(API+"?"+params,headers={"Accept":"application/vnd.github+json","User-Agent":"GENESE-public-bounty-scanner/1.2"})
+ req=urllib.request.Request(API+"?"+params,headers={"Accept":"application/vnd.github+json","User-Agent":"GENESE-public-bounty-scanner/1.3"})
  with urllib.request.urlopen(req,timeout=20) as r: data=json.loads(r.read().decode())
  if not isinstance(data.get("items"),list): raise ValueError("Unexpected GitHub API response")
  return data["items"]
@@ -38,13 +39,18 @@ def scan(offline=False):
  items=[]; errors=[]; success=0
  if not offline:
   for q in QUERIES:
-   try: items.extend(fetch(q)); success+=1
-   except Exception as e: errors.append(f"{q}: {type(e).__name__}: {e}")
- return {"scanner":"GENESE public bounty scanner","version":"1.2","checked_at_utc":datetime.now(timezone.utc).isoformat(),
- "live_search":{"attempted":not offline,"source":API,"queries":QUERIES,"successful_queries":success,
- "candidates_found":len(parse_items(items)),"candidates":parse_items(items)[:20],"errors":errors},
- "previously_observed_leads":[dict(x,status="HISTORICAL_LEAD_UNVERIFIED",evidence="Found in initial search; current availability/funding not checked.") for x in HISTORICAL_LEADS],
- "confirmed_payments":0,"note":"No claim, PR submission, or transfer was made. An advertised reward is not proof of funds or guaranteed payment."}
+   try:
+    got=fetch(q); items.extend(got); success+=1
+    print(f"[LIVE SEARCH OK] {q!r}: {len(got)} raw results",file=sys.stderr)
+   except Exception as e:
+    errors.append(f"{q}: {type(e).__name__}: {e}")
+    print(f"[LIVE SEARCH FAILED] {q}: {type(e).__name__}: {e}",file=sys.stderr)
+ candidates=parse_items(items)
+ return {"scanner":"GENESE public bounty scanner","version":"1.3","checked_at_utc":datetime.now(timezone.utc).isoformat(),
+  "live_search":{"attempted":not offline,"source":API,"queries":QUERIES,"successful_queries":success,
+  "candidates_found":len(candidates),"candidates":candidates[:20],"errors":errors},
+  "previously_observed_leads":[dict(x,status="HISTORICAL_LEAD_UNVERIFIED",evidence="Seen in an earlier search; current availability and funding not checked.") for x in HISTORICAL_LEADS],
+  "confirmed_payments":0,"note":"No task was claimed, no code submitted to a third party, and no payment or transfer occurred."}
 def main():
  p=argparse.ArgumentParser(description=__doc__); p.add_argument("--offline",action="store_true"); p.add_argument("--output")
  a=p.parse_args(); report=scan(a.offline); s=json.dumps(report,ensure_ascii=False,indent=2); print(s)
