@@ -1,11 +1,5 @@
 name: GENESE Bounty Scanner
 on:
-  push:
-    branches:
-      - "Lexo/NutriFit"
-    paths:
-      - "tools/genese-bounty-scan/**"
-      - ".github/workflows/genese-bounty-scan.yml"
   workflow_dispatch:
   schedule:
     - cron: "17 12 * * 1"
@@ -20,13 +14,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Run scanner tests
+      - name: Run unit tests
         working-directory: tools/genese-bounty-scan
         run: python -m unittest -v
-      - name: Run live public GitHub search
+      - name: Attempt live search and save report
         working-directory: tools/genese-bounty-scan
-        run: python genese_bounty_scan.py | tee scan-results.json
-      - name: Upload scan results even if search has issues
+        run: python genese_bounty_scan.py --output scan-results.json
+      - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4
         with:
