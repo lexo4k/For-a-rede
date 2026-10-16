@@ -8,6 +8,6 @@ class Tests(unittest.TestCase):
   u="https://github.com/a/b/issues/2"; rows=[{"title":"Bounty $20","state":"open","html_url":u},{"title":"Bounty $20","state":"open","html_url":u},{"title":"Bounty $30","state":"open","html_url":"https://github.com/a/b/issues/3","pull_request":{"url":"x"}}]
   self.assertEqual(len(parse_items(rows)),1)
  def test_no_amount_invented(self): self.assertEqual(amount("payment to be discussed"),"No explicit amount found")
- def test_historical_leads_preserved(self):
+ def test_offline_leads_preserved(self):
   r=scan(offline=True); self.assertFalse(r["live_search"]["attempted"]); self.assertEqual(len(r["previously_observed_leads"]),5); self.assertEqual(r["confirmed_payments"],0)
 if __name__=="__main__": unittest.main(verbosity=2)
