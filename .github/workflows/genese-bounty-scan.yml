@@ -1,0 +1,27 @@
+name: GENESE Bounty Scanner
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 12 * * 1"
+permissions:
+  contents: read
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run scanner tests
+        working-directory: tools/genese-bounty-scan
+        run: python -m unittest -v
+      - name: Scan public GitHub issues
+        working-directory: tools/genese-bounty-scan
+        run: python genese_bounty_scan.py | tee scan-results.json
+      - name: Upload scan results
+        uses: actions/upload-artifact@v4
+        with:
+          name: genese-bounty-scan-results
+          path: tools/genese-bounty-scan/scan-results.json
+          retention-days: 7
