@@ -23,21 +23,21 @@
       <button class="nav-item" data-view="wallet">◈ <span>Carteira</span></button>
       <button class="nav-item" data-view="reports">▥ <span>Relatórios</span></button>
     </nav>
-    <div class="sidebar-foot"><span class="status-dot"></span> Modo privado · Protótipo local</div>
+    <div class="sidebar-foot"><span class="status-dot"></span> Modo privado · Servidor conectado</div>
   </aside>
   <main class="main">
     <header class="topbar">
       <div><p class="eyebrow">WORKSPACE / OWNER</p><h1 id="page-title">Visão geral</h1></div>
       <div class="owner-chip"><span class="avatar">W</span><span>Proprietário<small>Acesso privado</small></span><button id="logout-btn" class="secondary logout">Sair</button></div>
     </header>
-    <section class="notice"><strong>Ambiente local</strong><span>Dados ficam neste navegador. Ainda não há login, sincronização, catálogo automático ou pagamentos conectados. Valores são registros manuais, não saldo disponível.</span></section>
+    <section class="notice"><strong>Ambiente privado</strong><span>Dados salvos no servidor e acessíveis após login. O painel organiza registros manuais; não busca campanhas automaticamente nem recebe ou transfere pagamentos. Valores anunciados não representam saldo disponível.</span></section>
     <section id="view-overview" class="view">
       <div class="welcome"><div><p class="eyebrow">CENTRAL DE CONTROLE</p><h2>Suas oportunidades,<br><em>em um só lugar.</em></h2><p>Acompanhe oportunidades reais e registre cada etapa sem confundir estimativas com pagamentos.</p></div><div class="orb" aria-hidden="true">W</div></div>
       <div class="metric-grid">
         <article class="metric"><span>Estimativas</span><strong id="overview-estimated">R$ 0,00</strong><small>Não são saldo sacável</small></article>
         <article class="metric"><span>A confirmar</span><strong id="overview-confirmed">R$ 0,00</strong><small>Dependem do contratante</small></article>
         <article class="metric"><span>Recebido</span><strong id="overview-paid">R$ 0,00</strong><small>Registros marcados como recebidos</small></article>
-        <article class="metric"><span>Tarefas ativas</span><strong id="active-count">0</strong><small>Registros neste dispositivo</small></article>
+        <article class="metric"><span>Tarefas ativas</span><strong id="active-count">0</strong><small>Registros no servidor</small></article>
       </div>
       <div class="section-heading"><div><p class="eyebrow">COMECE POR AQUI</p><h3>Central de oportunidades</h3></div><button class="text-button" data-go="opportunities">Ver oportunidades →</button></div>
       <div class="feature-grid">
@@ -80,7 +80,7 @@
       <div class="section-heading"><div><p class="eyebrow">TRANSPARÊNCIA</p><h3>Relatórios</h3></div></div>
       <div class="panel"><p id="report-summary" class="muted">Ainda não há atividade registrada.</p><button id="export-btn" class="secondary">Exportar relatório CSV</button></div>
     </section>
-    <footer>WYNCORE · Protótipo privado · Dados locais neste navegador</footer>
+    <footer>WYNCORE · Painel privado · Dados persistidos no servidor</footer>
   </main>
   <script src="app.js"></script>
 </body>
