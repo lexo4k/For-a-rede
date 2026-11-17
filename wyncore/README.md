@@ -1,34 +1,28 @@
 # WYNCORE
 
-Private, single-owner opportunity and earnings workspace.
+Painel privado de proprietário único para organizar oportunidades, tarefas e recebimentos confirmados.
 
-## Product rules
-- Single-owner workspace. No public participant registration, teams, or referral hierarchy.
-- Catalogue for legitimate, externally funded work and campaigns.
-- Task tracking from review through provider confirmation and receipt.
-- Separate estimates, confirmed receivables, and received amounts.
-- No deposits, paid upgrades, recruitment commissions, fabricated balances, or guaranteed earnings.
-- Payment integrations stay disabled until an eligible adult business owner and a verified provider configure them lawfully.
+## Implementado
+- Backend Node.js sem dependências de terceiros.
+- Login de proprietário com senha configurada no ambiente, cookie HttpOnly, SameSite=Strict, expiração e limitação básica de tentativas.
+- API protegida para oportunidades, tarefas, histórico de alterações e exportação CSV.
+- Persistência JSON em disco, com escrita atômica.
+- Interface ligada à API: não usa mais localStorage como banco de dados.
+- PWA com cache apenas dos arquivos estáticos. Rotas de API nunca são armazenadas offline.
+- Testes automatizados para validação dos dados.
 
-## Current implementation
-- Responsive dashboard with Overview, Opportunities, Tasks, Wallet, and Reports.
-- Manual opportunity registration with HTTPS URL validation.
-- Task status tracking and CSV export.
-- Local browser persistence using localStorage.
-- PWA manifest, app icon, and service-worker shell cache for offline reopening.
-- GitHub Actions syntax and required-file checks.
+## Executar localmente
+Requer Node.js 22 ou superior.
 
-This is still a local prototype. It has no account system, server database, automatic opportunity feed, advertiser integration, task execution, payment reconciliation, or money transfer. Values entered in the UI are records only and are not funds or proof of payment.
+```bash
+cd wyncore
+WYNCORE_OWNER_PASSWORD='uma-senha-forte-com-12-ou-mais-caracteres' WYNCORE_SESSION_SECRET='use-um-segredo-aleatorio-com-32-ou-mais-caracteres' npm start
+```
 
-## Run
-Serve the `wyncore/` directory over HTTPS or localhost, then open `index.html`. Service workers and installable PWA behavior require a secure context. Opening the file directly may work for basic UI but disables offline/PWA registration.
+Abra http://localhost:3000. Para executar testes: `npm test`.
 
-## Next engineering stages
-1. Server-side authentication and authorization.
-2. Database with auditable, append-only financial events.
-3. Verified provider integrations and task evidence.
-4. Provider-backed payment reconciliation.
-5. Automated browser tests, deployment, and Android packaging.
+## Publicar no Render
+O arquivo `render.yaml` descreve o serviço web e um disco persistente. Ao criar o serviço, configure `WYNCORE_OWNER_PASSWORD` como variável secreta. `WYNCORE_SESSION_SECRET` é gerado pelo Render. O deploy ainda precisa ser autorizado na conta Render do proprietário.
 
-## Security and compliance
-Never put API secrets, bank credentials, private keys, or payment tokens in frontend code or Git. Use test data until backend, provider eligibility, and legal/business arrangements are reviewed. Financial accounts and payment-provider onboarding must follow age and identity requirements and involve a responsible adult where required.
+## Limites reais
+O sistema agora tem backend e armazenamento, mas não está conectado a contratantes, campanhas pagas, fontes automáticas de vagas ou processadores de pagamento. O cadastro é manual e o status financeiro é um registro operacional, não uma confirmação bancária. Não há promessa de renda. Integrações comerciais e contas financeiras exigem elegibilidade, revisão e autorização adequadas. Nunca coloque senhas, tokens bancários ou chaves privadas no Git.
