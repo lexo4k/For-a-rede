@@ -1,17 +1,11 @@
 name: WYNCORE checks
-
 on:
   push:
     branches: [wyncore-core]
-    paths:
-      - "wyncore/**"
-      - ".github/workflows/wyncore-check.yml"
+    paths: ["wyncore/**", ".github/workflows/wyncore-check.yml"]
   pull_request:
     branches: [wyncore-core]
-    paths:
-      - "wyncore/**"
-      - ".github/workflows/wyncore-check.yml"
-
+    paths: ["wyncore/**", ".github/workflows/wyncore-check.yml"]
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -28,3 +22,5 @@ jobs:
           test -s wyncore/styles.css
           test -s wyncore/app.js
           test -s wyncore/README.md
+          test -s wyncore/manifest.webmanifest
+          test -s wyncore/sw.js
