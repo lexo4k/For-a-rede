@@ -26,3 +26,8 @@ O arquivo `render.yaml` descreve o serviço web e um disco persistente. Ao criar
 
 ## Limites reais
 O sistema agora tem backend e armazenamento, mas não está conectado a contratantes, campanhas pagas, fontes automáticas de vagas ou processadores de pagamento. O cadastro é manual e o status financeiro é um registro operacional, não uma confirmação bancária. Não há promessa de renda. Integrações comerciais e contas financeiras exigem elegibilidade, revisão e autorização adequadas. Nunca coloque senhas, tokens bancários ou chaves privadas no Git.
+
+
+## Módulos inspirados na experiência SL
+
+A interface inclui áreas para vídeos e campanhas, aprendizagem/estágio, progressão visual SL1–SL9 e acompanhamento de indicações. A progressão é demonstrativa e baseada em tarefas marcadas manualmente como recebidas. Não representa níveis oficiais da SteadyLayout, não cria saldo, não oferece comissões por recrutamento e não processa depósitos ou saques. Vídeos e atividades só podem ser cadastrados com uma fonte e condições verificáveis. Valores anunciados, estimados, confirmados pelo contratante e efetivamente recebidos permanecem separados.
