@@ -13,6 +13,7 @@ const PROD=process.env.NODE_ENV==='production';
 const COOKIE='wyncore_session';
 const SESSION_MS=8*60*60*1000;
 const STATUSES=['Em análise','Inscrito','Em execução','Concluída, aguardando aprovação','Confirmada pelo contratante','Recebido','Descartada'];
+const PUBLIC_FILES=new Set(['/','/index.html','/styles.css','/app.js','/manifest.webmanifest','/icon.svg','/sw.js']);
 const MIME={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml','.webmanifest':'application/manifest+json'};
 const rate=new Map();
 function assertConfig(){if(!PASSWORD||PASSWORD.length<12)throw new Error('Configure WYNCORE_OWNER_PASSWORD com pelo menos 12 caracteres.');if(!SECRET||SECRET.length<32)throw new Error('Configure WYNCORE_SESSION_SECRET com pelo menos 32 caracteres.')}
@@ -35,7 +36,7 @@ const url=new URL(req.url,'http://localhost');
 if(req.method==='GET'&&url.pathname==='/health'){return send(res,200,{ok:true,service:'wyncore',storage:'persistent-json',authConfigured:Boolean(PASSWORD&&SECRET)})}
 if(req.method==='POST'&&url.pathname==='/api/login'){if(rateLimited(req))return send(res,429,{error:'Muitas tentativas. Aguarde 15 minutos.'});if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});const b=await body(req);if(!safeEqual(b.password||'',PASSWORD))return send(res,401,{error:'Senha incorreta.'});return send(res,200,{ok:true},{'Set-Cookie':cookie(makeSession(),SESSION_MS/1000)})}
 if(req.method==='POST'&&url.pathname==='/api/logout'){return send(res,200,{ok:true},{'Set-Cookie':cookie('',0)})}
-if(!url.pathname.startsWith('/api/')){const p=url.pathname==='/'?'/index.html':url.pathname;const full=path.resolve(ROOT,'.'+p);if(!full.startsWith(ROOT+path.sep))return send(res,404,{error:'Não encontrado'});try{const content=await fs.readFile(full);res.writeHead(200,{'Content-Type':MIME[path.extname(full)]||'application/octet-stream','Cache-Control':path.extname(full)==='.html'?'no-cache':'public, max-age=3600'});return res.end(content)}catch{return send(res,404,{error:'Arquivo não encontrado'})}}
+if(!url.pathname.startsWith('/api/')){const p=url.pathname==='/'?'/index.html':url.pathname;if(!PUBLIC_FILES.has(p))return send(res,404,{error:'Não encontrado'});const full=path.resolve(ROOT,'.'+p);try{const content=await fs.readFile(full);res.writeHead(200,{'Content-Type':MIME[path.extname(full)]||'application/octet-stream','Cache-Control':path.extname(full)==='.html'?'no-cache':'public, max-age=3600'});return res.end(content)}catch{return send(res,404,{error:'Arquivo não encontrado'})}}
 if(!validSession(req))return send(res,401,{error:'Sessão expirada.'});
 if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
 const d=await load();
