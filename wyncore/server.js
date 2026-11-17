@@ -31,7 +31,7 @@ async function handler(req,res){try{
  if(req.method==='POST'&&p==='/api/access-request'){
   if(limited(req))return send(res,429,{error:'Muitas tentativas. Aguarde.'});if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
   const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),pass=String(b.password||'');
-  if(name.length<2||!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)||pass.length<10)err('Informe nome, e-mail válido e senha com pelo menos 10 caracteres.');
+  if(name.length<2||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||pass.length<10)err('Informe nome, e-mail válido e senha com pelo menos 10 caracteres.');
   const d=await load();if(d.users.some(u=>u.email===email)||d.participants.some(u=>u.email===email))err('Este e-mail já está cadastrado.',409);
   const person=D.requestAccess(d,{name,email});d.users.push({id:person.id,email,passwordHash:await hashPassword(pass)});await save(d);return send(res,201,{ok:true,message:'Cadastro recebido. Aguarde a liberação da equipe.'});
  }
