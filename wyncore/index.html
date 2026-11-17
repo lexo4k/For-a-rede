@@ -13,6 +13,7 @@
   <title>WYNCORE | Painel privado</title>
 </head>
 <body>
+  <section id="auth-screen" class="auth-screen hidden"><form id="login-form" class="auth-card"><div class="brand-mark">W</div><p class="eyebrow">PRIVATE WORKSPACE</p><h1>WYNCORE</h1><p class="muted">Acesso exclusivo do proprietário.</p><label>Senha de acesso<input id="owner-password" type="password" autocomplete="current-password" minlength="12" required></label><button class="primary" type="submit">Entrar no painel</button><p id="login-error" class="auth-error" role="alert"></p></form></section>
   <aside class="sidebar">
     <a class="brand" href="#"><span class="brand-mark">W</span><span>WYNCORE<small>PRIVATE WORKSPACE</small></span></a>
     <nav aria-label="Navegação principal">
@@ -27,7 +28,7 @@
   <main class="main">
     <header class="topbar">
       <div><p class="eyebrow">WORKSPACE / OWNER</p><h1 id="page-title">Visão geral</h1></div>
-      <div class="owner-chip"><span class="avatar">W</span><span>Proprietário<small>Nível máximo · acesso único</small></span></div>
+      <div class="owner-chip"><span class="avatar">W</span><span>Proprietário<small>Acesso privado</small></span><button id="logout-btn" class="secondary logout">Sair</button></div>
     </header>
     <section class="notice"><strong>Ambiente local</strong><span>Dados ficam neste navegador. Ainda não há login, sincronização, catálogo automático ou pagamentos conectados. Valores são registros manuais, não saldo disponível.</span></section>
     <section id="view-overview" class="view">
