@@ -1,10 +1,10 @@
 # WYNCORE
 
-Painel privado de proprietário único para organizar oportunidades, tarefas e recebimentos confirmados.
+Plataforma privada de atividades com contas por função, aprovação de participantes, atribuição e revisão de tarefas, níveis SL1–SL9 e livro-caixa.
 
 ## Implementado
 - Backend Node.js sem dependências de terceiros.
-- Login de proprietário com senha configurada no ambiente, cookie HttpOnly, SameSite=Strict, expiração e limitação básica de tentativas.
+- Login de administrador por segredo de ambiente e contas de participantes com senha derivada via scrypt; sessão assinada em cookie HttpOnly, SameSite=Strict e expiração.\n- Solicitação pública de acesso, aprovação por administrador/supervisor/gerente e controle de papéis; apenas administrador nomeia supervisores e gerentes.\n- Cadastro de programas, atribuição a participantes, envio de comprovação, revisão de entregas e registro administrativo de pagamentos já realizados.\n- Livro-caixa por participante, trilha de auditoria e indicações sem comissão automática.
 - API protegida para oportunidades, tarefas, histórico de alterações e exportação CSV.
 - Persistência JSON em disco, com escrita atômica.
 - Interface ligada à API: não usa mais localStorage como banco de dados.
@@ -19,15 +19,15 @@ cd wyncore
 WYNCORE_OWNER_PASSWORD='uma-senha-forte-com-12-ou-mais-caracteres' WYNCORE_SESSION_SECRET='use-um-segredo-aleatorio-com-32-ou-mais-caracteres' npm start
 ```
 
-Abra http://localhost:3000. Para executar testes: `npm test`.
+Abra http://localhost:3000. O administrador entra com a senha configurada e e-mail em branco. Participantes solicitam acesso pela tela inicial e aguardam aprovação. Para executar testes: `npm test`.
 
 ## Publicar no Render
 O arquivo `render.yaml` descreve o serviço web e um disco persistente. Ao criar o serviço, configure `WYNCORE_OWNER_PASSWORD` como variável secreta. `WYNCORE_SESSION_SECRET` é gerado pelo Render. O deploy ainda precisa ser autorizado na conta Render do proprietário.
 
 ## Limites reais
-O sistema agora tem backend e armazenamento, mas não está conectado a contratantes, campanhas pagas, fontes automáticas de vagas ou processadores de pagamento. O cadastro é manual e o status financeiro é um registro operacional, não uma confirmação bancária. Não há promessa de renda. Integrações comerciais e contas financeiras exigem elegibilidade, revisão e autorização adequadas. Nunca coloque senhas, tokens bancários ou chaves privadas no Git.
+O sistema tem backend e armazenamento, mas ainda não está conectado a contratantes, campanhas pagas, fontes automáticas de vagas ou processadores de pagamento. O cadastro é manual e o status financeiro é um registro operacional, não uma confirmação bancária. Não há promessa de renda. Integrações comerciais e contas financeiras exigem elegibilidade, revisão e autorização adequadas. Nunca coloque senhas, tokens bancários ou chaves privadas no Git.
 
 
 ## Módulos inspirados na experiência SL
 
-A interface inclui áreas para vídeos e campanhas, aprendizagem/estágio, progressão visual SL1–SL9 e acompanhamento de indicações. A progressão é demonstrativa e baseada em tarefas marcadas manualmente como recebidas. Não representa níveis oficiais da SteadyLayout, não cria saldo, não oferece comissões por recrutamento e não processa depósitos ou saques. Vídeos e atividades só podem ser cadastrados com uma fonte e condições verificáveis. Valores anunciados, estimados, confirmados pelo contratante e efetivamente recebidos permanecem separados.
+A interface inclui áreas para vídeos e campanhas, aprendizagem/estágio, progressão visual SL1–SL9 e acompanhamento de indicações. A progressão é demonstrativa e baseada em atividades aprovadas/registradas no fluxo. Não representa níveis oficiais da SteadyLayout, não cria saldo, não oferece comissões por recrutamento e não processa depósitos ou saques. Vídeos e atividades só podem ser cadastrados com uma fonte e condições verificáveis. Valores anunciados, estimados, confirmados pelo contratante e efetivamente recebidos permanecem separados.
