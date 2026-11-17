@@ -4,7 +4,10 @@ Plataforma privada de atividades com contas por função, aprovação de partici
 
 ## Implementado
 - Backend Node.js sem dependências de terceiros.
-- Login de administrador por segredo de ambiente e contas de participantes com senha derivada via scrypt; sessão assinada em cookie HttpOnly, SameSite=Strict e expiração.\n- Solicitação pública de acesso, aprovação por administrador/supervisor/gerente e controle de papéis; apenas administrador nomeia supervisores e gerentes.\n- Cadastro de programas, atribuição a participantes, envio de comprovação, revisão de entregas e registro administrativo de pagamentos já realizados.\n- Livro-caixa por participante, trilha de auditoria e indicações sem comissão automática.
+- Login de administrador por segredo de ambiente e contas de participantes com senha derivada via scrypt; sessão assinada em cookie HttpOnly, SameSite=Strict e expiração.
+- Solicitação pública de acesso, aprovação por administrador/supervisor/gerente e controle de papéis; apenas administrador nomeia supervisores e gerentes.
+- Cadastro de programas, atribuição a participantes, envio de comprovação, revisão de entregas e registro administrativo de pagamentos já realizados.
+- Livro-caixa por participante, trilha de auditoria e indicações sem comissão automática.
 - API protegida para oportunidades, tarefas, histórico de alterações e exportação CSV.
 - Persistência JSON em disco, com escrita atômica.
 - Interface ligada à API: não usa mais localStorage como banco de dados.
