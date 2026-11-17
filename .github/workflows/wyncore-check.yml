@@ -1,10 +1,10 @@
 name: WYNCORE checks
 on:
   push:
-    branches: [forcarede-init]
+    branches: [wyncore-core]
     paths: ["wyncore/**", ".github/workflows/wyncore-check.yml"]
   pull_request:
-    branches: [wyncore-core]
+    branches: [forcarede-init]
     paths: ["wyncore/**", ".github/workflows/wyncore-check.yml"]
 jobs:
   validate:
