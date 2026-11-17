@@ -2,26 +2,33 @@
 
 Private, single-owner opportunity and earnings workspace.
 
-## Scope
-- Single-owner dashboard; no public participant registration or referral hierarchy.
-- Opportunity catalogue for legitimate, externally funded work and campaigns.
-- Task status tracking: discovered, reviewed, applied, completed, awaiting provider confirmation, paid.
-- Ledger separates estimates, confirmed receivables, and received payments.
-- No deposits, paid upgrades, recruitment commissions, simulated balances, or guaranteed earnings.
-- Payment integrations remain disabled until an eligible adult business owner and a verified provider configure them lawfully.
+## Product rules
+- Single-owner workspace. No public participant registration, teams, or referral hierarchy.
+- Catalogue for legitimate, externally funded work and campaigns.
+- Task tracking from review through provider confirmation and receipt.
+- Separate estimates, confirmed receivables, and received amounts.
+- No deposits, paid upgrades, recruitment commissions, fabricated balances, or guaranteed earnings.
+- Payment integrations stay disabled until an eligible adult business owner and a verified provider configure them lawfully.
 
-## Current stage
-Initial responsive frontend prototype. Data is stored in this browser only. It does not connect to advertisers, execute paid tasks, create receivables, or transfer money.
+## Current implementation
+- Responsive dashboard with Overview, Opportunities, Tasks, Wallet, and Reports.
+- Manual opportunity registration with HTTPS URL validation.
+- Task status tracking and CSV export.
+- Local browser persistence using localStorage.
+- PWA manifest, app icon, and service-worker shell cache for offline reopening.
+- GitHub Actions syntax and required-file checks.
+
+This is still a local prototype. It has no account system, server database, automatic opportunity feed, advertiser integration, task execution, payment reconciliation, or money transfer. Values entered in the UI are records only and are not funds or proof of payment.
 
 ## Run
-Open `index.html` in a browser. No build step is required.
+Serve the `wyncore/` directory over HTTPS or localhost, then open `index.html`. Service workers and installable PWA behavior require a secure context. Opening the file directly may work for basic UI but disables offline/PWA registration.
 
 ## Next engineering stages
-1. Backend authentication and server-side authorization.
-2. Database with immutable ledger entries and audit trail.
-3. Verified opportunity-provider integrations and evidence of task completion.
-4. Provider-backed payment reconciliation; no client-side balance mutation.
-5. Automated tests, deployment, and Android packaging.
+1. Server-side authentication and authorization.
+2. Database with auditable, append-only financial events.
+3. Verified provider integrations and task evidence.
+4. Provider-backed payment reconciliation.
+5. Automated browser tests, deployment, and Android packaging.
 
-## Safety and privacy
-Never put API secrets, bank credentials, private keys, or payment tokens in frontend code or Git. Use test data only until the backend and legal/business arrangements are reviewed.
+## Security and compliance
+Never put API secrets, bank credentials, private keys, or payment tokens in frontend code or Git. Use test data until backend, provider eligibility, and legal/business arrangements are reviewed. Financial accounts and payment-provider onboarding must follow age and identity requirements and involve a responsible adult where required.
