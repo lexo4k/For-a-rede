@@ -1,0 +1,30 @@
+name: WYNCORE checks
+
+on:
+  push:
+    branches: [wyncore-core]
+    paths:
+      - "wyncore/**"
+      - ".github/workflows/wyncore-check.yml"
+  pull_request:
+    branches: [wyncore-core]
+    paths:
+      - "wyncore/**"
+      - ".github/workflows/wyncore-check.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check JavaScript syntax
+        run: node --check wyncore/app.js
+      - name: Check required project files
+        run: |
+          test -s wyncore/index.html
+          test -s wyncore/styles.css
+          test -s wyncore/app.js
+          test -s wyncore/README.md
