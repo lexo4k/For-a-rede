@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1020">
+  <meta name="description" content="WYNCORE: painel privado de oportunidades e acompanhamento de receitas.">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+  <title>WYNCORE | Painel privado</title>
+</head>
+<body>
+  <section id="auth-screen" class="auth-screen hidden"><form id="login-form" class="auth-card"><div class="brand-mark">W</div><p class="eyebrow">PRIVATE WORKSPACE</p><h1>WYNCORE</h1><p class="muted">Acesso exclusivo do proprietário.</p><label>Senha de acesso<input id="owner-password" type="password" autocomplete="current-password" minlength="12" required></label><button class="primary" type="submit">Entrar no painel</button><p id="login-error" class="auth-error" role="alert"></p></form></section>
+  <aside class="sidebar">
+    <a class="brand" href="#"><span class="brand-mark">W</span><span>WYNCORE<small>PRIVATE WORKSPACE</small></span></a>
+    <nav aria-label="Navegação principal">
+      <button class="nav-item active" data-view="overview">▦ <span>Visão geral</span></button>
+      <button class="nav-item" data-view="opportunities">⌕ <span>Oportunidades</span></button>
+      <button class="nav-item" data-view="tasks">▤ <span>Minhas tarefas</span></button>
+      <button class="nav-item" data-view="wallet">◈ <span>Carteira</span></button>
+      <button class="nav-item" data-view="reports">▥ <span>Relatórios</span></button>
+    </nav>
+    <div class="sidebar-foot"><span class="status-dot"></span> Modo privado · Servidor conectado</div>
+  </aside>
+  <main class="main">
+    <header class="topbar">
+      <div><p class="eyebrow">WORKSPACE / OWNER</p><h1 id="page-title">Visão geral</h1></div>
+      <div class="owner-chip"><span class="avatar">W</span><span>Proprietário<small>Acesso privado</small></span><button id="logout-btn" class="secondary logout">Sair</button></div>
+    </header>
+    <section class="notice"><strong>Ambiente privado</strong><span>Dados salvos no servidor e acessíveis após login. O painel organiza registros manuais; não busca campanhas automaticamente nem recebe ou transfere pagamentos. Valores anunciados não representam saldo disponível.</span></section>
+    <section id="view-overview" class="view">
+      <div class="welcome"><div><p class="eyebrow">CENTRAL DE CONTROLE</p><h2>Suas oportunidades,<br><em>em um só lugar.</em></h2><p>Acompanhe oportunidades reais e registre cada etapa sem confundir estimativas com pagamentos.</p></div><div class="orb" aria-hidden="true">W</div></div>
+      <div class="metric-grid">
+        <article class="metric"><span>Estimativas</span><strong id="overview-estimated">R$ 0,00</strong><small>Não são saldo sacável</small></article>
+        <article class="metric"><span>A confirmar</span><strong id="overview-confirmed">R$ 0,00</strong><small>Dependem do contratante</small></article>
+        <article class="metric"><span>Recebido</span><strong id="overview-paid">R$ 0,00</strong><small>Registros marcados como recebidos</small></article>
+        <article class="metric"><span>Tarefas ativas</span><strong id="active-count">0</strong><small>Registros no servidor</small></article>
+      </div>
+      <div class="section-heading"><div><p class="eyebrow">COMECE POR AQUI</p><h3>Central de oportunidades</h3></div><button class="text-button" data-go="opportunities">Ver oportunidades →</button></div>
+      <div class="feature-grid">
+        <article class="feature"><div class="feature-icon">◉</div><h4>Campanhas e vídeos</h4><p>Registre campanhas com remuneração e condições publicadas pelo contratante.</p><span class="tag">Cadastro manual</span></article>
+        <article class="feature"><div class="feature-icon">⌁</div><h4>Serviços digitais</h4><p>Acompanhe trabalhos, entregas, prazos e comprovantes de conclusão.</p><span class="tag">Cadastro manual</span></article>
+        <article class="feature"><div class="feature-icon">▣</div><h4>Programas e vagas</h4><p>Organize oportunidades formais e seus requisitos de elegibilidade.</p><span class="tag">Cadastro manual</span></article>
+      </div>
+      <div class="section-heading"><div><p class="eyebrow">FONTES PÚBLICAS</p><h3>Oportunidades com regras verificáveis</h3><p class="muted">Consulte as condições diretamente na fonte. A WYNCORE não garante seleção nem remuneração.</p></div></div>
+      <div class="feature-grid">
+        <article class="feature"><div class="feature-icon">⌂</div><h4>Aprendizagem profissional</h4><p>Programa formal de formação e trabalho protegido, com regras específicas para adolescentes e jovens.</p><a class="source-link" href="https://www.gov.br/trabalho-e-emprego/pt-br/assuntos/aprendizagem-profissional" target="_blank" rel="noopener noreferrer">Ministério do Trabalho e Emprego ↗</a></article>
+        <article class="feature"><div class="feature-icon">▣</div><h4>Regras e direitos do aprendiz</h4><p>Consulte faixa etária, contrato, jornada, matrícula escolar e direitos previstos.</p><a class="source-link" href="https://www.gov.br/trabalho-e-emprego/pt-br/noticias-e-conteudo/2026/julho/aprendizagem-profissional-regras-direitos-e-funcionamento-do-contrato-de-aprendizagem" target="_blank" rel="noopener noreferrer">Consultar regras oficiais ↗</a></article>
+        <article class="feature"><div class="feature-icon">✓</div><h4>Verifique antes de aceitar</h4><p>Não pague para conseguir vaga, não envie documentos a desconhecidos e confira a entidade formadora.</p><span class="tag">Segurança primeiro</span></article>
+      </div>
+    </section>
+    <section id="view-opportunities" class="view hidden">
+      <div class="section-heading"><div><p class="eyebrow">DESCOBERTA</p><h3>Oportunidades</h3><p class="muted">Cadastre apenas oportunidades verificáveis e confira as regras diretamente com a fonte.</p></div></div>
+      <form id="opportunity-form" class="panel form-grid">
+        <label>Nome da oportunidade<input id="opp-title" required maxlength="90" placeholder="Ex.: campanha de divulgação"></label>
+        <label>Fonte / empresa<input id="opp-source" required maxlength="90" placeholder="Nome do contratante"></label>
+        <label>Remuneração anunciada (R$)<input id="opp-value" type="number" min="0" max="10000000" step="0.01" required placeholder="0,00"></label>
+        <label>Link oficial<input id="opp-url" type="url" placeholder="https://..."></label>
+        <button class="primary" type="submit">＋ Registrar oportunidade</button>
+      </form>
+      <div id="opportunity-list" class="list panel"><p class="empty">Nenhuma oportunidade registrada.</p></div>
+    </section>
+    <section id="view-tasks" class="view hidden">
+      <div class="section-heading"><div><p class="eyebrow">ACOMPANHAMENTO</p><h3>Minhas tarefas</h3><p class="muted">O registro de uma tarefa não confirma aprovação nem pagamento pelo contratante.</p></div></div>
+      <div id="task-list" class="list panel"><p class="empty">Nenhuma tarefa em andamento.</p></div>
+    </section>
+    <section id="view-wallet" class="view hidden">
+      <div class="section-heading"><div><p class="eyebrow">CONTROLE FINANCEIRO</p><h3>Carteira</h3></div></div>
+      <div class="metric-grid">
+        <article class="metric"><span>Estimado</span><strong id="wallet-estimated">R$ 0,00</strong><small>Informação não garantida</small></article>
+        <article class="metric"><span>Confirmado</span><strong id="wallet-confirmed">R$ 0,00</strong><small>Aguardando pagamento</small></article>
+        <article class="metric"><span>Recebido</span><strong id="wallet-paid">R$ 0,00</strong><small>Não é saldo bancário</small></article>
+      </div>
+      <div class="panel"><h4>Regra do livro-caixa</h4><p class="muted">A mudança de status é manual e deve corresponder a evidências reais. O protótipo não recebe, guarda nem transfere dinheiro.</p></div>
+    </section>
+    <section id="view-reports" class="view hidden">
+      <div class="section-heading"><div><p class="eyebrow">TRANSPARÊNCIA</p><h3>Relatórios</h3></div></div>
+      <div class="panel"><p id="report-summary" class="muted">Ainda não há atividade registrada.</p><button id="export-btn" class="secondary">Exportar relatório CSV</button></div>
+    </section>
+    <footer>WYNCORE · Painel privado · Dados persistidos no servidor</footer>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
