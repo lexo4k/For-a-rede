@@ -13,7 +13,7 @@
   <title>WYNCORE | Painel privado</title>
 </head>
 <body>
-  <section id="auth-screen" class="auth-screen hidden"><form id="login-form" class="auth-card"><div class="brand-mark">W</div><p class="eyebrow">PRIVATE WORKSPACE</p><h1>WYNCORE</h1><p class="muted">Acesso exclusivo do proprietário.</p><label>Senha de acesso<input id="owner-password" type="password" autocomplete="current-password" minlength="12" required></label><button class="primary" type="submit">Entrar no painel</button><p id="login-error" class="auth-error" role="alert"></p></form></section>
+  <section id="auth-screen" class="auth-screen hidden"><form id="login-form" class="auth-card"><div class="brand-mark">W</div><p class="eyebrow">PRIVATE WORKSPACE</p><h1>WYNCORE</h1><p class="muted">Entre na sua conta ou solicite acesso à equipe.</p><label>E-mail<input id="login-email" type="email" autocomplete="username" placeholder="seu@email.com"></label><label>Senha<input id="owner-password" type="password" autocomplete="current-password" required></label><button class="primary" type="submit">Entrar</button><p id="login-error" class="auth-error" role="alert"></p></form><form id="access-form" class="auth-card"><h2>Solicitar acesso</h2><label>Nome<input id="access-name" required minlength="2"></label><label>E-mail<input id="access-email" type="email" required></label><label>Crie uma senha<input id="access-password" type="password" minlength="10" required></label><button class="secondary" type="submit">Enviar cadastro</button><p id="access-message" class="auth-error" role="status"></p></form></section>
   <aside class="sidebar">
     <a class="brand" href="#"><span class="brand-mark">W</span><span>WYNCORE<small>PRIVATE WORKSPACE</small></span></a>
     <nav aria-label="Navegação principal">
@@ -31,8 +31,8 @@
   </aside>
   <main class="main">
     <header class="topbar">
-      <div><p class="eyebrow">WORKSPACE / OWNER</p><h1 id="page-title">Visão geral</h1></div>
-      <div class="owner-chip"><span class="avatar">W</span><span>Proprietário<small>Acesso privado</small></span><button id="logout-btn" class="secondary logout">Sair</button></div>
+      <div><p class="eyebrow">WORKSPACE / <span id="user-role">CONTA</span></p><h1 id="page-title">Visão geral</h1></div>
+      <div class="owner-chip"><span class="avatar">W</span><span id="user-label">Conta<small>Área de trabalho</small></span><button id="logout-btn" class="secondary logout">Sair</button></div>
     </header>
     <section class="notice"><strong>Ambiente privado</strong><span>Dados salvos no servidor e acessíveis após login. O painel organiza registros manuais; não busca campanhas automaticamente nem recebe ou transfere pagamentos. Valores anunciados não representam saldo disponível.</span></section>
     <section id="view-overview" class="view">
