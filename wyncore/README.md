@@ -34,3 +34,8 @@ O sistema tem backend e armazenamento, mas ainda não está conectado a contrata
 ## Módulos inspirados na experiência SL
 
 A interface inclui áreas para vídeos e campanhas, aprendizagem/estágio, progressão visual SL1–SL9 e acompanhamento de indicações. A progressão é demonstrativa e baseada em atividades aprovadas/registradas no fluxo. Não representa níveis oficiais da SteadyLayout, não cria saldo, não oferece comissões por recrutamento e não processa depósitos ou saques. Vídeos e atividades só podem ser cadastrados com uma fonte e condições verificáveis. Valores anunciados, estimados, confirmados pelo contratante e efetivamente recebidos permanecem separados.
+
+
+## Cadastro de participantes e integração de parceiros
+
+O administrador pode cadastrar participantes em Equipe e aprovações. O cadastro cria acesso pendente com senha inicial; após aprovação, a pessoa pode entrar com o e-mail e a senha definida. Para importação automática de campanhas, configure `WYNCORE_PARTNER_WEBHOOK_SECRET` no ambiente Vercel e compartilhe o segredo apenas com o parceiro contratado. O parceiro envia `POST /api/integrations/campaigns` com JSON contendo `title`, `sponsor`, `reward`, `budget` e `url`, e o cabeçalho `X-Wyncore-Signature: sha256=<HMAC-SHA256 do corpo bruto>`. As campanhas entram como `pending_funding`; o webhook não confirma dinheiro nem libera pagamentos. Esta versão não faz transferências bancárias nem pagamentos automáticos.
