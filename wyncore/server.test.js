@@ -116,7 +116,7 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.equal(companyData.costs[0].amount,39.9,'cost records should persist in storage');
  const integrationStatus=await fetch(base+'/api/integrations/status',{headers:{cookie}});
  assert.equal(integrationStatus.status,200);
- const programResponse=await fetch(base+'/api/programs',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({title:'Atividade de teste',source:'Fonte oficial',reward:75,budget:150,url:'https://example.org/task'})});
+ const programResponse=await fetch(base+'/api/programs',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({title:'Atividade de teste',source:'Fonte oficial',reward:75,budget:150,url:'https://example.org/task',videoUrl:'https://example.org/ad.mp4'})});
  assert.equal(programResponse.status,201,'team should create a program');
  const program=await programResponse.json();
  assert.equal(program.status,'pending_funding','new programs must wait for funding review');
@@ -133,6 +133,13 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  const participantDash=await (await fetch(base+'/api/dashboard',{headers:{cookie:participantCookie}})).json();
  assert.equal(participantDash.assignments.length,1,'participant should only see their own assigned activity');
  assert.equal(participantDash.assignments[0].id,assignment.id);
+ const feedback=await fetch(base+'/api/campaign-feedback',{method:'POST',headers:{cookie:participantCookie,'content-type':'application/json'},body:JSON.stringify({programId:program.id,rating:5,comment:'Anúncio claro e informativo'})});
+ assert.equal(feedback.status,201,'participant should be able to rate an active video campaign');
+ const feedbackUpdate=await fetch(base+'/api/campaign-feedback',{method:'POST',headers:{cookie:participantCookie,'content-type':'application/json'},body:JSON.stringify({programId:program.id,rating:4,comment:'Atualização da avaliação'})});
+ assert.equal(feedbackUpdate.status,200,'participant should update one rating instead of creating duplicates');
+ const feedbackData=await (await fetch(base+'/api/dashboard',{headers:{cookie:participantCookie}})).json();
+ assert.equal(feedbackData.campaignFeedback.length,1,'participant should only see their own campaign feedback');
+ assert.equal(feedbackData.campaignFeedback[0].rating,4);
  const submitted=await fetch(base+'/api/assignments/'+assignment.id+'/submit',{method:'POST',headers:{cookie:participantCookie,'content-type':'application/json'},body:JSON.stringify({proof:'https://example.org/proof'})});
  assert.equal(submitted.status,200,'participant should submit proof');
  const reviewed=await fetch(base+'/api/assignments/'+assignment.id+'/review',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({decision:'approved',note:'Comprovante conferido'})});
