@@ -41,9 +41,12 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.ok(participant,'pending participant should appear for the admin');
  const approval=await fetch(base+'/api/participants/approve',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({participantId:participant.id,role:'participant'})});
  assert.equal(approval.status,200,'admin should approve participant');
- const programResponse=await fetch(base+'/api/programs',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({title:'Atividade de teste',source:'Fonte oficial',reward:75,url:'https://example.org/task'})});
+ const programResponse=await fetch(base+'/api/programs',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({title:'Atividade de teste',source:'Fonte oficial',reward:75,budget:150,url:'https://example.org/task'})});
  assert.equal(programResponse.status,201,'team should create a program');
  const program=await programResponse.json();
+ assert.equal(program.status,'pending_funding','new programs must wait for funding review');
+ const fundingResponse=await fetch(base+'/api/programs/'+program.id+'/funding',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({reference:'FUND-TEST-1234',evidenceUrl:'https://example.org/receipt'})});
+ assert.equal(fundingResponse.status,200,'admin should review campaign funding evidence');
  const assignmentResponse=await fetch(base+'/api/programs/'+program.id+'/assign',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({participantId:participant.id})});
  assert.equal(assignmentResponse.status,201,'team should assign the program');
  const assignment=await assignmentResponse.json();
