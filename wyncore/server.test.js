@@ -8,6 +8,7 @@ process.env.DATA_DIR=path.join(os.tmpdir(),'wyncore-integration-'+process.pid);
 process.env.WYNCORE_OWNER_PASSWORD='test-password-with-more-than-12';
 process.env.WYNCORE_SESSION_SECRET='test-session-secret-with-more-than-32-characters';
 process.env.WYNCORE_GOOGLE_CLIENT_ID='wyncore-test-google-client';
+process.env.WYNCORE_CONVERSION_SECRET='wyncore-test-conversion-secret';
 const {createServer,validateOpportunity,limited,STATUSES}=require('./server');
 let server,base,cookie;
 test('rate limiter tolerates serverless requests without a socket object',()=>{
@@ -117,6 +118,16 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  const companyData=await (await fetch(base+'/api/company',{headers:{cookie}})).json();
  assert.equal(companyData.leads[0].status,'proposal','commercial changes should persist in storage');
  assert.equal(companyData.costs[0].amount,39.9,'cost records should persist in storage');
+ const assignment={id:'assignment-already-created'};
+ const conversionEvent={eventId:'evt-1',transactionId:'txn-1',participantId:participant.id,programId:program.id,status:'settled',revenue:10,currency:'BRL'};
+ const conversionRaw=JSON.stringify(conversionEvent);
+ const conversionSignature=require('node:crypto').createHmac('sha256',process.env.WYNCORE_CONVERSION_SECRET).update(conversionRaw).digest('hex');
+ const conversion=await fetch(base+'/api/integrations/conversions',{method:'POST',headers:{'content-type':'application/json','x-wyncore-signature':'sha256='+conversionSignature},body:conversionRaw});
+ assert.equal(conversion.status,201,'signed settled conversion should be accepted');
+ assert.equal((await conversion.json()).conversion.reward,6,'default participant share should be 60 percent');
+ const duplicate=await fetch(base+'/api/integrations/conversions',{method:'POST',headers:{'content-type':'application/json','x-wyncore-signature':'sha256='+conversionSignature},body:conversionRaw});
+ assert.equal(duplicate.status,200,'duplicate partner event should be idempotent');
+ assert.equal((await duplicate.json()).duplicate,true);
  const integrationStatus=await fetch(base+'/api/integrations/status',{headers:{cookie}});
  assert.equal(integrationStatus.status,200);
  const integrationHealth=await integrationStatus.json();
