@@ -49,7 +49,7 @@ async function handler(req,res){try{
  if(req.method==='POST'&&p==='/api/access-request'){
   if(limited(req))return send(res,429,{error:'Muitas tentativas. Aguarde.'});if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
   const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),phone=String(b.phone||'').replace(/\D/g,''),pass=String(b.password||'');
-  if(name.length<2||(!email&&!phone)||(email&&!/^\S+@\S+\.\S+$/.test(email))||(phone&&(phone.length<10||phone.length>13))||pass.length<10)err('Informe nome, e-mail válido ou telefone com DDD, e senha com pelo menos 10 caracteres.');
+  if(name.length<2||phone.length<10||phone.length>13||(email&&!/^\S+@\S+\.\S+$/.test(email))||pass.length<10)err('Informe nome, celular com DDD e senha com pelo menos 10 caracteres. O e-mail é opcional.');
   const d=await load();if(d.users.some(u=>(email&&u.email===email)||(phone&&u.phone===phone))||d.participants.some(u=>(email&&u.email===email)||(phone&&u.phone===phone)))err('Este e-mail ou telefone já está cadastrado.',409);
   const person=D.requestAccess(d,{name,email,phone});d.users.push({id:person.id,email,phone,passwordHash:await hashPassword(pass)});await save(d);return send(res,201,{ok:true,message:'Cadastro recebido. Aguarde a liberação da equipe.'});
  }
