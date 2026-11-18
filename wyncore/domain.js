@@ -4,7 +4,7 @@ const ROLES=['admin','supervisor','manager','participant'];
 const LEVELS=Array.from({length:9},(_,i)=>'SL'+(i+1));
 const TASK_STATES=['available','assigned','submitted','approved','rejected','paid'];
 function id(){return crypto.randomUUID()}
-function ensureState(s){s.participants ||= [];s.programs ||= [];s.assignments ||= [];s.ledger ||= [];s.referrals ||= [];s.audit ||= [];return s}
+function ensureState(s){s.participants ||= [];s.programs ||= [];s.assignments ||= [];s.ledger ||= [];s.referrals ||= [];s.audit ||= [];s.companyLeads ||= [];s.companyCosts ||= [];return s}
 function requireRole(actor,roles){if(!actor||!roles.includes(actor.role))throw Object.assign(new Error('Permissão insuficiente.'),{status:403})}
 function audit(s,actor,type,entityId,details={}){s.audit.push({id:id(),actorId:actor.id,type,entityId,details,at:new Date().toISOString()})}
 function requestAccess(s,profile){ensureState(s);const name=String(profile.name||'').trim();const email=String(profile.email||'').trim().toLowerCase();const phone=String(profile.phone||'').replace(/\D/g,'');if(name.length<2||(!email&&!phone)||(email&&!/^\S+@\S+\.\S+$/.test(email))||(phone&&(phone.length<10||phone.length>13)))throw Object.assign(new Error('Informe nome e um e-mail válido ou telefone com DDD.'),{status:400});if(s.participants.some(p=>(email&&p.email===email)||(phone&&p.phone===phone)))throw Object.assign(new Error('Já existe cadastro com este e-mail ou telefone.'),{status:409});const p={id:id(),name,email,phone,role:'participant',status:'pending',level:'SL1',createdAt:new Date().toISOString()};s.participants.push(p);return p}
