@@ -45,3 +45,8 @@ O administrador pode cadastrar participantes em Equipe e aprovações. O cadastr
 - Funil comercial de empresas: prospecção, contato, proposta, contrato registrado e inativo.
 - Registro interno de custos operacionais. Os lançamentos não movimentam dinheiro nem substituem extratos ou documentos contábeis.
 - Cada alteração é enviada à API e só é apresentada como salva após resposta bem-sucedida do servidor. Os dados são recarregados do armazenamento persistente após login.
+
+
+## Website and advertising readiness
+
+The public home page now contains useful informational content, official-source links, FAQ, institutional pages and responsive advertising placements. Ad placements are intentionally inactive until a responsible publisher account is approved and valid provider/client/slot identifiers are supplied. No ad impressions or revenue are fabricated. Review privacy and terms content with the legally responsible site operator before enabling third-party advertising.
