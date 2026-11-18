@@ -39,6 +39,8 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.equal(privateFile.status,404,'server source must not be served publicly');
  const signupWithoutPhone=await fetch(base+'/api/access-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'Sem Telefone',email:'semtelefone@example.org',password:'senha-segura-123'})});
  assert.equal(signupWithoutPhone.status,400,'public signup must require a phone number');
+ const signupMissingEmail=await fetch(base+'/api/access-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'Sem Email',phone:'11987654320',password:'senha-segura-123'})});
+ assert.equal(signupMissingEmail.status,400,'public signup must require an email for participants');
  const signup=await fetch(base+'/api/access-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'Participante Teste',email:'participante@example.org',phone:'11987654321',password:'senha-segura-123'})});
  assert.equal(signup.status,201,'participant access request should be created');
  const pendingDash=await (await fetch(base+'/api/dashboard',{headers:{cookie}})).json();
@@ -46,7 +48,9 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.ok(participant,'pending participant should appear for the admin');
  const approval=await fetch(base+'/api/participants/approve',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({participantId:participant.id,role:'participant'})});
  assert.equal(approval.status,200,'admin should approve participant');
- const participantCreated=await fetch(base+'/api/participants',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({name:'Participante Direto',phone:'21987654321',password:'senha-inicial-123'})});
+ const missingEmailParticipant=await fetch(base+'/api/participants',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({name:'Sem Email',phone:'21987654320',password:'senha-inicial-123'})});
+ assert.equal(missingEmailParticipant.status,400,'admin-created participants must require an email');
+ const participantCreated=await fetch(base+'/api/participants',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({name:'Participante Direto',email:'direto@example.org',phone:'21987654321',password:'senha-inicial-123'})});
  assert.equal(participantCreated.status,201,'admin should be able to add a participant directly');
  const directParticipant=(await participantCreated.json()).participant;
  const directPending=await (await fetch(base+'/api/dashboard',{headers:{cookie}})).json();
