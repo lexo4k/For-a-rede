@@ -44,9 +44,11 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.equal((await fetch(base+'/organizar-candidatura.html')).status,200);
  const denied=await fetch(base+'/api/dashboard');
  assert.equal(denied.status,401,'private API must reject anonymous requests');
- const login=await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({password:process.env.WYNCORE_OWNER_PASSWORD})});
+ const login=await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({identifier:'ADMIN',password:process.env.WYNCORE_OWNER_PASSWORD})});
  assert.equal(login.status,200,'owner login should succeed');
  cookie=login.headers.get('set-cookie').split(';')[0];
+ const blockedOwnerPassword=await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({identifier:'11999999999',password:process.env.WYNCORE_OWNER_PASSWORD})});
+ assert.equal(blockedOwnerPassword.status,401,'the administrator password must never authenticate a participant as admin');
  const dashboard=await fetch(base+'/api/dashboard',{headers:{cookie}});
  assert.equal(dashboard.status,200);
  const created=await fetch(base+'/api/opportunities',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({title:'Teste de oportunidade',source:'Fonte de teste',value:125,url:'https://example.org/opportunity'})});
@@ -68,6 +70,15 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.equal(signupMissingEmail.status,201,'participants can register with phone and password without an email');
  const signup=await fetch(base+'/api/access-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'Participante Teste',email:'participante@example.org',phone:'11987654321',password:'senha-segura-123'})});
  assert.equal(signup.status,201,'participant access request should be created');
+ const sharedSecretSignup=await fetch(base+'/api/access-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'Participante Senha Igual',email:'senha-igual@example.org',phone:'41987654321',password:process.env.WYNCORE_OWNER_PASSWORD})});
+ assert.equal(sharedSecretSignup.status,201);
+ const sharedSecretPerson=(await (await fetch(base+'/api/dashboard',{headers:{cookie}})).json()).participants.find(p=>p.email==='senha-igual@example.org');
+ const sharedSecretApproval=await fetch(base+'/api/participants/approve',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({participantId:sharedSecretPerson.id})});
+ assert.equal(sharedSecretApproval.status,200);
+ const sharedSecretLogin=await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({identifier:'senha-igual@example.org',password:process.env.WYNCORE_OWNER_PASSWORD})});
+ assert.equal(sharedSecretLogin.status,200);
+ const sharedSecretMe=await (await fetch(base+'/api/me',{headers:{cookie:sharedSecretLogin.headers.get('set-cookie').split(';')[0]}})).json();
+ assert.equal(sharedSecretMe.role,'participant','participant with same password text must still receive an isolated participant session');
  const pendingDash=await (await fetch(base+'/api/dashboard',{headers:{cookie}})).json();
  const participant=pendingDash.participants.find(p=>p.email==='participante@example.org');
  assert.ok(participant,'pending participant should appear for the admin');
