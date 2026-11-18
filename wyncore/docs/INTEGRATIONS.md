@@ -21,6 +21,25 @@ Fluxo exigido:
 
 Uma chave de webhook isolada apenas autentica a origem de uma chamada; não prova que houve receita, nem substitui o contrato e a conciliação financeira.
 
+## 2. Webhook de conversões do parceiro
+
+O endpoint server-to-server `POST /api/integrations/conversions` recebe eventos JSON assinados com HMAC-SHA256 no cabeçalho `X-Wyncore-Signature: sha256=<hex>`. A assinatura é calculada sobre o corpo JSON bruto usando `WYNCORE_CONVERSION_SECRET`, configurado somente no ambiente do servidor.
+
+Exemplo de evento:
+```json
+{
+  "eventId": "identificador-unico-do-evento",
+  "transactionId": "identificador-unico-da-conversao",
+  "participantId": "id-interno-do-participante",
+  "programId": "id-interno-da-campanha",
+  "status": "settled",
+  "revenue": 10.00,
+  "currency": "BRL"
+}
+```
+
+Estados aceitos: `approved` (em análise, sem saldo disponível), `settled` (receita liquidada ao publisher, credita a participação) e `reversed` (estorna uma conversão anteriormente liquidada). Eventos repetidos são idempotentes por `eventId`; a mesma transação não pode mudar de participante ou campanha. O percentual de repasse usa `WYNCORE_REWARD_SHARE_PERCENT` (padrão 60%, limitado de 1% a 90%). O percentual precisa ser definido no contrato e nos termos publicados antes de operar. Este endpoint genérico ainda exige homologação e mapeamento específico do parceiro; não significa que uma rede esteja conectada.
+
 ## 2. Provedor Pix / pagamentos
 
 O código atual não contém um adaptador de provedor Pix conectado. A rota de pagamento permanece bloqueada para impedir registros falsos.
