@@ -34,6 +34,36 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.match(await report.text(),/Teste de oportunidade/);
  const privateFile=await fetch(base+'/server.js');
  assert.equal(privateFile.status,404,'server source must not be served publicly');
+ const signup=await fetch(base+'/api/access-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'Participante Teste',email:'participante@example.org',password:'senha-segura-123'})});
+ assert.equal(signup.status,201,'participant access request should be created');
+ const pendingDash=await (await fetch(base+'/api/dashboard',{headers:{cookie}})).json();
+ const participant=pendingDash.participants.find(p=>p.email==='participante@example.org');
+ assert.ok(participant,'pending participant should appear for the admin');
+ const approval=await fetch(base+'/api/participants/approve',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({participantId:participant.id,role:'participant'})});
+ assert.equal(approval.status,200,'admin should approve participant');
+ const programResponse=await fetch(base+'/api/programs',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({title:'Atividade de teste',source:'Fonte oficial',reward:75,url:'https://example.org/task'})});
+ assert.equal(programResponse.status,201,'team should create a program');
+ const program=await programResponse.json();
+ const assignmentResponse=await fetch(base+'/api/programs/'+program.id+'/assign',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({participantId:participant.id})});
+ assert.equal(assignmentResponse.status,201,'team should assign the program');
+ const assignment=await assignmentResponse.json();
+ const participantLogin=await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:'participante@example.org',password:'senha-segura-123'})});
+ assert.equal(participantLogin.status,200,'approved participant should sign in');
+ const participantCookie=participantLogin.headers.get('set-cookie').split(';')[0];
+ const participantDash=await (await fetch(base+'/api/dashboard',{headers:{cookie:participantCookie}})).json();
+ assert.equal(participantDash.assignments.length,1,'participant should only see their own assigned activity');
+ assert.equal(participantDash.assignments[0].id,assignment.id);
+ const submitted=await fetch(base+'/api/assignments/'+assignment.id+'/submit',{method:'POST',headers:{cookie:participantCookie,'content-type':'application/json'},body:JSON.stringify({proof:'https://example.org/proof'})});
+ assert.equal(submitted.status,200,'participant should submit proof');
+ const reviewed=await fetch(base+'/api/assignments/'+assignment.id+'/review',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({decision:'approved',note:'Comprovante conferido'})});
+ assert.equal(reviewed.status,200,'admin should review submitted proof');
+ const payment=await fetch(base+'/api/assignments/'+assignment.id+'/payment',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({reference:'REF-TEST-1234'})});
+ assert.equal(payment.status,200,'admin should record an already completed payment');
+ const finalParticipantDash=await (await fetch(base+'/api/dashboard',{headers:{cookie:participantCookie}})).json();
+ assert.equal(finalParticipantDash.ledger.length,1,'participant should see their own payment record');
+ const referral=await fetch(base+'/api/referrals',{method:'POST',headers:{cookie:participantCookie,'content-type':'application/json'},body:JSON.stringify({email:'indicado@example.org'})});
+ assert.equal(referral.status,201,'participant should be able to record a referral');
+
 });
 test('opportunity validation rejects unsafe data',()=>{
  assert.equal(validateOpportunity({title:'Trabalho',source:'Fonte',value:10,url:'https://example.org'}).value,10);
