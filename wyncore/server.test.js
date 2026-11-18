@@ -7,8 +7,12 @@ const path=require('node:path');
 process.env.DATA_DIR=path.join(os.tmpdir(),'wyncore-integration-'+process.pid);
 process.env.WYNCORE_OWNER_PASSWORD='test-password-with-more-than-12';
 process.env.WYNCORE_SESSION_SECRET='test-session-secret-with-more-than-32-characters';
-const {createServer,validateOpportunity,STATUSES}=require('./server');
+process.env.WYNCORE_GOOGLE_CLIENT_ID='wyncore-test-google-client';
+const {createServer,validateOpportunity,limited,STATUSES}=require('./server');
 let server,base,cookie;
+test('rate limiter tolerates serverless requests without a socket object',()=>{
+ assert.equal(limited({headers:{},socket:null},'test','identity',10,900000),false);
+});
 test('public signup remains available when owner/session secrets are absent',()=>{
  const script=`const {createServer}=require('./server');const s=createServer();s.listen(0,'127.0.0.1',async()=>{try{const r=await fetch('http://127.0.0.1:'+s.address().port+'/api/access-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'Cadastro sem segredo',email:'sem-segredo@example.org',phone:'11987654321',password:'senha-segura-123'})});process.stdout.write(String(r.status));s.close()}catch(e){process.stderr.write(String(e));s.close();process.exitCode=1}});`;
  const run=require('node:child_process').spawnSync(process.execPath,['-e',script],{cwd:__dirname,encoding:'utf8',env:{...process.env,WYNCORE_OWNER_PASSWORD:'',WYNCORE_SESSION_SECRET:'',DATA_DIR:path.join(os.tmpdir(),'wyncore-no-auth-'+process.pid)}});
@@ -27,6 +31,8 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.equal(healthData.ownerLoginConfigured,true);
  assert.equal(healthData.participantLoginConfigured,true);
  assert.equal(healthData.signupAvailable,true);
+ const authConfig=await (await fetch(base+'/api/auth/config')).json();
+ assert.equal(authConfig.googleEnabled,true,'Google login should expose its configured client id');
  const publicPage=await fetch(base+'/sobre.html');
  assert.equal(publicPage.status,200,'public institutional pages should be served');
  assert.equal((await fetch(base+'/privacidade.html')).status,200);
@@ -111,6 +117,8 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  const assignment=await assignmentResponse.json();
  const participantLogin=await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:'participante@example.org',password:'senha-segura-123'})});
  assert.equal(participantLogin.status,200,'approved participant should sign in');
+ const participantProfile=(await (await fetch(base+'/api/dashboard',{headers:{cookie:participantLogin.headers.get('set-cookie').split(';')[0]}})).json()).participants;
+ assert.ok(participantProfile===undefined,'participant dashboard must not expose the full team list');
  const participantCookie=participantLogin.headers.get('set-cookie').split(';')[0];
  const participantDash=await (await fetch(base+'/api/dashboard',{headers:{cookie:participantCookie}})).json();
  assert.equal(participantDash.assignments.length,1,'participant should only see their own assigned activity');
@@ -123,6 +131,23 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.equal(payment.status,200,'admin should record an already completed payment');
  const finalParticipantDash=await (await fetch(base+'/api/dashboard',{headers:{cookie:participantCookie}})).json();
  assert.equal(finalParticipantDash.ledger.length,1,'participant should see their own payment record');
+ const originalFetch=global.fetch;
+ global.fetch=async(input,options)=>String(input).startsWith('https://oauth2.googleapis.com/tokeninfo?')?new Response(JSON.stringify({aud:process.env.WYNCORE_GOOGLE_CLIENT_ID,sub:'google-sub-123',email:'google@example.org',email_verified:'true',iss:'https://accounts.google.com',exp:String(Math.floor(Date.now()/1000)+300),name:'Conta Google Teste'}),{status:200,headers:{'content-type':'application/json'}}):originalFetch(input,options);
+ try{
+  const googleRequest=await fetch(base+'/api/google-login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({credential:'google-id-token-test'})});
+  assert.equal(googleRequest.status,202,'new Google account should enter pending approval');
+  const pendingGoogle=(await fetch(base+'/api/dashboard',{headers:{cookie}})).json();
+  const pendingData=await pendingGoogle;
+  const googlePerson=pendingData.participants.find(x=>x.email==='google@example.org');
+  assert.ok(googlePerson,'Google signup should create a pending participant');
+  const approvedGoogle=await fetch(base+'/api/participants/approve',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({participantId:googlePerson.id,role:'participant'})});
+  assert.equal(approvedGoogle.status,200,'admin should approve Google signup');
+  const googleLogin=await fetch(base+'/api/google-login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({credential:'google-id-token-test'})});
+  assert.equal(googleLogin.status,200,'approved Google user should sign in');
+  const googleCookie=googleLogin.headers.get('set-cookie').split(';')[0];
+  const googleMe=await (await fetch(base+'/api/me',{headers:{cookie:googleCookie}})).json();
+  assert.equal(googleMe.email,'google@example.org');
+ }finally{global.fetch=originalFetch}
  const referral=await fetch(base+'/api/referrals',{method:'POST',headers:{cookie:participantCookie,'content-type':'application/json'},body:JSON.stringify({email:'indicado@example.org'})});
  assert.equal(referral.status,201,'participant should be able to record a referral');
 
