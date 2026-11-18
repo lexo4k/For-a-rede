@@ -45,7 +45,7 @@ async function verifyPassword(p,stored){if(!stored||!stored.includes(':'))return
 function actor(session,d){if(!session)return null;if(session.role==='admin'&&session.id==='owner')return{id:'owner',role:'admin',email:'owner'};return d.participants.find(p=>p.id===session.id&&p.status==='active'&&p.role===session.role)||null}
 async function handler(req,res){try{
  const url=new URL(req.url,'http://localhost'),p=url.pathname;
- if(req.method==='GET'&&p==='/health')return send(res,200,{ok:true,service:'wyncore',storage:'persistent-json',authConfigured:Boolean(PASSWORD&&SECRET)});
+ if(req.method==='GET'&&(p==='/health'||p==='/api/health'))return send(res,200,{ok:true,service:'WYNCORE',storage:process.env.BLOB_READ_WRITE_TOKEN?'vercel-blob-private':'persistent-json',authConfigured:Boolean(PASSWORD&&SECRET),publicAccess:true});
  if(req.method==='POST'&&p==='/api/access-request'){
   if(limited(req))return send(res,429,{error:'Muitas tentativas. Aguarde.'});if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
   const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),phone=String(b.phone||'').replace(/\D/g,''),pass=String(b.password||'');
