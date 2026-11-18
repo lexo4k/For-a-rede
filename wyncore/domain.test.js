@@ -10,7 +10,8 @@ test('access approval, task lifecycle and payment ledger enforce roles',()=>{
  assert.equal(p.status,'pending');
  assert.throws(()=>d.assignProgram(s,manager,'missing',p.id),/ativo/);
  d.approveParticipant(s,admin,p.id);
- const program=d.createProgram(s,manager,{title:'Tarefa de teste',source:'Contratante',reward:12.5,url:'https://example.org/task'});
+ const program=d.createProgram(s,manager,{title:'Tarefa de teste',source:'Contratante',reward:12.5,budget:100,url:'https://example.org/task'});
+ d.confirmProgramFunding(s,admin,program.id,'ref-financiamento-123','https://example.org/evidencia');
  const a=d.assignProgram(s,manager,program.id,p.id);
  const participant={id:p.id,role:'participant',email:p.email};
  d.submitAssignment(s,participant,a.id,'comprovante-ref-123');
@@ -39,10 +40,13 @@ test('participant can request an activity and team can approve it',()=>{
  const s={};const p=d.requestAccess(s,{name:'Participante',email:'atividade@example.com'});
  d.approveParticipant(s,admin,p.id);
  const participant={id:p.id,role:'participant',email:p.email};
- const program=d.createProgram(s,manager,{title:'Atividade aberta',source:'Fonte oficial',reward:0,url:'https://example.org'});
+ const program=d.createProgram(s,manager,{title:'Atividade aberta',source:'Fonte oficial',reward:10,budget:20,url:'https://example.org'});
+ d.confirmProgramFunding(s,admin,program.id,'ref-financiamento-456','https://example.org/evidencia');
  const request=d.requestProgram(s,participant,program.id);
  assert.equal(request.state,'requested');
  assert.throws(()=>d.requestProgram(s,participant,program.id),/já solicitou/);
  d.approveProgramRequest(s,manager,request.id);
  assert.equal(request.state,'assigned');
 });
+
+test('campaigns cannot be used before funding review and cannot exceed their budget',()=>{const s={};const p=d.requestAccess(s,{name:'Participante',email:'budget@example.com'});d.approveParticipant(s,admin,p.id);const participant={id:p.id,role:'participant',email:p.email};const program=d.createProgram(s,manager,{title:'Campanha limitada',source:'Empresa',reward:10,budget:10,url:'https://example.org'});assert.equal(program.status,'pending_funding');assert.throws(()=>d.requestProgram(s,participant,program.id),/indisponível/);d.confirmProgramFunding(s,admin,program.id,'fund-ref-123','https://example.org/receipt');d.requestProgram(s,participant,program.id);assert.throws(()=>d.requestProgram(s,{...participant,id:'another'},program.id),/Orçamento/);});
