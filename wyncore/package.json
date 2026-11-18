@@ -4,7 +4,7 @@
   "private": true,
   "description": "Single-owner opportunity and work tracking platform",
   "engines": {
-    "node": ">=22"
+    "node": "22.x"
   },
   "scripts": {
     "start": "node server.js",
