@@ -47,7 +47,7 @@ if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catc
 async function setupGoogleLogin(){
  const target=$('google-login-button');if(!target)return;
  try{
-  const response=await fetch('/api/auth/config',{cache:'no-store'}),config=await response.json();
+  const response=await fetch('/api/health',{cache:'no-store'}),config=await response.json();
   if(!response.ok||!config.googleEnabled||!config.googleClientId){target.textContent='Entrar com Google ficará disponível após a configuração segura do provedor.';target.setAttribute('aria-disabled','true');return}
   const render=()=>{if(!window.google?.accounts?.id)return;window.google.accounts.id.initialize({client_id:config.googleClientId,callback:window.handleGoogleCredential});window.google.accounts.id.renderButton(target,{theme:'outline',size:'large',shape:'rectangular',text:'continue_with',width:320,locale:'pt-BR'});};
   if(window.google?.accounts?.id){render();return}
