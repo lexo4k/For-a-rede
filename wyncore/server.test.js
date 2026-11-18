@@ -29,6 +29,10 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.equal(healthData.signupAvailable,true);
  const publicPage=await fetch(base+'/sobre.html');
  assert.equal(publicPage.status,200,'public institutional pages should be served');
+ assert.equal((await fetch(base+'/privacidade.html')).status,200);
+ assert.equal((await fetch(base+'/termos.html')).status,200);
+ assert.equal((await fetch(base+'/robots.txt')).status,200);
+ assert.equal((await fetch(base+'/sitemap.xml')).status,200);
  const denied=await fetch(base+'/api/dashboard');
  assert.equal(denied.status,401,'private API must reject anonymous requests');
  const login=await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({password:process.env.WYNCORE_OWNER_PASSWORD})});

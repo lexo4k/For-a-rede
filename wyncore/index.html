@@ -4,16 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1020">
-  <meta name="description" content="WYNCORE: consulte informações públicas, organize oportunidades e acompanhe atividades com transparência."><meta name="robots" content="index,follow"><meta property="og:type" content="website"><meta property="og:title" content="WYNCORE | Oportunidades com transparência"><meta property="og:description" content="Informação, organização e acompanhamento de oportunidades em um só lugar.">
+  <meta name="description" content="WYNCORE: consulte informações públicas, organize oportunidades e acompanhe atividades com transparência."><link rel="canonical" href="https://wyncore.vercel.app/"><meta property="og:url" content="https://wyncore.vercel.app/"><meta name="robots" content="index,follow"><meta property="og:type" content="website"><meta property="og:title" content="WYNCORE | Oportunidades com transparência"><meta property="og:description" content="Informação, organização e acompanhamento de oportunidades em um só lugar.">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css">
-  <title>WYNCORE | Painel privado</title>
+  <title>WYNCORE | Oportunidades e organização</title>
 </head>
 <body>
-  <section id="auth-screen" class="auth-screen hidden">
+  <section id="auth-screen" class="auth-screen">
     <div class="public-home">
       <header class="public-top">
         <a class="brand" href="/" aria-label="WYNCORE início"><span class="brand-mark">W</span><span>WYNCORE<small>OPORTUNIDADES E ORGANIZAÇÃO</small></span></a>
@@ -64,7 +64,7 @@
       <footer class="public-footer"><span>© <span id="public-year">2026</span> WYNCORE. Informação e organização com transparência.</span><nav aria-label="Links institucionais"><a href="/sobre.html">Sobre</a><a href="/privacidade.html">Privacidade</a><a href="/termos.html">Termos de uso</a></nav></footer>
     </div>
   </section>
-  <aside class="sidebar">
+  <aside class="sidebar hidden">
     <a class="brand" href="#"><span class="brand-mark">W</span><span>WYNCORE<small>PRIVATE WORKSPACE</small></span></a>
     <nav aria-label="Navegação principal">
       <button class="nav-item active" data-view="overview">▦ <span>Início</span></button>
@@ -82,7 +82,7 @@
     </nav>
     <div class="sidebar-foot"><span class="status-dot"></span> <span id="server-status">Verificando servidor...</span></div>
   </aside>
-  <main class="main">
+  <main class="main hidden">
     <header class="topbar">
       <div><p class="eyebrow">WORKSPACE / <span id="user-role">CONTA</span></p><h1 id="page-title">Visão geral</h1></div>
       <div class="owner-chip"><span class="avatar">W</span><span id="user-label">Conta<small>Área de trabalho</small></span><button id="logout-btn" class="secondary logout">Sair</button></div>
