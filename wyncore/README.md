@@ -1,12 +1,12 @@
 # WYNCORE
 
-Plataforma privada de atividades com contas por função, aprovação de participantes, atribuição e revisão de tarefas, níveis SL1–SL9 e livro-caixa.
+Plataforma privada de atividades com contas por função, aprovação de participantes exclusivamente pelo administrador proprietário, atribuição e revisão de atividades, níveis SL1–SL9 e registros operacionais.
 
 ## Implementado
 - Backend Node.js sem dependências de terceiros (exceto armazenamento Vercel Blob).
 - Login administrativo por identificador **ADMIN** e senha de ambiente; contas de participantes com senha derivada via scrypt.
 - Sessão assinada em cookie HttpOnly, SameSite=Strict e expiração.
-- Solicitação pública de acesso, aprovação por administrador/supervisor/gerente e controle de papéis.
+- Solicitação pública de acesso; somente o administrador proprietário pode aprovar participantes e executar ações administrativas. Contas novas sempre recebem o papel participant.
 - Campanhas com orçamento, recompensa, fonte HTTPS e bloqueio até conferência manual de evidência de financiamento.
 - Atribuição, comprovação, revisão, histórico, trilha de auditoria e relatórios CSV.
 - Persistência JSON em Vercel Blob privado ou disco persistente.
@@ -43,7 +43,7 @@ Os espaços publicitários da página são apenas posições visuais. Nenhuma re
 Veja [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) para os requisitos técnicos e critérios de ativação das integrações de anúncios e Pix.
 
 ## Módulos inspirados na experiência SL
-A interface inclui áreas para vídeos e campanhas, aprendizagem/estágio, progressão visual SL1–SL9 e acompanhamento de indicações. A progressão é demonstrativa e baseada em atividades aprovadas/registradas no fluxo. Não representa níveis oficiais de terceiros, não cria saldo, não oferece comissões por recrutamento e não processa depósitos ou saques.
+A interface inclui áreas para conteúdos e campanhas, aprendizagem/estágio, progressão visual SL1–SL9 e acompanhamento de indicações. A progressão é administrativa e não cria direito financeiro. A progressão é demonstrativa e baseada em atividades aprovadas/registradas no fluxo. Não representa níveis oficiais de terceiros, não cria saldo, não oferece comissões por recrutamento e não processa depósitos ou saques.
 
 ## Cadastro e integração de parceiros
 O administrador pode cadastrar participantes em Equipe e aprovações. O cadastro cria acesso pendente; após aprovação, a pessoa pode entrar com o e-mail ou celular e a senha definida. Para importação automática de campanhas, configure `WYNCORE_PARTNER_WEBHOOK_SECRET` no ambiente do servidor e compartilhe o segredo apenas com o parceiro contratado. O parceiro envia `POST /api/integrations/campaigns` com JSON contendo `title`, `sponsor`, `reward`, `budget` e `url`, e o cabeçalho `X-Wyncore-Signature: sha256=<HMAC-SHA256 do corpo bruto>`. As campanhas entram como `pending_funding`; o webhook não confirma dinheiro nem libera pagamentos.
