@@ -45,7 +45,7 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  const denied=await fetch(base+'/api/dashboard');
  assert.equal(denied.status,401,'private API must reject anonymous requests');
  const login=await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({identifier:'ADMIN',password:process.env.WYNCORE_OWNER_PASSWORD})});
- assert.equal(login.status,200,'owner login should succeed');
+ assert.equal(login.status,200,'owner login should succeed: '+JSON.stringify(await login.clone().json()));
  cookie=login.headers.get('set-cookie').split(';')[0];
  const blockedOwnerPassword=await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({identifier:'11999999999',password:process.env.WYNCORE_OWNER_PASSWORD})});
  assert.equal(blockedOwnerPassword.status,401,'the administrator password must never authenticate a participant as admin');
