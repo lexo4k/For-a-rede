@@ -65,7 +65,7 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  const signupWithoutPhone=await fetch(base+'/api/access-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'Sem Telefone',email:'semtelefone@example.org',password:'senha-segura-123'})});
  assert.equal(signupWithoutPhone.status,400,'public signup must require a phone number');
  const signupMissingEmail=await fetch(base+'/api/access-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'Sem Email',phone:'11987654320',password:'senha-segura-123'})});
- assert.equal(signupMissingEmail.status,400,'public signup must require an email for participants');
+ assert.equal(signupMissingEmail.status,201,'participants can register with phone and password without an email');
  const signup=await fetch(base+'/api/access-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'Participante Teste',email:'participante@example.org',phone:'11987654321',password:'senha-segura-123'})});
  assert.equal(signup.status,201,'participant access request should be created');
  const pendingDash=await (await fetch(base+'/api/dashboard',{headers:{cookie}})).json();
