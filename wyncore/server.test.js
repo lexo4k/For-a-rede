@@ -50,6 +50,16 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.equal(directApproval.status,200);
  const directLogin=await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({identifier:'21987654321',password:'senha-inicial-123'})});
  assert.equal(directLogin.status,200,'new participant should be able to log in by phone after approval');
+ const companyLead=await fetch(base+'/api/company/leads',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({company:'Empresa Exemplo Ltda',contact:'contato@empresa.example',channel:'email',notes:'Contato inicial'})});
+ assert.equal(companyLead.status,201,'admin should save a company prospect');
+ const lead=await companyLead.json();
+ const leadUpdate=await fetch(base+'/api/company/leads/'+lead.id,{method:'PATCH',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({status:'proposal'})});
+ assert.equal(leadUpdate.status,200,'admin should update the commercial pipeline');
+ const cost=await fetch(base+'/api/company/costs',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({description:'Hospedagem de teste',amount:39.9,category:'tecnologia'})});
+ assert.equal(cost.status,201,'admin should save an operational cost');
+ const companyData=await (await fetch(base+'/api/company',{headers:{cookie}})).json();
+ assert.equal(companyData.leads[0].status,'proposal','commercial changes should persist in storage');
+ assert.equal(companyData.costs[0].amount,39.9,'cost records should persist in storage');
  const integrationStatus=await fetch(base+'/api/integrations/status',{headers:{cookie}});
  assert.equal(integrationStatus.status,200);
  const programResponse=await fetch(base+'/api/programs',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({title:'Atividade de teste',source:'Fonte oficial',reward:75,budget:150,url:'https://example.org/task'})});
