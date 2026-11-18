@@ -7,6 +7,7 @@ const COOKIE='wyncore_session',SESSION_MS=8*60*60*1000;
 const PUBLIC_FILES=new Set(['/','/index.html','/styles.css','/app.js','/manifest.webmanifest','/icon.svg','/sw.js']);
 const MIME={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml','.webmanifest':'application/manifest+json'};
 const rate=new Map();
+function normalizePhone(value){let digits=String(value||'').replace(/\D/g,'');if(digits.startsWith('55')&&(digits.length===12||digits.length===13))digits=digits.slice(2);return digits;}
 function assertConfig(){if(PASSWORD.length<12)throw Error('Configure WYNCORE_OWNER_PASSWORD com pelo menos 12 caracteres.');if(SECRET.length<32)throw Error('Configure WYNCORE_SESSION_SECRET com pelo menos 32 caracteres.')}
 function safeEqual(a,b){const x=Buffer.from(String(a)),y=Buffer.from(String(b));return x.length===y.length&&crypto.timingSafeEqual(x,y)}
 function sign(v){return crypto.createHmac('sha256',SECRET).update(v).digest('base64url')}
@@ -39,7 +40,7 @@ function err(message,status=400){throw Object.assign(Error(message),{status})}
 const STATUSES=['Em análise','Inscrito','Em execução','Concluída, aguardando aprovação','Confirmada pelo contratante','Recebido','Descartada'];
 function validateOpportunity(v){const title=String(v.title||'').trim().slice(0,90),source=String(v.source||'').trim().slice(0,90),value=Number(v.value),url=String(v.url||'').trim();if(!title||!source||!Number.isFinite(value)||value<0||value>10000000)err('Confira nome, fonte e valor.');if(url){let u;try{u=new URL(url)}catch{}if(!u||u.protocol!=='https:')err('O link precisa ser HTTPS válido.')}return{id:crypto.randomUUID(),title,source,value,url,status:'Registrada',createdAt:new Date().toISOString()}}
 function originAllowed(req){const o=req.headers.origin;return !o||o===((PROD?'https':'http')+'://'+req.headers.host)}
-function limited(req){const ip=req.socket.remoteAddress||'?',now=Date.now(),x=rate.get(ip)||{n:0,t:now};if(now-x.t>900000){x.n=0;x.t=now}x.n++;rate.set(ip,x);return x.n>10}
+function limited(req,scope,identity,limit=10,windowMs=900000){const ip=req.socket.remoteAddress||'?',now=Date.now(),id=String(identity||'').trim().toLowerCase()||'unknown',ipKey='ip:'+scope+':'+ip,idKey='id:'+scope+':'+ip+':'+crypto.createHash('sha256').update(id).digest('hex').slice(0,20);if(rate.size>5000)for(const[k,v]of rate)if(now-v.t>windowMs*2)rate.delete(k);const bump=(key,max)=>{const x=rate.get(key)||{n:0,t:now};if(now-x.t>windowMs){x.n=0;x.t=now}x.n++;rate.set(key,x);return x.n>max};return bump(ipKey,120)||bump(idKey,limit);}
 function hashPassword(p,salt=crypto.randomBytes(16).toString('hex')){return new Promise((resolve,reject)=>crypto.scrypt(String(p),salt,64,(e,k)=>e?reject(e):resolve(salt+':'+k.toString('hex'))))}
 async function verifyPassword(p,stored){if(!stored||!stored.includes(':'))return false;const [salt,key]=stored.split(':');const got=await hashPassword(p,salt);return safeEqual(got.split(':')[1],key)}
 function actor(session,d){if(!session)return null;if(session.role==='admin'&&session.id==='owner')return{id:'owner',role:'admin',email:'owner'};return d.participants.find(p=>p.id===session.id&&p.status==='active'&&p.role===session.role)||null}
@@ -48,10 +49,10 @@ async function handler(req,res){try{
  if(req.method==='GET'&&(p==='/health'||p==='/api/health'))return send(res,200,{ok:true,service:'WYNCORE',storage:process.env.BLOB_READ_WRITE_TOKEN?'vercel-blob-private':'persistent-json',authConfigured:Boolean(PASSWORD&&SECRET),publicAccess:true});
  if(!PASSWORD||SECRET.length<32)return send(res,503,{error:'A autenticação segura do WYNCORE ainda não está configurada no servidor.'});
  if(req.method==='POST'&&p==='/api/access-request'){
-  if(limited(req))return send(res,429,{error:'Muitas tentativas. Aguarde.'});if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
-  const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),phone=String(b.phone||'').replace(/\D/g,''),pass=String(b.password||'');
+  if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
+  const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),phone=normalizePhone(b.phone),pass=String(b.password||'');if(limited(req,'signup',email||phone,5,3600000))return send(res,429,{error:'Muitas tentativas de cadastro para este contato. Aguarde um pouco.'});
   if(name.length<2||phone.length<10||phone.length>13||!/^\S+@\S+\.\S+$/.test(email)||pass.length<10)err('Para criar uma conta de participante, informe nome, celular com DDD, e-mail válido e senha com pelo menos 10 caracteres.');
-  const d=await load();if(d.users.some(u=>(email&&u.email===email)||(phone&&u.phone===phone))||d.participants.some(u=>(email&&u.email===email)||(phone&&u.phone===phone)))err('Este e-mail ou telefone já está cadastrado.',409);
+  const d=await load();if(d.users.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone))||d.participants.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone)))err('Este e-mail ou telefone já está cadastrado.',409);
   const person=D.requestAccess(d,{name,email,phone});d.users.push({id:person.id,email,phone,passwordHash:await hashPassword(pass)});await save(d);return send(res,201,{ok:true,message:'Cadastro recebido. Aguarde a liberação da equipe.'});
  }
  if(req.method==='POST'&&p==='/api/integrations/campaigns'){
@@ -64,10 +65,10 @@ async function handler(req,res){try{
   await save(d);return send(res,201,{ok:true,campaignId:campaign.id,status:campaign.status,message:'Campanha importada e aguardando conferência de financiamento.'});
  }
  if(req.method==='POST'&&p==='/api/login'){
-  if(limited(req))return send(res,429,{error:'Muitas tentativas. Aguarde 15 minutos.'});if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
-  const b=await body(req);let user=null;
+  if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
+  const b=await body(req),identifier=String(b.identifier||b.email||'').trim();if(limited(req,'login',identifier,10,900000))return send(res,429,{error:'Muitas tentativas para esta conta. Aguarde 15 minutos.'});let user=null;
   if(PASSWORD&&safeEqual(b.password||'',PASSWORD))user={id:'owner',role:'admin',email:'owner'};
-  else {const d=await load(),identifier=String(b.identifier||b.email||'').trim(),normalized=identifier.toLowerCase(),digits=identifier.replace(/\D/g,''),u=d.users.find(x=>(normalized.includes('@')&&x.email===normalized)||(digits.length>=10&&x.phone===digits));if(u&&await verifyPassword(b.password||'',u.passwordHash)){const person=d.participants.find(x=>x.id===u.id);if(!person||person.status!=='active')return send(res,403,{error:'Cadastro aguardando aprovação da equipe.'});user={id:person.id,role:person.role,email:person.email,phone:person.phone}}}
+  else {const d=await load(),normalized=identifier.toLowerCase(),digits=normalizePhone(identifier),u=d.users.find(x=>(normalized.includes('@')&&x.email===normalized)||(digits.length>=10&&normalizePhone(x.phone)===digits));if(u&&await verifyPassword(b.password||'',u.passwordHash)){const person=d.participants.find(x=>x.id===u.id);if(!person||person.status!=='active')return send(res,403,{error:'Cadastro aguardando aprovação da equipe.'});user={id:person.id,role:person.role,email:person.email,phone:person.phone}}}
   if(!user)return send(res,401,{error:'E-mail ou senha incorretos.'});return send(res,200,{ok:true},{'Set-Cookie':cookie(makeSession(user),SESSION_MS/1000)});
  }
  if(req.method==='POST'&&p==='/api/logout')return send(res,200,{ok:true},{'Set-Cookie':cookie('',0)});
@@ -77,7 +78,7 @@ async function handler(req,res){try{
  const d=await load(),me=actor(session,d);if(!me)return send(res,403,{error:'Conta inativa ou sem permissão.'});
  if(req.method==='GET'&&p==='/api/me')return send(res,200,{id:me.id,role:me.role,email:me.email,name:me.name||'Administrador'});
  if(req.method==='GET'&&p==='/api/integrations/status'){if(me.role!=='admin')err('Somente administrador.',403);return send(res,200,{partnerCampaignWebhook:PARTNER_SECRET?'configured':'not_configured',automaticPaymentTransfers:false,bankVerification:false});}
- if(req.method==='POST'&&p==='/api/participants'){if(me.role!=='admin')err('Somente administrador.',403);const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),phone=String(b.phone||'').replace(/\D/g,''),pass=String(b.password||'');if(name.length<2||!/^\S+@\S+\.\S+$/.test(email)||!phone||phone.length<10||phone.length>13||pass.length<10)err('Para cadastrar um participante, informe nome, e-mail válido, celular com DDD e senha com pelo menos 10 caracteres.');if(d.users.some(u=>(email&&u.email===email)||(phone&&u.phone===phone))||d.participants.some(u=>(email&&u.email===email)||(phone&&u.phone===phone)))err('Este e-mail ou telefone já está cadastrado.',409);const person=D.createParticipant(d,me,{name,email,phone});d.users.push({id:person.id,email,phone,passwordHash:await hashPassword(pass)});await save(d);return send(res,201,{ok:true,participant:{id:person.id,name:person.name,email:person.email,phone:person.phone,status:person.status},message:'Participante cadastrado. Aprove o acesso para liberar o login.'});}
+ if(req.method==='POST'&&p==='/api/participants'){if(me.role!=='admin')err('Somente administrador.',403);const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),phone=normalizePhone(b.phone),pass=String(b.password||'');if(name.length<2||!/^\S+@\S+\.\S+$/.test(email)||!phone||phone.length<10||phone.length>13||pass.length<10)err('Para cadastrar um participante, informe nome, e-mail válido, celular com DDD e senha com pelo menos 10 caracteres.');if(d.users.some(u=>(email&&u.email===email)||(phone&&u.phone===phone))||d.participants.some(u=>(email&&u.email===email)||(phone&&u.phone===phone)))err('Este e-mail ou telefone já está cadastrado.',409);const person=D.createParticipant(d,me,{name,email,phone});d.users.push({id:person.id,email,phone,passwordHash:await hashPassword(pass)});await save(d);return send(res,201,{ok:true,participant:{id:person.id,name:person.name,email:person.email,phone:person.phone,status:person.status},message:'Participante cadastrado. Aprove o acesso para liberar o login.'});}
  if(req.method==='GET'&&p==='/api/dashboard'){
   if(me.role==='admin')return send(res,200,{...D.snapshot(d,me),opportunities:d.opportunities,tasks:d.tasks,events:d.events.slice(-100).reverse(),companyLeads:d.companyLeads||[],companyCosts:d.companyCosts||[]});
   return send(res,200,D.snapshot(d,me));
