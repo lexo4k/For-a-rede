@@ -31,8 +31,7 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.equal(healthData.ownerLoginConfigured,true);
  assert.equal(healthData.participantLoginConfigured,true);
  assert.equal(healthData.signupAvailable,true);
- const authConfig=await (await fetch(base+'/api/auth/config')).json();
- assert.equal(authConfig.googleEnabled,true,'Google login should expose its configured client id');
+ assert.equal(healthData.googleEnabled,true,'Google login should expose its configured client id');
  const publicPage=await fetch(base+'/sobre.html');
  assert.equal(publicPage.status,200,'public institutional pages should be served');
  assert.equal((await fetch(base+'/privacidade.html')).status,200);
