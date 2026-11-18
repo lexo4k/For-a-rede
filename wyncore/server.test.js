@@ -41,6 +41,17 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.ok(participant,'pending participant should appear for the admin');
  const approval=await fetch(base+'/api/participants/approve',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({participantId:participant.id,role:'participant'})});
  assert.equal(approval.status,200,'admin should approve participant');
+ const participantCreated=await fetch(base+'/api/participants',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({name:'Participante Direto',email:'direto@example.org',password:'senha-inicial-123'})});
+ assert.equal(participantCreated.status,201,'admin should be able to add a participant directly');
+ const directParticipant=(await participantCreated.json()).participant;
+ const directPending=await (await fetch(base+'/api/dashboard',{headers:{cookie}})).json();
+ assert.ok(directPending.participants.some(p=>p.id===directParticipant.id));
+ const directApproval=await fetch(base+'/api/participants/approve',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({participantId:directParticipant.id,role:'participant'})});
+ assert.equal(directApproval.status,200);
+ const directLogin=await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:'direto@example.org',password:'senha-inicial-123'})});
+ assert.equal(directLogin.status,200,'new participant should be able to log in after approval');
+ const integrationStatus=await fetch(base+'/api/integrations/status',{headers:{cookie}});
+ assert.equal(integrationStatus.status,200);
  const programResponse=await fetch(base+'/api/programs',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({title:'Atividade de teste',source:'Fonte oficial',reward:75,budget:150,url:'https://example.org/task'})});
  assert.equal(programResponse.status,201,'team should create a program');
  const program=await programResponse.json();
