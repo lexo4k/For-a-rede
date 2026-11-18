@@ -57,8 +57,10 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.ok(directPending.participants.some(p=>p.id===directParticipant.id));
  const directApproval=await fetch(base+'/api/participants/approve',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({participantId:directParticipant.id,role:'participant'})});
  assert.equal(directApproval.status,200);
- const directLogin=await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({identifier:'21987654321',password:'senha-inicial-123'})});
+ const directLogin=await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({identifier:'+55 (21) 98765-4321',password:'senha-inicial-123'})});
  assert.equal(directLogin.status,200,'new participant should be able to log in by phone after approval');
+ const attempts=await Promise.all(Array.from({length:11},()=>fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({identifier:'bloqueado@example.org',password:'senha-errada'})})));assert.equal(attempts[10].status,429,'repeated failures should be rate-limited per account');
+ const otherAccount=await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({identifier:'outra-conta@example.org',password:'senha-errada'})});assert.equal(otherAccount.status,401,'one account rate limit must not block another user on the same IP');
  const companyLead=await fetch(base+'/api/company/leads',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({company:'Empresa Exemplo Ltda',contact:'contato@empresa.example',channel:'email',notes:'Contato inicial'})});
  assert.equal(companyLead.status,201,'admin should save a company prospect');
  const lead=await companyLead.json();
