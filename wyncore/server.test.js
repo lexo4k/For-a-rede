@@ -9,6 +9,12 @@ process.env.WYNCORE_OWNER_PASSWORD='test-password-with-more-than-12';
 process.env.WYNCORE_SESSION_SECRET='test-session-secret-with-more-than-32-characters';
 const {createServer,validateOpportunity,STATUSES}=require('./server');
 let server,base,cookie;
+test('public signup remains available when owner/session secrets are absent',()=>{
+ const script=`const {createServer}=require('./server');const s=createServer();s.listen(0,'127.0.0.1',async()=>{try{const r=await fetch('http://127.0.0.1:'+s.address().port+'/api/access-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'Cadastro sem segredo',email:'sem-segredo@example.org',phone:'11987654321',password:'senha-segura-123'})});process.stdout.write(String(r.status));s.close()}catch(e){process.stderr.write(String(e));s.close();process.exitCode=1}});`;
+ const run=require('node:child_process').spawnSync(process.execPath,['-e',script],{cwd:__dirname,encoding:'utf8',env:{...process.env,WYNCORE_OWNER_PASSWORD:'',WYNCORE_SESSION_SECRET:'',DATA_DIR:path.join(os.tmpdir(),'wyncore-no-auth-'+process.pid)}});
+ assert.equal(run.status,0,run.stderr);
+ assert.equal(run.stdout,'201','signup should not be blocked by missing owner/session configuration');
+});
 test('WYNCORE authenticated API end-to-end',async t=>{
  server=createServer();
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
