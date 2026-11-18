@@ -34,3 +34,15 @@ test('referrals are tracked without automatic commission',()=>{
  assert.equal(s.referrals[0].status,'invited');
  assert.equal(s.ledger.length,0);
 });
+
+test('participant can request an activity and team can approve it',()=>{
+ const s={};const p=d.requestAccess(s,{name:'Participante',email:'atividade@example.com'});
+ d.approveParticipant(s,admin,p.id);
+ const participant={id:p.id,role:'participant',email:p.email};
+ const program=d.createProgram(s,manager,{title:'Atividade aberta',source:'Fonte oficial',reward:0,url:'https://example.org'});
+ const request=d.requestProgram(s,participant,program.id);
+ assert.equal(request.state,'requested');
+ assert.throws(()=>d.requestProgram(s,participant,program.id),/já solicitou/);
+ d.approveProgramRequest(s,manager,request.id);
+ assert.equal(request.state,'assigned');
+});
