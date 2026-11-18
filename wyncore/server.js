@@ -48,10 +48,10 @@ async function handler(req,res){try{
  if(req.method==='GET'&&p==='/health')return send(res,200,{ok:true,service:'wyncore',storage:'persistent-json',authConfigured:Boolean(PASSWORD&&SECRET)});
  if(req.method==='POST'&&p==='/api/access-request'){
   if(limited(req))return send(res,429,{error:'Muitas tentativas. Aguarde.'});if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
-  const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),pass=String(b.password||'');
-  if(name.length<2||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||pass.length<10)err('Informe nome, e-mail válido e senha com pelo menos 10 caracteres.');
-  const d=await load();if(d.users.some(u=>u.email===email)||d.participants.some(u=>u.email===email))err('Este e-mail já está cadastrado.',409);
-  const person=D.requestAccess(d,{name,email});d.users.push({id:person.id,email,passwordHash:await hashPassword(pass)});await save(d);return send(res,201,{ok:true,message:'Cadastro recebido. Aguarde a liberação da equipe.'});
+  const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),phone=String(b.phone||'').replace(/\D/g,''),pass=String(b.password||'');
+  if(name.length<2||(!email&&!phone)||(email&&!/^\S+@\S+\.\S+$/.test(email))||(phone&&(phone.length<10||phone.length>13))||pass.length<10)err('Informe nome, e-mail válido ou telefone com DDD, e senha com pelo menos 10 caracteres.');
+  const d=await load();if(d.users.some(u=>(email&&u.email===email)||(phone&&u.phone===phone))||d.participants.some(u=>(email&&u.email===email)||(phone&&u.phone===phone)))err('Este e-mail ou telefone já está cadastrado.',409);
+  const person=D.requestAccess(d,{name,email,phone});d.users.push({id:person.id,email,phone,passwordHash:await hashPassword(pass)});await save(d);return send(res,201,{ok:true,message:'Cadastro recebido. Aguarde a liberação da equipe.'});
  }
  if(req.method==='POST'&&p==='/api/integrations/campaigns'){
   if(!PARTNER_SECRET)return send(res,503,{error:'Integração de parceiros ainda não configurada no servidor.'});
@@ -59,14 +59,14 @@ async function handler(req,res){try{
   if(!provided||!safeEqual(provided,expected))return send(res,401,{error:'Assinatura do parceiro inválida.'});
   let payload;try{payload=raw?JSON.parse(raw):{}}catch{return send(res,400,{error:'JSON inválido.'})}
   const d=await load(),partner={id:'partner-webhook',role:'manager'};
-  const campaign=D.createProgram(d,partner,{title:payload.title,source:payload.sponsor,sponsor:payload.sponsor,reward:payload.reward,budget:payload.budget,url:payload.url});
+  const campaign=D.createProgram(d,partner,{title:payload.title,source:payload.sponsor,sponsor:payload.sponsor,reward:payload.reward,budget:payload.budget,url:payload.url,videoUrl:payload.videoUrl});
   await save(d);return send(res,201,{ok:true,campaignId:campaign.id,status:campaign.status,message:'Campanha importada e aguardando conferência de financiamento.'});
  }
  if(req.method==='POST'&&p==='/api/login'){
   if(limited(req))return send(res,429,{error:'Muitas tentativas. Aguarde 15 minutos.'});if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
   const b=await body(req);let user=null;
   if(PASSWORD&&safeEqual(b.password||'',PASSWORD))user={id:'owner',role:'admin',email:'owner'};
-  else {const d=await load(),u=d.users.find(x=>x.email===String(b.email||'').trim().toLowerCase());if(u&&await verifyPassword(b.password||'',u.passwordHash)){const person=d.participants.find(x=>x.id===u.id);if(!person||person.status!=='active')return send(res,403,{error:'Cadastro aguardando aprovação da equipe.'});user={id:person.id,role:person.role,email:person.email}}}
+  else {const d=await load(),identifier=String(b.identifier||b.email||'').trim(),normalized=identifier.toLowerCase(),digits=identifier.replace(/\D/g,''),u=d.users.find(x=>(normalized.includes('@')&&x.email===normalized)||(digits.length>=10&&x.phone===digits));if(u&&await verifyPassword(b.password||'',u.passwordHash)){const person=d.participants.find(x=>x.id===u.id);if(!person||person.status!=='active')return send(res,403,{error:'Cadastro aguardando aprovação da equipe.'});user={id:person.id,role:person.role,email:person.email,phone:person.phone}}}
   if(!user)return send(res,401,{error:'E-mail ou senha incorretos.'});return send(res,200,{ok:true},{'Set-Cookie':cookie(makeSession(user),SESSION_MS/1000)});
  }
  if(req.method==='POST'&&p==='/api/logout')return send(res,200,{ok:true},{'Set-Cookie':cookie('',0)});
@@ -76,7 +76,7 @@ async function handler(req,res){try{
  const d=await load(),me=actor(session,d);if(!me)return send(res,403,{error:'Conta inativa ou sem permissão.'});
  if(req.method==='GET'&&p==='/api/me')return send(res,200,{id:me.id,role:me.role,email:me.email,name:me.name||'Administrador'});
  if(req.method==='GET'&&p==='/api/integrations/status'){if(me.role!=='admin')err('Somente administrador.',403);return send(res,200,{partnerCampaignWebhook:PARTNER_SECRET?'configured':'not_configured',automaticPaymentTransfers:false,bankVerification:false});}
- if(req.method==='POST'&&p==='/api/participants'){if(me.role!=='admin')err('Somente administrador.',403);const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),pass=String(b.password||'');if(name.length<2||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||pass.length<10)err('Informe nome, e-mail válido e senha com pelo menos 10 caracteres.');if(d.users.some(u=>u.email===email)||d.participants.some(u=>u.email===email))err('Este e-mail já está cadastrado.',409);const person=D.createParticipant(d,me,{name,email});d.users.push({id:person.id,email,passwordHash:await hashPassword(pass)});await save(d);return send(res,201,{ok:true,participant:{id:person.id,name:person.name,email:person.email,status:person.status},message:'Participante cadastrado. Aprove o acesso para liberar o login.'});}
+ if(req.method==='POST'&&p==='/api/participants'){if(me.role!=='admin')err('Somente administrador.',403);const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),phone=String(b.phone||'').replace(/\D/g,''),pass=String(b.password||'');if(name.length<2||(!email&&!phone)||(email&&!/^\S+@\S+\.\S+$/.test(email))||(phone&&(phone.length<10||phone.length>13))||pass.length<10)err('Informe nome, e-mail válido ou telefone com DDD, e senha com pelo menos 10 caracteres.');if(d.users.some(u=>(email&&u.email===email)||(phone&&u.phone===phone))||d.participants.some(u=>(email&&u.email===email)||(phone&&u.phone===phone)))err('Este e-mail ou telefone já está cadastrado.',409);const person=D.createParticipant(d,me,{name,email,phone});d.users.push({id:person.id,email,phone,passwordHash:await hashPassword(pass)});await save(d);return send(res,201,{ok:true,participant:{id:person.id,name:person.name,email:person.email,phone:person.phone,status:person.status},message:'Participante cadastrado. Aprove o acesso para liberar o login.'});}
  if(req.method==='GET'&&p==='/api/dashboard'){
   if(me.role==='admin')return send(res,200,{...D.snapshot(d,me),opportunities:d.opportunities,tasks:d.tasks,events:d.events.slice(-100).reverse()});
   return send(res,200,D.snapshot(d,me));
