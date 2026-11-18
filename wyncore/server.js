@@ -46,6 +46,7 @@ function actor(session,d){if(!session)return null;if(session.role==='admin'&&ses
 async function handler(req,res){try{
  const url=new URL(req.url,'http://localhost'),p=url.pathname;
  if(req.method==='GET'&&(p==='/health'||p==='/api/health'))return send(res,200,{ok:true,service:'WYNCORE',storage:process.env.BLOB_READ_WRITE_TOKEN?'vercel-blob-private':'persistent-json',authConfigured:Boolean(PASSWORD&&SECRET),publicAccess:true});
+ if(!PASSWORD||SECRET.length<32)return send(res,503,{error:'A autenticação segura do WYNCORE ainda não está configurada no servidor.'});
  if(req.method==='POST'&&p==='/api/access-request'){
   if(limited(req))return send(res,429,{error:'Muitas tentativas. Aguarde.'});if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
   const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),phone=String(b.phone||'').replace(/\D/g,''),pass=String(b.password||'');
