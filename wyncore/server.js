@@ -50,7 +50,7 @@ async function handler(req,res){try{
  if(req.method==='POST'&&p==='/api/access-request'){
   if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
   const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),phone=normalizePhone(b.phone),pass=String(b.password||'');if(limited(req,'signup',email||phone,5,3600000))return send(res,429,{error:'Muitas tentativas de cadastro para este contato. Aguarde um pouco.'});
-  if(name.length<2||phone.length<10||phone.length>13||!/^\S+@\S+\.\S+$/.test(email)||pass.length<10)err('Para criar uma conta de participante, informe nome, celular com DDD, e-mail válido e senha com pelo menos 10 caracteres.');
+  if(name.length<2||phone.length<10||phone.length>13||(email&&!/^\S+@\S+\.\S+$/.test(email))||pass.length<10)err('Para criar uma conta, informe nome, celular com DDD e senha com pelo menos 10 caracteres. O e-mail é opcional.');
   const d=await load();if(d.users.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone))||d.participants.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone)))err('Este e-mail ou telefone já está cadastrado.',409);
   const person=D.requestAccess(d,{name,email,phone});d.users.push({id:person.id,email,phone,passwordHash:await hashPassword(pass)});await save(d);return send(res,201,{ok:true,message:'Cadastro recebido. Aguarde a liberação da equipe.'});
  }
