@@ -14,6 +14,9 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  base='http://127.0.0.1:'+server.address().port;
  t.after(async()=>{await new Promise(resolve=>server.close(resolve));await fs.rm(process.env.DATA_DIR,{recursive:true,force:true})});
+ const health=await fetch(base+'/api/health');
+ assert.equal(health.status,200,'public health endpoint should show server status');
+ assert.equal((await health.json()).ok,true);
  const denied=await fetch(base+'/api/dashboard');
  assert.equal(denied.status,401,'private API must reject anonymous requests');
  const login=await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({password:process.env.WYNCORE_OWNER_PASSWORD})});
