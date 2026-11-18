@@ -22,5 +22,35 @@ function submitAssignment(s,actor,assignmentId,proof){ensureState(s);requireRole
 function reviewAssignment(s,actor,assignmentId,decision,note=''){ensureState(s);requireRole(actor,['admin','supervisor','manager']);const a=s.assignments.find(x=>x.id===assignmentId);if(!a||a.state!=='submitted')throw Object.assign(new Error('Atividade não está aguardando revisão.'),{status:409});if(!['approved','rejected'].includes(decision))throw Object.assign(new Error('Decisão inválida.'),{status:400});a.state=decision;a.reviewedBy=actor.id;a.reviewNote=String(note).slice(0,500);a.reviewedAt=new Date().toISOString();audit(s,actor,'assignment_'+decision,a.id);if(decision==='approved'){const p=s.participants.find(x=>x.id===a.participantId);const completed=s.assignments.filter(x=>x.participantId===p.id&&['approved','paid'].includes(x.state)).length;p.level=LEVELS[Math.min(8,Math.floor(completed/3))]}return a}
 function recordPayment(s,actor,assignmentId,reference){ensureState(s);requireRole(actor,['admin']);const a=s.assignments.find(x=>x.id===assignmentId&&x.state==='approved');const program=a&&s.programs.find(x=>x.id===a.programId);const ref=String(reference||'').trim();if(!a||!program||program.fundingStatus!=='manually_reviewed'||ref.length<4)throw Object.assign(new Error('Atividade aprovada e referência de pagamento são obrigatórias.'),{status:400});a.state='paid';a.paidAt=new Date().toISOString();a.paymentReference=ref;s.ledger.unshift({id:id(),participantId:a.participantId,assignmentId:a.id,kind:'payment_confirmed',amount:a.reward,reference:ref,confirmedBy:actor.id,at:a.paidAt});audit(s,actor,'payment_recorded',a.id);return a}
 function addReferral(s,actor,email){ensureState(s);requireRole(actor,['participant']);const target=String(email||'').trim().toLowerCase();if(!/^\S+@\S+\.\S+$/.test(target)||target===actor.email)throw Object.assign(new Error('E-mail de indicação inválido.'),{status:400});const r={id:id(),inviterId:actor.id,email:target,status:'invited',createdAt:new Date().toISOString()};s.referrals.unshift(r);audit(s,actor,'referral_created',r.id);return r}
-function snapshot(s,actor){ensureState(s);if(actor.role==='participant'){const own=s.assignments.filter(a=>a.participantId===actor.id);return{participant:s.participants.find(p=>p.id===actor.id),assignments:own,ledger:s.ledger.filter(x=>x.participantId===actor.id),referrals:s.referrals.filter(x=>x.inviterId===actor.id),programs:s.programs.filter(p=>p.status==='active'),campaignFeedback:s.campaignFeedback.filter(x=>x.participantId===actor.id)}}requireRole(actor,['admin','supervisor','manager']);return{participants:s.participants,programs:s.programs,assignments:s.assignments,ledger:s.ledger,referrals:s.referrals,audit:s.audit.slice(-200).reverse()}}
-module.exports={ROLES,LEVELS,TASK_STATES,ensureState,requestAccess,createParticipant,approveParticipant,advanceParticipantLevel,createProgram,confirmProgramFunding,reservedBudget,assignProgram,requestProgram,approveProgramRequest,submitAssignment,reviewAssignment,recordPayment,addReferral,snapshot};
+function recordPartnerConversion(s,event){
+ ensureState(s);s.conversions ||= [];
+ const eventId=String(event.eventId||'').trim(),transactionId=String(event.transactionId||'').trim(),participantId=String(event.participantId||'').trim(),programId=String(event.programId||'').trim(),status=String(event.status||'').trim(),revenue=Number(event.revenue);
+ if(!eventId||eventId.length>160||!transactionId||transactionId.length>160)throw Object.assign(new Error('Identificadores do evento e da transação são obrigatórios.'),{status:400});
+ if(!['approved','settled','reversed'].includes(status))throw Object.assign(new Error('Estado de conversão inválido.'),{status:400});
+ if(!Number.isFinite(revenue)||revenue<=0||revenue>10000000||String(event.currency||'BRL').toUpperCase()!=='BRL')throw Object.assign(new Error('Receita deve ser positiva e estar em BRL.'),{status:400});
+ if(s.conversions.some(x=>x.eventIds.includes(eventId)))return {duplicate:true,conversion:s.conversions.find(x=>x.eventIds.includes(eventId))};
+ let c=s.conversions.find(x=>x.transactionId===transactionId);
+ if(!c){
+  const participant=s.participants.find(x=>x.id===participantId&&x.status==='active'),program=s.programs.find(x=>x.id===programId);
+  if(!participant||!program)throw Object.assign(new Error('Participante ou campanha não encontrado/ativo.'),{status:404});
+  c={id:id(),transactionId,participantId,programId,revenue,currency:'BRL',status:'pending',reward:0,eventIds:[],createdAt:new Date().toISOString()};
+  s.conversions.unshift(c);
+ }else if(c.participantId!==participantId||c.programId!==programId)throw Object.assign(new Error('A transação já pertence a outro participante ou campanha.'),{status:409});
+ c.eventIds.push(eventId);c.lastEventAt=new Date().toISOString();c.revenue=revenue;
+ if(status==='approved'&&c.status!=='settled'&&c.status!=='reversed'){c.status='approved';}
+ if(status==='settled'&&c.status!=='reversed'){
+  if(c.status!=='settled'){
+   const pct=Math.max(1,Math.min(90,Number(process.env.WYNCORE_REWARD_SHARE_PERCENT)||60));
+   c.reward=Math.round(revenue*pct)/100;
+   c.status='settled';c.settledAt=new Date().toISOString();
+   s.ledger.unshift({id:id(),participantId:c.participantId,conversionId:c.id,kind:'earning_confirmed',amount:c.reward,reference:transactionId,at:c.settledAt});
+  }
+ }
+ if(status==='reversed'&&c.status!=='reversed'){
+  if(c.status==='settled')s.ledger.unshift({id:id(),participantId:c.participantId,conversionId:c.id,kind:'earning_reversed',amount:-c.reward,reference:transactionId,at:new Date().toISOString()});
+  c.status='reversed';c.reversedAt=new Date().toISOString();
+ }
+ return {duplicate:false,conversion:c};
+}
+function snapshot(s,actor){ensureState(s);if(actor.role==='participant'){const own=s.assignments.filter(a=>a.participantId===actor.id),ledger=s.ledger.filter(x=>x.participantId===actor.id);return{participant:s.participants.find(p=>p.id===actor.id),assignments:own,ledger,wallet:{confirmed:Math.round(ledger.reduce((n,x)=>n+Number(x.amount||0),0)*100)/100,pending:(s.conversions||[]).filter(x=>x.participantId===actor.id&&x.status==='approved').reduce((n,x)=>n+Number(x.revenue||0)*Math.max(1,Math.min(90,Number(process.env.WYNCORE_REWARD_SHARE_PERCENT)||60))/100,0)},conversions:(s.conversions||[]).filter(x=>x.participantId===actor.id),referrals:s.referrals.filter(x=>x.inviterId===actor.id),programs:s.programs.filter(p=>p.status==='active'),campaignFeedback:s.campaignFeedback.filter(x=>x.participantId===actor.id)}}requireRole(actor,['admin','supervisor','manager']);return{participants:s.participants,programs:s.programs,assignments:s.assignments,ledger:s.ledger,referrals:s.referrals,audit:s.audit.slice(-200).reverse()}}
+module.exports={ROLES,LEVELS,TASK_STATES,ensureState,requestAccess,createParticipant,approveParticipant,advanceParticipantLevel,createProgram,confirmProgramFunding,reservedBudget,assignProgram,requestProgram,approveProgramRequest,submitAssignment,reviewAssignment,recordPayment,addReferral,recordPartnerConversion,snapshot};
