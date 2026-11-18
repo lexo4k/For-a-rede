@@ -3,12 +3,13 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const d=require('./domain');
 const admin={id:'admin-1',role:'admin',email:'admin@example.com'};
-const manager={id:'manager-1',role:'manager'};
+const manager={id:'admin-2',role:'admin'};
+const nonAdmin={id:'manager-1',role:'manager'};
 test('access approval, task lifecycle and payment ledger enforce roles',()=>{
  const s={};d.ensureState(s);
  const p=d.requestAccess(s,{name:'Pessoa Teste',email:'pessoa@example.com'});
  assert.equal(p.status,'pending');
- assert.throws(()=>d.assignProgram(s,manager,'missing',p.id),/ativo/);
+ assert.throws(()=>d.assignProgram(s,nonAdmin,'missing',p.id),/Permissão/);
  d.approveParticipant(s,admin,p.id);
  const program=d.createProgram(s,manager,{title:'Tarefa de teste',source:'Contratante',reward:12.5,budget:100,url:'https://example.org/task'});
  d.confirmProgramFunding(s,admin,program.id,'ref-financiamento-123','https://example.org/evidencia');
@@ -50,3 +51,5 @@ test('participant can request an activity and team can approve it',()=>{
 });
 
 test('campaigns cannot be used before funding review and cannot exceed their budget',()=>{const s={};const p=d.requestAccess(s,{name:'Participante',email:'budget@example.com'});d.approveParticipant(s,admin,p.id);const participant={id:p.id,role:'participant',email:p.email};const program=d.createProgram(s,manager,{title:'Campanha limitada',source:'Empresa',reward:10,budget:10,url:'https://example.org'});assert.equal(program.status,'pending_funding');assert.throws(()=>d.requestProgram(s,participant,program.id),/indisponível/);d.confirmProgramFunding(s,admin,program.id,'fund-ref-123','https://example.org/receipt');d.requestProgram(s,participant,program.id);assert.throws(()=>d.requestProgram(s,{...participant,id:'another'},program.id),/Orçamento/);});
+
+test('only the owner admin role can perform management actions',()=>{const s={};const pending=d.requestAccess(s,{name:'Pessoa',email:'pessoa2@example.com'});assert.throws(()=>d.approveParticipant(s,nonAdmin,pending.id),/Permissão/);assert.throws(()=>d.createProgram(s,nonAdmin,{title:'Teste',source:'Empresa',reward:5,budget:10}),/Permissão/);assert.throws(()=>d.snapshot(s,nonAdmin),/Permissão/);});
