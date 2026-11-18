@@ -48,6 +48,13 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.ok(participant,'pending participant should appear for the admin');
  const approval=await fetch(base+'/api/participants/approve',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({participantId:participant.id,role:'participant'})});
  assert.equal(approval.status,200,'admin should approve participant');
+ const signupAlias=await fetch(base+'/api/access-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'Participante Rota Alias',email:'alias@example.org',phone:'31987654321',password:'senha-segura-123'})});
+ assert.equal(signupAlias.status,201,'alias participant should be created');
+ const aliasDash=await (await fetch(base+'/api/dashboard',{headers:{cookie}})).json();
+ const aliasPerson=aliasDash.participants.find(p=>p.email==='alias@example.org');
+ assert.ok(aliasPerson,'alias participant should appear in admin dashboard');
+ const aliasApproval=await fetch(base+'/participants/approve',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({participantId:aliasPerson.id,role:'participant'})});
+ assert.equal(aliasApproval.status,200,'serverless path without /api prefix should normalize and approve');
  const missingEmailParticipant=await fetch(base+'/api/participants',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({name:'Sem Email',phone:'21987654320',password:'senha-inicial-123'})});
  assert.equal(missingEmailParticipant.status,400,'admin-created participants must require an email');
  const participantCreated=await fetch(base+'/api/participants',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({name:'Participante Direto',email:'direto@example.org',phone:'21987654321',password:'senha-inicial-123'})});
