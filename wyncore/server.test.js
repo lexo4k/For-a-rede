@@ -84,6 +84,9 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.ok(participant,'pending participant should appear for the admin');
  const approval=await fetch(base+'/api/participants/approve',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({participantId:participant.id})});
  assert.equal(approval.status,200,'admin should approve participant');
+ const levelAdvance=await fetch(base+'/api/participants/'+participant.id+'/level',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({direction:'next'})});
+ assert.equal(levelAdvance.status,200,'admin should advance participant level');
+ assert.equal((await levelAdvance.json()).level,'SL2');
  const signupAlias=await fetch(base+'/api/access-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'Participante Rota Alias',email:'alias@example.org',phone:'31987654321',password:'senha-segura-123'})});
  assert.equal(signupAlias.status,201,'alias participant should be created');
  const aliasDash=await (await fetch(base+'/api/dashboard',{headers:{cookie}})).json();
@@ -131,6 +134,7 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.ok(participantProfile===undefined,'participant dashboard must not expose the full team list');
  const participantCookie=participantLogin.headers.get('set-cookie').split(';')[0];
  const participantDash=await (await fetch(base+'/api/dashboard',{headers:{cookie:participantCookie}})).json();
+ assert.equal(participantDash.participant.level,'SL2','participant should see the level assigned by admin');
  assert.equal(participantDash.assignments.length,1,'participant should only see their own assigned activity');
  assert.equal(participantDash.assignments[0].id,assignment.id);
  const feedback=await fetch(base+'/api/campaign-feedback',{method:'POST',headers:{cookie:participantCookie,'content-type':'application/json'},body:JSON.stringify({programId:program.id,rating:5,comment:'Anúncio claro e informativo'})});
