@@ -39,3 +39,9 @@ A interface inclui áreas para vídeos e campanhas, aprendizagem/estágio, progr
 ## Cadastro de participantes e integração de parceiros
 
 O administrador pode cadastrar participantes em Equipe e aprovações. O cadastro cria acesso pendente com senha inicial; após aprovação, a pessoa pode entrar com o e-mail e a senha definida. Para importação automática de campanhas, configure `WYNCORE_PARTNER_WEBHOOK_SECRET` no ambiente Vercel e compartilhe o segredo apenas com o parceiro contratado. O parceiro envia `POST /api/integrations/campaigns` com JSON contendo `title`, `sponsor`, `reward`, `budget` e `url`, e o cabeçalho `X-Wyncore-Signature: sha256=<HMAC-SHA256 do corpo bruto>`. As campanhas entram como `pending_funding`; o webhook não confirma dinheiro nem libera pagamentos. Esta versão não faz transferências bancárias nem pagamentos automáticos.
+
+
+## WYNCORE Company
+- Funil comercial de empresas: prospecção, contato, proposta, contrato registrado e inativo.
+- Registro interno de custos operacionais. Os lançamentos não movimentam dinheiro nem substituem extratos ou documentos contábeis.
+- Cada alteração é enviada à API e só é apresentada como salva após resposta bem-sucedida do servidor. Os dados são recarregados do armazenamento persistente após login.
