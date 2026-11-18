@@ -45,7 +45,7 @@ function hashPassword(p,salt=crypto.randomBytes(16).toString('hex')){return new 
 async function verifyPassword(p,stored){if(!stored||!stored.includes(':'))return false;const [salt,key]=stored.split(':');const got=await hashPassword(p,salt);return safeEqual(got.split(':')[1],key)}
 function actor(session,d){if(!session)return null;if(session.role==='admin'&&session.id==='owner')return{id:'owner',role:'admin',email:'owner'};return d.participants.find(p=>p.id===session.id&&p.status==='active'&&p.role===session.role)||null}
 async function handler(req,res){try{
- const url=new URL(req.url,'http://localhost'),p=url.pathname;
+ const url=new URL(req.url,'http://localhost');let p=url.pathname;if(p!=='/'&&!p.startsWith('/api/')&&!PUBLIC_FILES.has(p)&&p!=='/health')p='/api'+p;
  if(req.method==='GET'&&(p==='/health'||p==='/api/health'))return send(res,200,{ok:true,service:'WYNCORE',storage:process.env.BLOB_READ_WRITE_TOKEN?'vercel-blob-private':'persistent-json',authConfigured:Boolean(PASSWORD&&SECRET),publicAccess:true});
  if(!PASSWORD||SECRET.length<32)return send(res,503,{error:'A autenticação segura do WYNCORE ainda não está configurada no servidor.'});
  if(req.method==='POST'&&p==='/api/access-request'){
