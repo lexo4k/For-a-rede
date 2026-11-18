@@ -34,6 +34,8 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.match(await report.text(),/Teste de oportunidade/);
  const privateFile=await fetch(base+'/server.js');
  assert.equal(privateFile.status,404,'server source must not be served publicly');
+ const signupWithoutPhone=await fetch(base+'/api/access-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'Sem Telefone',email:'semtelefone@example.org',password:'senha-segura-123'})});
+ assert.equal(signupWithoutPhone.status,400,'public signup must require a phone number');
  const signup=await fetch(base+'/api/access-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'Participante Teste',email:'participante@example.org',phone:'11987654321',password:'senha-segura-123'})});
  assert.equal(signup.status,201,'participant access request should be created');
  const pendingDash=await (await fetch(base+'/api/dashboard',{headers:{cookie}})).json();
