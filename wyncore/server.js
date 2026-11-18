@@ -76,8 +76,8 @@ async function handler(req,res){try{
 
  if(req.method==='POST'&&p==='/api/participants/approve'){const b=await body(req);if(me.role!=='admin')err('Somente administrador pode liberar participantes e definir cargos.',403);const person=D.approveParticipant(d,me,String(b.participantId||''),b.role||'participant');await save(d);return send(res,200,person)}
  if(req.method==='POST'&&p==='/api/programs'){const x=D.createProgram(d,me,await body(req));await save(d);return send(res,201,x)}
- m=p.match(/^\\/api\\/programs\\/([\\w-]+)\\/request$/);if(req.method==='POST'&&m){const x=D.requestProgram(d,me,m[1]);await save(d);return send(res,201,x)}
- m=p.match(/^\\/api\\/assignments\\/([\\w-]+)\\/accept$/);if(req.method==='POST'&&m){const x=D.approveProgramRequest(d,me,m[1]);await save(d);return send(res,200,x)}
+ m=p.match(/^\/api\/programs\\/([\w-]+)\\/request$/);if(req.method==='POST'&&m){const x=D.requestProgram(d,me,m[1]);await save(d);return send(res,201,x)}
+ m=p.match(/^\/api\/assignments\\/([\w-]+)\\/accept$/);if(req.method==='POST'&&m){const x=D.approveProgramRequest(d,me,m[1]);await save(d);return send(res,200,x)}
  let m=p.match(/^\/api\/programs\/([\w-]+)\/assign$/);if(req.method==='POST'&&m){const b=await body(req),x=D.assignProgram(d,me,m[1],String(b.participantId||''));await save(d);return send(res,201,x)}
  m=p.match(/^\/api\/assignments\/([\w-]+)\/submit$/);if(req.method==='POST'&&m){const b=await body(req),x=D.submitAssignment(d,me,m[1],b.proof);await save(d);return send(res,200,x)}
  m=p.match(/^\/api\/assignments\/([\w-]+)\/review$/);if(req.method==='POST'&&m){const b=await body(req),x=D.reviewAssignment(d,me,m[1],b.decision,b.note);await save(d);return send(res,200,x)}
