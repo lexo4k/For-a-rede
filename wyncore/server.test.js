@@ -119,6 +119,10 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.equal(companyData.costs[0].amount,39.9,'cost records should persist in storage');
  const integrationStatus=await fetch(base+'/api/integrations/status',{headers:{cookie}});
  assert.equal(integrationStatus.status,200);
+ const integrationHealth=await integrationStatus.json();
+ assert.equal(integrationHealth.advertisingNetwork.configured,false);
+ assert.equal(integrationHealth.pix.providerConfigured,false);
+ assert.equal(integrationHealth.pix.payoutsEnabled,false);
  const programResponse=await fetch(base+'/api/programs',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({title:'Atividade de teste',source:'Fonte oficial',reward:75,budget:150,url:'https://example.org/task',videoUrl:'https://example.org/ad.mp4'})});
  assert.equal(programResponse.status,201,'team should create a program');
  const program=await programResponse.json();
@@ -149,9 +153,11 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  const reviewed=await fetch(base+'/api/assignments/'+assignment.id+'/review',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({decision:'approved',note:'Comprovante conferido'})});
  assert.equal(reviewed.status,200,'admin should review submitted proof');
  const payment=await fetch(base+'/api/assignments/'+assignment.id+'/payment',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({reference:'REF-TEST-1234'})});
- assert.equal(payment.status,200,'admin should record an already completed payment');
+ assert.equal(payment.status,503,'WYNCORE must refuse to register a payment until a real Pix provider is connected');
+ const paymentError=await payment.json();
+ assert.match(paymentError.error,/nenhum provedor de pagamentos está conectado/i);
  const finalParticipantDash=await (await fetch(base+'/api/dashboard',{headers:{cookie:participantCookie}})).json();
- assert.equal(finalParticipantDash.ledger.length,1,'participant should see their own payment record');
+ assert.equal(finalParticipantDash.ledger.length,0,'WYNCORE must not create a fake payment ledger entry');
  const originalFetch=global.fetch;
  global.fetch=async(input,options)=>String(input).startsWith('https://oauth2.googleapis.com/tokeninfo?')?new Response(JSON.stringify({aud:process.env.WYNCORE_GOOGLE_CLIENT_ID,sub:'google-sub-123',email:'google@example.org',email_verified:'true',iss:'https://accounts.google.com',exp:String(Math.floor(Date.now()/1000)+300),name:'Conta Google Teste'}),{status:200,headers:{'content-type':'application/json'}}):originalFetch(input,options);
  try{
