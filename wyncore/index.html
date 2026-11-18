@@ -63,11 +63,12 @@
     <section id="view-referrals" class="view hidden"><div class="section-heading"><div><p class="eyebrow">REDE DE CONTATOS</p><h3>Indicações</h3><p class="muted">Acompanhe recomendações sem prometer comissões ou pagamentos que não tenham sido formalmente oferecidos e comprovados.</p></div></div><div class="panel"><h4>Regras de transparência</h4><p class="muted">Não convide pessoas com promessa de lucro garantido, não cobre taxa de entrada e não registre comissão sem contrato e origem financeira verificáveis. Esta versão não gera links de afiliado nem paga bônus por recrutamento.</p></div></section>
     <section id="view-team" class="view hidden"><div class="section-heading"><div><p class="eyebrow">GESTÃO DE ACESSO</p><h3>Equipe e aprovações</h3><p class="muted">Aprove cadastros pendentes e acompanhe os participantes.</p></div></div><div id="participant-list" class="list panel"><p class="empty">Nenhum cadastro pendente.</p></div></section>
     <section id="view-opportunities" class="view hidden">
-      <div class="section-heading"><div><p class="eyebrow">DESCOBERTA</p><h3>Oportunidades</h3><p class="muted">Cadastre apenas oportunidades verificáveis e confira as regras diretamente com a fonte.</p></div></div>
+      <div class="section-heading"><div><p class="eyebrow">DESCOBERTA</p><h3>Oportunidades</h3><p class="muted">Cadastre campanhas com orçamento limitado. Elas só aparecem aos participantes depois da conferência manual de evidência de financiamento.</p></div></div>
       <form id="opportunity-form" class="panel form-grid">
         <label>Nome da oportunidade<input id="opp-title" required maxlength="90" placeholder="Ex.: campanha de divulgação"></label>
         <label>Fonte / empresa<input id="opp-source" required maxlength="90" placeholder="Nome do contratante"></label>
-        <label>Remuneração anunciada (R$)<input id="opp-value" type="number" min="0" max="10000000" step="0.01" required placeholder="0,00"></label>
+        <label>Recompensa por entrega aprovada (R$)<input id="opp-value" type="number" min="0.01" max="1000000" step="0.01" required placeholder="0,00"></label>
+        <label>Orçamento total da campanha (R$)<input id="opp-budget" type="number" min="0.01" max="100000000" step="0.01" required placeholder="Ex.: 500,00"></label>
         <label>Link oficial<input id="opp-url" type="url" placeholder="https://..."></label>
         <button class="primary" type="submit">＋ Registrar oportunidade</button>
       </form>
@@ -84,7 +85,7 @@
         <article class="metric"><span>Confirmado</span><strong id="wallet-confirmed">R$ 0,00</strong><small>Aguardando pagamento</small></article>
         <article class="metric"><span>Recebido</span><strong id="wallet-paid">R$ 0,00</strong><small>Não é saldo bancário</small></article>
       </div>
-      <div class="panel"><h4>Regra do livro-caixa</h4><p class="muted">A mudança de status é manual e deve corresponder a evidências reais. O protótipo não recebe, guarda nem transfere dinheiro.</p></div>
+      <div class="panel"><h4>Regra do livro-caixa</h4><p class="muted">A mudança de status é manual e deve corresponder a evidências reais. O sistema não recebe, guarda nem transfere dinheiro. Uma referência e um link são conferidos manualmente por um administrador e não equivalem a validação bancária automática.</p></div>
     </section>
     <section id="view-reports" class="view hidden">
       <div class="section-heading"><div><p class="eyebrow">TRANSPARÊNCIA</p><h3>Relatórios</h3></div></div>
