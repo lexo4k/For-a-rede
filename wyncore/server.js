@@ -160,7 +160,7 @@ async function handler(req,res){try{
   }
   const cell=v=>{let x=String(v??'');if(/^[=+@\\-\\t\\r]/.test(x))x="'"+x;return '"'+x.replaceAll('"','""')+'"';};
   res.writeHead(200,{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="wyncore-ads-relatorio.csv"','Cache-Control':'no-store'});
-  return res.end('\\ufeff'+rows.map(row=>row.map(cell).join(';')).join('\\r\\n'));
+  return res.end('\ufeff'+rows.map(row=>row.map(cell).join(';')).join('\r\n'));
  }
 
  if(req.method==='GET'&&p==='/api/dashboard'){
