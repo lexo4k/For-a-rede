@@ -26,7 +26,7 @@ async function load(){
   const d=JSON.parse(raw);
   return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[]});
  }
- try{const d=JSON.parse(await fs.readFile(DATA_FILE,'utf8'));return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[]})}catch(e){if(e.code!=='ENOENT')throw e;return D.ensureState({opportunities:[],tasks:[],events:[],users:[]})}
+ try{const d=JSON.parse(await fs.readFile(DATA_FILE,'utf8'));return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[]})}catch(e){if(e.code!=='ENOENT')throw e;return D.ensureState({opportunities:[],tasks:[],events:[],users:[]})}
 }
 async function save(d){
  if(process.env.BLOB_READ_WRITE_TOKEN){
@@ -110,7 +110,7 @@ async function handler(req,res){try{
   const campaigns=d.adCampaigns||[],reviews=d.adReviews||[];
   if(me.role==='admin')return send(res,200,{campaigns,reviews,participants:d.participants.map(x=>({id:x.id,name:x.name,status:x.status})),summary:{campaigns:campaigns.length,open:campaigns.filter(x=>x.status==='open').length,reviews:reviews.length,pending:reviews.filter(x=>x.status==='pending').length,accepted:reviews.filter(x=>x.status==='accepted').length,contracted:campaigns.reduce((n,x)=>n+(Number(x.contractValue)||0),0),received:campaigns.filter(x=>x.contractStatus==='received').reduce((n,x)=>n+(Number(x.contractValue)||0),0)}});
   if(me.role!=='participant')err('Acesso não permitido.',403);
-  return send(res,200,{campaigns:campaigns.filter(x=>x.status==='open'),reviews:reviews.filter(x=>x.participantId===me.id)});
+  const mine=reviews.filter(x=>x.participantId===me.id);return send(res,200,{campaigns:campaigns.filter(x=>x.status==='open'),reviews:mine,campaignHistory:Object.fromEntries(mine.map(r=>{const c=campaigns.find(x=>x.id===r.campaignId);return [r.campaignId,c?c.title:'Campanha encerrada']}))});
  }
  if(req.method==='POST'&&p==='/api/ad-campaigns'){
   if(me.role!=='admin')err('Somente administração pode criar campanhas.',403);
@@ -148,6 +148,19 @@ async function handler(req,res){try{
   const review=(d.adReviews||[]).find(x=>x.id===adMatch[1]);if(!review)return send(res,404,{error:'Avaliação não encontrada.'});
   const b=await body(req),note=String(b.note||'').trim().slice(0,500);if(review.status!=='pending')err('Esta avaliação já foi revisada.',409);
   review.status=adMatch[2]==='accept'?'accepted':'rejected';review.reviewNote=note;review.reviewedBy=me.id;review.reviewedAt=new Date().toISOString();await save(d);return send(res,200,review);
+ }
+
+
+ if(req.method==='GET'&&p==='/api/ad-report.csv'){
+  if(me.role!=='admin')err('Relatório restrito à administração.',403);
+  const campaigns=d.adCampaigns||[],reviews=d.adReviews||[];
+  const rows=[['Campanha','Empresa','Formato','Status','Valor contratado (BRL)','Recebimento','Avaliações','Aprovadas','Rejeitadas','Média clareza','Média credibilidade','Média relevância','Criada em']];
+  for(const c of campaigns){const rs=reviews.filter(r=>r.campaignId===c.id),avg=k=>rs.length?(rs.reduce((n,r)=>n+Number(r[k]||0),0)/rs.length).toFixed(2):'';
+   rows.push([c.title,c.client,c.channel,c.status,c.contractValue,c.contractStatus,rs.length,rs.filter(r=>r.status==='accepted').length,rs.filter(r=>r.status==='rejected').length,avg('clarity'),avg('trust'),avg('relevance'),c.createdAt]);
+  }
+  const cell=v=>{let x=String(v??'');if(/^[=+@\\-\\t\\r]/.test(x))x="'"+x;return '"'+x.replaceAll('"','""')+'"';};
+  res.writeHead(200,{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="wyncore-ads-relatorio.csv"','Cache-Control':'no-store'});
+  return res.end('\\ufeff'+rows.map(row=>row.map(cell).join(';')).join('\\r\\n'));
  }
 
  if(req.method==='GET'&&p==='/api/dashboard'){
