@@ -21,12 +21,12 @@ async function load(){
  if(process.env.BLOB_READ_WRITE_TOKEN){
   const {get}=require('@vercel/blob');
   const found=await get('wyncore/data.json',{access:'private',useCache:false});
-  if(!found)return D.ensureState({opportunities:[],tasks:[],events:[],users:[]});
+  if(!found)return D.ensureState({opportunities:[],tasks:[],events:[],users:[],adCampaigns:[],adReviews:[],advertiserInquiries:[]});
   const raw=await new Response(found.stream).text();
   const d=JSON.parse(raw);
   return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[],advertiserInquiries:d.advertiserInquiries||[]});
  }
- try{const d=JSON.parse(await fs.readFile(DATA_FILE,'utf8'));return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[]})}catch(e){if(e.code!=='ENOENT')throw e;return D.ensureState({opportunities:[],tasks:[],events:[],users:[]})}
+ try{const d=JSON.parse(await fs.readFile(DATA_FILE,'utf8'));return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[],advertiserInquiries:d.advertiserInquiries||[]})}catch(e){if(e.code!=='ENOENT')throw e;return D.ensureState({opportunities:[],tasks:[],events:[],users:[]})}
 }
 async function save(d){
  if(process.env.BLOB_READ_WRITE_TOKEN){
@@ -127,6 +127,21 @@ async function handler(req,res){try{
   if(title.length<3||client.length<2||brief.length<30||!['digital','video','social','display','other'].includes(channel)||!Number.isFinite(value)||value<0||value>100000000)err('Informe título, empresa, briefing com pelo menos 30 caracteres e valor de contrato válido.');
   const c={id:crypto.randomUUID(),title,client,brief,channel,objective,contractValue:value,contractStatus:'not_recorded',status:'draft',createdBy:me.id,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
   d.adCampaigns.unshift(c);d.audit.unshift({id:crypto.randomUUID(),actorId:me.id,type:'ad_campaign_created',entityId:c.id,details:{client},at:new Date().toISOString()});await save(d);return send(res,201,c);
+ }
+ let leadMatch=p.match(/^\/api\/advertiser-inquiries\/([\\w-]+)\/(contacted|decline|create-campaign)$/);
+ if(req.method==='POST'&&leadMatch){
+  if(me.role!=='admin')err('Somente administração.',403);
+  const lead=(d.advertiserInquiries||[]).find(x=>x.id===leadMatch[1]);if(!lead)return send(res,404,{error:'Solicitação não encontrada.'});
+  if(leadMatch[2]==='contacted'){lead.status='contacted';lead.updatedAt=new Date().toISOString()}
+  if(leadMatch[2]==='decline'){lead.status='declined';lead.updatedAt=new Date().toISOString()}
+  if(leadMatch[2]==='create-campaign'){
+   if(lead.status==='converted')err('Solicitação já convertida.',409);
+   const b=await body(req),title=String(b.title||('Pesquisa para '+lead.company)).trim().slice(0,120),brief=String(b.brief||lead.objective).trim().slice(0,3000);
+   if(title.length<3||brief.length<30)err('Título ou briefing inválido.');
+   const c={id:crypto.randomUUID(),title,client:lead.company,brief,channel:'digital',objective:lead.objective,contractValue:0,contractStatus:'not_recorded',status:'draft',createdBy:me.id,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),leadId:lead.id};
+   d.adCampaigns.unshift(c);lead.status='converted';lead.campaignId=c.id;lead.updatedAt=new Date().toISOString();
+  }
+  await save(d);return send(res,200,{ok:true,lead});
  }
  let adMatch=p.match(/^\/api\/ad-campaigns\/([\w-]+)\/(open|pause|complete)$/);
  if(req.method==='POST'&&adMatch){
