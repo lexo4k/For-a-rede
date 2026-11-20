@@ -129,7 +129,7 @@ async function handler(req,res){try{
   const c={id:crypto.randomUUID(),title,client,brief,channel,objective,contractValue:value,contractStatus:'not_recorded',status:'draft',createdBy:me.id,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
   d.adCampaigns.unshift(c);d.audit.unshift({id:crypto.randomUUID(),actorId:me.id,type:'ad_campaign_created',entityId:c.id,details:{client},at:new Date().toISOString()});await save(d);return send(res,201,c);
  }
- let leadMatch=p.match(/^\/api\/advertiser-inquiries\/([\\w-]+)\/(contacted|decline|create-campaign)$/);
+ let leadMatch=p.match(/^\/api\/advertiser-inquiries\/([\w-]+)\/(contacted|decline|create-campaign)$/);
  if(req.method==='POST'&&leadMatch){
   if(me.role!=='admin')err('Somente administração.',403);
   const lead=(d.advertiserInquiries||[]).find(x=>x.id===leadMatch[1]);if(!lead)return send(res,404,{error:'Solicitação não encontrada.'});
