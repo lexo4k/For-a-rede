@@ -14,12 +14,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Syntax checks
-        run: |
-          node --check wyncore/server.js
-          node --check wyncore/ads.js
-          node --check wyncore/app.js
-          node --check wyncore/sw.js
+      - name: Check server syntax
+        run: node --check wyncore/server.js
+      - name: Check Ads frontend syntax
+        run: node --check wyncore/ads.js
+      - name: Check main frontend syntax
+        run: node --check wyncore/app.js
+      - name: Check service worker syntax
+        run: node --check wyncore/sw.js
       - name: Backend tests
         working-directory: wyncore
         run: npm test
