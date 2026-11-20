@@ -4,7 +4,7 @@ const D=require('./domain');
 const ROOT=__dirname,DATA_DIR=process.env.DATA_DIR||path.join(ROOT,'data'),DATA_FILE=path.join(DATA_DIR,'wyncore.json');
 const PORT=Number(process.env.PORT||3000),PASSWORD=process.env.WYNCORE_OWNER_PASSWORD||'',SECRET=process.env.WYNCORE_SESSION_SECRET||'',PARTNER_SECRET=process.env.WYNCORE_PARTNER_WEBHOOK_SECRET||'',GOOGLE_CLIENT_ID=process.env.WYNCORE_GOOGLE_CLIENT_ID||'',PROD=process.env.NODE_ENV==='production';
 const COOKIE='wyncore_session',SESSION_MS=8*60*60*1000;
-const PUBLIC_FILES=new Set(['/','/index.html','/styles.css','/app.js','/manifest.webmanifest','/icon.svg','/sw.js','/sobre.html','/privacidade.html','/termos.html','/robots.txt','/sitemap.xml','/guia-aprendizagem.html','/guia-estagio.html','/seguranca-oportunidades.html','/organizar-candidatura.html']);
+const PUBLIC_FILES=new Set(['/','/index.html','/styles.css','/app.js','/manifest.webmanifest','/icon.svg','/sw.js','/sobre.html','/privacidade.html','/termos.html','/robots.txt','/sitemap.xml','/guia-aprendizagem.html','/guia-estagio.html','/seguranca-oportunidades.html','/organizar-candidatura.html','/ads.html','/ads.css','/ads.js']);
 const MIME={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml','.webmanifest':'application/manifest+json','.xml':'application/xml; charset=utf-8','.txt':'text/plain; charset=utf-8'};
 const rate=new Map();
 function normalizePhone(value){let digits=String(value||'').replace(/\D/g,'');if(digits.startsWith('55')&&(digits.length===12||digits.length===13))digits=digits.slice(2);return digits;}
@@ -24,7 +24,7 @@ async function load(){
   if(!found)return D.ensureState({opportunities:[],tasks:[],events:[],users:[]});
   const raw=await new Response(found.stream).text();
   const d=JSON.parse(raw);
-  return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[]});
+  return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[]});
  }
  try{const d=JSON.parse(await fs.readFile(DATA_FILE,'utf8'));return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[]})}catch(e){if(e.code!=='ENOENT')throw e;return D.ensureState({opportunities:[],tasks:[],events:[],users:[]})}
 }
@@ -105,6 +105,51 @@ async function handler(req,res){try{
  if(req.method==='GET'&&p==='/api/integrations/status'){if(me.role!=='admin')err('Somente administrador.',403);return send(res,200,{advertisingNetwork:{configured:false,conversionValidation:false,reason:'Nenhuma rede de anunciantes está conectada.'},partnerCampaignWebhook:{configured:Boolean(PARTNER_SECRET),conversionValidation:Boolean(process.env.WYNCORE_CONVERSION_SECRET),reason:process.env.WYNCORE_CONVERSION_SECRET?'Webhook assinado de conversões configurado; falta homologação com parceiro e conciliação de liquidação.':'Webhook de campanhas pode importar campanhas; webhook de conversões ainda não configurado.'},pix:{providerConfigured:false,payoutsEnabled:false,bankVerification:false,reason:'Provedor Pix e credenciais de integração não configurados.'},automaticPaymentTransfers:false});}
  if(req.method==='POST'&&p==='/api/campaign-feedback'){if(me.role!=='participant')err('Somente participantes podem avaliar campanhas.',403);if(limited(req,'campaign-feedback',me.id,30,3600000))return send(res,429,{error:'Limite de avaliações atingido. Tente novamente mais tarde.'});const b=await body(req),programId=String(b.programId||''),rating=Number(b.rating),comment=String(b.comment||'').trim().slice(0,300),program=d.programs.find(x=>x.id===programId&&x.status==='active'&&x.videoUrl);if(!program)err('Campanha de vídeo indisponível.',404);if(!Number.isInteger(rating)||rating<1||rating>5)err('Escolha uma avaliação entre 1 e 5.');let feedback=d.campaignFeedback.find(x=>x.programId===programId&&x.participantId===me.id);const now=new Date().toISOString();if(feedback){feedback.rating=rating;feedback.comment=comment;feedback.updatedAt=now;await save(d);return send(res,200,{ok:true,feedback,updated:true})}feedback={id:crypto.randomUUID(),programId,participantId:me.id,rating,comment,createdAt:now,updatedAt:now};d.campaignFeedback.unshift(feedback);await save(d);return send(res,201,{ok:true,feedback,updated:false});}
  if(req.method==='POST'&&p==='/api/participants'){if(me.role!=='admin')err('Somente administrador.',403);const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),phone=normalizePhone(b.phone),pass=String(b.password||'');if(name.length<2||!/^\S+@\S+\.\S+$/.test(email)||!phone||phone.length<10||phone.length>13||pass.length<10)err('Para cadastrar um participante, informe nome, e-mail válido, celular com DDD e senha com pelo menos 10 caracteres.');if(d.users.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone))||d.participants.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone)))err('Este e-mail ou telefone já está cadastrado.',409);const person=D.createParticipant(d,me,{name,email,phone});d.users.push({id:person.id,email,phone,passwordHash:await hashPassword(pass)});await save(d);return send(res,201,{ok:true,participant:{id:person.id,name:person.name,email:person.email,phone:person.phone,status:person.status},message:'Participante cadastrado. Aprove o acesso para liberar o login.'});}
+
+ if(req.method==='GET'&&p==='/api/ad-workspace'){
+  const campaigns=d.adCampaigns||[],reviews=d.adReviews||[];
+  if(me.role==='admin')return send(res,200,{campaigns,reviews,participants:d.participants.map(x=>({id:x.id,name:x.name,status:x.status})),summary:{campaigns:campaigns.length,open:campaigns.filter(x=>x.status==='open').length,reviews:reviews.length,pending:reviews.filter(x=>x.status==='pending').length,accepted:reviews.filter(x=>x.status==='accepted').length,contracted:campaigns.reduce((n,x)=>n+(Number(x.contractValue)||0),0),received:campaigns.filter(x=>x.contractStatus==='received').reduce((n,x)=>n+(Number(x.contractValue)||0),0)}});
+  if(me.role!=='participant')err('Acesso não permitido.',403);
+  return send(res,200,{campaigns:campaigns.filter(x=>x.status==='open'),reviews:reviews.filter(x=>x.participantId===me.id)});
+ }
+ if(req.method==='POST'&&p==='/api/ad-campaigns'){
+  if(me.role!=='admin')err('Somente administração pode criar campanhas.',403);
+  const b=await body(req),title=String(b.title||'').trim().slice(0,120),client=String(b.client||'').trim().slice(0,120),brief=String(b.brief||'').trim().slice(0,3000),channel=String(b.channel||'digital'),objective=String(b.objective||'').trim().slice(0,500),value=Number(b.contractValue||0);
+  if(title.length<3||client.length<2||brief.length<30||!['digital','video','social','display','other'].includes(channel)||!Number.isFinite(value)||value<0||value>100000000)err('Informe título, empresa, briefing com pelo menos 30 caracteres e valor de contrato válido.');
+  const c={id:crypto.randomUUID(),title,client,brief,channel,objective,contractValue:value,contractStatus:'not_recorded',status:'draft',createdBy:me.id,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+  d.adCampaigns.unshift(c);d.audit.unshift({id:crypto.randomUUID(),actorId:me.id,type:'ad_campaign_created',entityId:c.id,details:{client},at:new Date().toISOString()});await save(d);return send(res,201,c);
+ }
+ let adMatch=p.match(/^\/api\/ad-campaigns\/([\w-]+)\/(open|pause|complete)$/);
+ if(req.method==='POST'&&adMatch){
+  if(me.role!=='admin')err('Somente administração.',403);
+  const c=(d.adCampaigns||[]).find(x=>x.id===adMatch[1]);if(!c)return send(res,404,{error:'Campanha não encontrada.'});
+  c.status=({open:'open',pause:'paused',complete:'completed'})[adMatch[2]];c.updatedAt=new Date().toISOString();await save(d);return send(res,200,c);
+ }
+ adMatch=p.match(/^\/api\/ad-campaigns\/([\w-]+)\/contract-payment$/);
+ if(req.method==='POST'&&adMatch){
+  if(me.role!=='admin')err('Somente administração.',403);
+  const c=(d.adCampaigns||[]).find(x=>x.id===adMatch[1]);if(!c)return send(res,404,{error:'Campanha não encontrada.'});
+  const b=await body(req),reference=String(b.reference||'').trim().slice(0,120);if(!reference||Number(c.contractValue)<=0)err('Informe o valor do contrato e a referência real de recebimento.');
+  c.contractStatus='received';c.contractReference=reference;c.receivedAt=new Date().toISOString();c.updatedAt=c.receivedAt;await save(d);return send(res,200,c);
+ }
+ if(req.method==='POST'&&p==='/api/ad-reviews'){
+  if(me.role!=='participant')err('Somente avaliadores podem enviar avaliações.',403);
+  if(limited(req,'ad-review',me.id,20,3600000))return send(res,429,{error:'Limite de avaliações por hora atingido.'});
+  const b=await body(req),campaignId=String(b.campaignId||''),clarity=Number(b.clarity),trust=Number(b.trust),relevance=Number(b.relevance),comment=String(b.comment||'').trim().slice(0,1200);
+  const c=(d.adCampaigns||[]).find(x=>x.id===campaignId&&x.status==='open');if(!c)err('Campanha não está aberta para avaliações.',404);
+  if(![clarity,trust,relevance].every(x=>Number.isInteger(x)&&x>=1&&x<=5)||comment.length<20)err('Avalie os três critérios de 1 a 5 e escreva um comentário de pelo menos 20 caracteres.');
+  if((d.adReviews||[]).some(x=>x.campaignId===campaignId&&x.participantId===me.id))err('Você já enviou uma avaliação para esta campanha.',409);
+  const review={id:crypto.randomUUID(),campaignId,participantId:me.id,clarity,trust,relevance,comment,status:'pending',createdAt:new Date().toISOString()};
+  d.adReviews.unshift(review);d.audit.unshift({id:crypto.randomUUID(),actorId:me.id,type:'ad_review_submitted',entityId:review.id,details:{campaignId},at:new Date().toISOString()});await save(d);return send(res,201,review);
+ }
+ adMatch=p.match(/^\/api\/ad-reviews\/([\w-]+)\/(accept|reject)$/);
+ if(req.method==='POST'&&adMatch){
+  if(me.role!=='admin')err('Somente administração.',403);
+  const review=(d.adReviews||[]).find(x=>x.id===adMatch[1]);if(!review)return send(res,404,{error:'Avaliação não encontrada.'});
+  const b=await body(req),note=String(b.note||'').trim().slice(0,500);if(review.status!=='pending')err('Esta avaliação já foi revisada.',409);
+  review.status=adMatch[2]==='accept'?'accepted':'rejected';review.reviewNote=note;review.reviewedBy=me.id;review.reviewedAt=new Date().toISOString();await save(d);return send(res,200,review);
+ }
+
  if(req.method==='GET'&&p==='/api/dashboard'){
   if(me.role==='admin')return send(res,200,{...D.snapshot(d,me),opportunities:d.opportunities,tasks:d.tasks,events:d.events.slice(-100).reverse(),companyLeads:d.companyLeads||[],companyCosts:d.companyCosts||[],campaignFeedback:d.campaignFeedback||[]});
   return send(res,200,D.snapshot(d,me));
