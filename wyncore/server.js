@@ -55,6 +55,13 @@ async function handler(req,res){try{
   const person=D.requestAccess(d,{name,email,phone});d.users.push({id:person.id,email,phone,passwordHash:await hashPassword(pass)});await save(d);return send(res,201,{ok:true,message:'Cadastro recebido. Aguarde a liberação da equipe.'});
  }
  if(!p.startsWith('/api/')){const file=p==='/'?'/index.html':p;if(!PUBLIC_FILES.has(file))return send(res,404,{error:'Não encontrado'});const full=path.resolve(ROOT,'.'+file);try{const data=await fs.readFile(full);const extension=path.extname(full);const cachePolicy=['.html','.js','.css','.webmanifest'].includes(extension)?'no-cache':'public, max-age=3600';res.writeHead(200,{'Content-Type':MIME[extension]||'application/octet-stream','Cache-Control':cachePolicy});return res.end(data)}catch{return send(res,404,{error:'Arquivo não encontrado'})}}
+ if(req.method==='POST'&&p==='/api/advertiser-inquiries'){
+  if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
+  if(limited(req,'advertiser-inquiry',String(req.headers['x-forwarded-for']||req.socket.remoteAddress||'unknown'),5,3600000))return send(res,429,{error:'Limite de solicitações atingido. Tente novamente mais tarde.'});
+  const b=await body(req),company=String(b.company||'').trim().slice(0,140),contact=String(b.contact||'').trim().slice(0,100),email=String(b.email||'').trim().toLowerCase().slice(0,160),phone=normalizePhone(b.phone),objective=String(b.objective||'').trim().slice(0,1800),budget=Number(b.budget||0);
+  if(company.length<2||contact.length<2||!/^\S+@\S+\.\S+$/.test(email)||phone.length<10||objective.length<30||!Number.isFinite(budget)||budget<0||budget>100000000)err('Informe empresa, responsável, e-mail válido, telefone, objetivo detalhado e orçamento válido.');
+  const d=await load();const lead={id:crypto.randomUUID(),company,contact,email,phone,objective,budget,status:'new',createdAt:new Date().toISOString()};d.advertiserInquiries.unshift(lead);await save(d);return send(res,201,{ok:true,message:'Solicitação recebida. A equipe comercial fará a análise e entrará em contato.'});
+ }
  if(SECRET.length<32)return send(res,503,{error:'A autenticação de sessão ainda não está configurada no servidor. O pedido de cadastro pode ser recebido, mas a entrada ficará indisponível até a configuração.'});
  if(req.method==='POST'&&p==='/api/google-login'){
   if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
@@ -107,13 +114,7 @@ async function handler(req,res){try{
  if(req.method==='POST'&&p==='/api/participants'){if(me.role!=='admin')err('Somente administrador.',403);const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),phone=normalizePhone(b.phone),pass=String(b.password||'');if(name.length<2||!/^\S+@\S+\.\S+$/.test(email)||!phone||phone.length<10||phone.length>13||pass.length<10)err('Para cadastrar um participante, informe nome, e-mail válido, celular com DDD e senha com pelo menos 10 caracteres.');if(d.users.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone))||d.participants.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone)))err('Este e-mail ou telefone já está cadastrado.',409);const person=D.createParticipant(d,me,{name,email,phone});d.users.push({id:person.id,email,phone,passwordHash:await hashPassword(pass)});await save(d);return send(res,201,{ok:true,participant:{id:person.id,name:person.name,email:person.email,phone:person.phone,status:person.status},message:'Participante cadastrado. Aprove o acesso para liberar o login.'});}
 
 
- if(req.method==='POST'&&p==='/api/advertiser-inquiries'){
-  if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
-  if(limited(req,'advertiser-inquiry',String(req.headers['x-forwarded-for']||req.socket.remoteAddress||'unknown'),5,3600000))return send(res,429,{error:'Limite de solicitações atingido. Tente novamente mais tarde.'});
-  const b=await body(req),company=String(b.company||'').trim().slice(0,140),contact=String(b.contact||'').trim().slice(0,100),email=String(b.email||'').trim().toLowerCase().slice(0,160),phone=normalizePhone(b.phone),objective=String(b.objective||'').trim().slice(0,1800),budget=Number(b.budget||0);
-  if(company.length<2||contact.length<2||!/^\S+@\S+\.\S+$/.test(email)||phone.length<10||objective.length<30||!Number.isFinite(budget)||budget<0||budget>100000000)err('Informe empresa, responsável, e-mail válido, telefone, objetivo detalhado e orçamento válido.');
-  const d=await load();const lead={id:crypto.randomUUID(),company,contact,email,phone,objective,budget,status:'new',createdAt:new Date().toISOString()};d.advertiserInquiries.unshift(lead);await save(d);return send(res,201,{ok:true,message:'Solicitação recebida. A equipe comercial fará a análise e entrará em contato.'});
- }
+
 
  if(req.method==='GET'&&p==='/api/ad-workspace'){
   const campaigns=d.adCampaigns||[],reviews=d.adReviews||[];
