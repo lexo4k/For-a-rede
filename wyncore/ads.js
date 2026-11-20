@@ -52,4 +52,5 @@ function renderParticipant(){$('open-campaigns').innerHTML=data.campaigns.length
 $('my-reviews').innerHTML=data.reviews.length?data.reviews.map(r=>'<article class="item"><div class="item-head"><h3>'+esc(data.campaignHistory?.[r.campaignId]||(data.campaigns.find(c=>c.id===r.campaignId)||{}).title||'Avaliação')+'</h3><span class="pill">'+esc(r.status)+'</span></div><p>Clareza '+r.clarity+'/5 · Credibilidade '+r.trust+'/5 · Relevância '+r.relevance+'/5</p><p>'+esc(r.comment)+'</p><small class="muted">'+date(r.createdAt)+'</small></article>').join(''):'<div class="empty">Você ainda não enviou avaliações.</div>'}
 $('open-campaigns').onsubmit=async e=>{const f=e.target.closest('form[data-campaign]');if(!f)return;e.preventDefault();const v=Object.fromEntries(new FormData(f));try{await api('/ad-reviews',{method:'POST',body:JSON.stringify({campaignId:f.dataset.campaign,...v})});await load()}catch(x){alert(x.message)}}
 }
+}
 (async()=>{try{await start()}catch(e){if(e.message.includes('Sessão')||e.message.includes('401'))return;console.warn(e);msg('Não foi possível iniciar a área: '+e.message,true)}})();
