@@ -124,9 +124,9 @@ async function handler(req,res){try{
  }
  if(req.method==='POST'&&p==='/api/ad-campaigns'){
   if(me.role!=='admin')err('Somente administração pode criar campanhas.',403);
-  const b=await body(req),title=String(b.title||'').trim().slice(0,120),client=String(b.client||'').trim().slice(0,120),brief=String(b.brief||'').trim().slice(0,3000),channel=String(b.channel||'digital'),objective=String(b.objective||'').trim().slice(0,500),value=Number(b.contractValue||0);
-  if(title.length<3||client.length<2||brief.length<30||!['digital','video','social','display','other'].includes(channel)||!Number.isFinite(value)||value<0||value>100000000)err('Informe título, empresa, briefing com pelo menos 30 caracteres e valor de contrato válido.');
-  const c={id:crypto.randomUUID(),title,client,brief,channel,objective,contractValue:value,contractStatus:'not_recorded',status:'draft',createdBy:me.id,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+  const b=await body(req),title=String(b.title||'').trim().slice(0,120),client=String(b.client||'').trim().slice(0,120),brief=String(b.brief||'').trim().slice(0,3000),channel=String(b.channel||'digital'),objective=String(b.objective||'').trim().slice(0,500),mediaUrl=String(b.mediaUrl||'').trim().slice(0,2000),value=Number(b.contractValue||0);
+  if(title.length<3||client.length<2||brief.length<30||!['digital','video','social','display','other'].includes(channel)||!Number.isFinite(value)||value<0||value>100000000)err('Informe título, empresa, briefing com pelo menos 30 caracteres e valor de contrato válido.');if(mediaUrl){let u;try{u=new URL(mediaUrl)}catch{}if(!u||u.protocol!=='https:'||u.username||u.password)err('O link do anúncio precisa ser HTTPS válido.');}
+  const c={id:crypto.randomUUID(),title,client,brief,channel,objective,mediaUrl,contractValue:value,contractStatus:'not_recorded',status:'draft',createdBy:me.id,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
   d.adCampaigns.unshift(c);d.audit.unshift({id:crypto.randomUUID(),actorId:me.id,type:'ad_campaign_created',entityId:c.id,details:{client},at:new Date().toISOString()});await save(d);return send(res,201,c);
  }
  let leadMatch=p.match(/^\/api\/advertiser-inquiries\/([\w-]+)\/(contacted|decline|create-campaign)$/);
