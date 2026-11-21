@@ -1,12 +1,14 @@
 'use strict';
 const http=require('node:http'),fs=require('node:fs/promises'),path=require('node:path'),crypto=require('node:crypto');
-const D=require('./domain'),Asaas=require('./asaas'),Adscend=require('./adscend'),Paypal=require('./paypal');
+const D=require('./domain'),Asaas=require('./asaas'),Adscend=require('./adscend'),Paypal=require('./paypal'),Payouts=require('./payouts');
 const ROOT=__dirname,DATA_DIR=process.env.DATA_DIR||path.join(ROOT,'data'),DATA_FILE=path.join(DATA_DIR,'wyncore.json');
 const PORT=Number(process.env.PORT||3000),PASSWORD=process.env.WYNCORE_OWNER_PASSWORD||'',SECRET=process.env.WYNCORE_SESSION_SECRET||'',PARTNER_SECRET=process.env.WYNCORE_PARTNER_WEBHOOK_SECRET||'',GOOGLE_CLIENT_ID=process.env.WYNCORE_GOOGLE_CLIENT_ID||'',PROD=process.env.NODE_ENV==='production';
 const COOKIE='wyncore_session',SESSION_MS=8*60*60*1000;
 const PUBLIC_FILES=new Set(['/','/index.html','/anunciantes.html','/styles.css','/app.js','/manifest.webmanifest','/icon.svg','/sw.js','/sobre.html','/privacidade.html','/termos.html','/robots.txt','/sitemap.xml','/guia-aprendizagem.html','/guia-estagio.html','/seguranca-oportunidades.html','/organizar-candidatura.html','/ads.html','/ads.css','/ads.js','/work.html','/work.css','/work.js']);
 const MIME={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml','.webmanifest':'application/manifest+json','.xml':'application/xml; charset=utf-8','.txt':'text/plain; charset=utf-8'};
 const rate=new Map();
+const operationLocks=new Map();
+async function withLock(key,work){const previous=operationLocks.get(key)||Promise.resolve();let release;const current=new Promise(resolve=>{release=resolve});operationLocks.set(key,current);await previous;try{return await work()}finally{release();if(operationLocks.get(key)===current)operationLocks.delete(key)}}
 function normalizePhone(value){let digits=String(value||'').replace(/\D/g,'');if(digits.startsWith('55')&&(digits.length===12||digits.length===13))digits=digits.slice(2);return digits;}
 function isPlayableAdMedia(value){try{const u=new URL(String(value||''));if(u.protocol!=='https:'||u.username||u.password)return false;const host=u.hostname.toLowerCase();if(host==='youtu.be'||host==='youtube.com'||host.endsWith('.youtube.com')){const id=host==='youtu.be'?u.pathname.split('/').filter(Boolean)[0]:(u.pathname.startsWith('/embed/')?u.pathname.split('/')[2]:u.searchParams.get('v'));return /^[A-Za-z0-9_-]{11}$/.test(id||'')}if(host==='vimeo.com'||host.endsWith('.vimeo.com'))return /^\d+$/.test(u.pathname.split('/').filter(Boolean).pop()||'');return ['mp4','webm','ogg'].includes(u.pathname.toLowerCase().split('.').pop())}catch{return false}}
 function assertConfig(){if(PASSWORD.length<12)throw Error('Configure WYNCORE_OWNER_PASSWORD com pelo menos 12 caracteres.');if(SECRET.length<32)throw Error('Configure WYNCORE_SESSION_SECRET com pelo menos 32 caracteres.')}
@@ -97,15 +99,20 @@ async function handler(req,res){try{
    }
   }
   if(['TRANSFER_DONE','TRANSFER_FAILED','TRANSFER_CANCELLED'].includes(type)&&String(transfer.externalReference||'').startsWith('wyncore-earning:')){
-   const earningId=String(transfer.externalReference).slice('wyncore-earning:'.length);
-   const earning=(d.adEarnings||[]).find(x=>x.id===earningId&&String(x.asaasTransferId)===String(transfer.id));
-   if(earning){
-    if(type==='TRANSFER_DONE'){earning.status='paid';earning.paidAt=new Date().toISOString();earning.paymentReference=transfer.id;}
-    else{earning.status='approved_unpaid';earning.payoutError=String(transfer.failReason||type).slice(0,300);}
-    earning.updatedAt=new Date().toISOString();
+    const updated=Payouts.applyTransferEvent(d,transfer,type,new Date().toISOString());
+    if(!updated){
+     const earningId=String(transfer.externalReference).slice('wyncore-earning:'.length);
+     const legacy=(d.adEarnings||[]).find(x=>x.id===earningId&&String(x.asaasTransferId)===String(transfer.id));
+     if(legacy){
+      if(type==='TRANSFER_DONE'){legacy.status='paid';legacy.paidAt=new Date().toISOString();legacy.paymentReference=transfer.id;}
+      else{legacy.status='approved_unpaid';legacy.payoutError=String(transfer.failReason||type).slice(0,300);}
+      legacy.updatedAt=new Date().toISOString();
+     }
+    }
    }
-  }
-  d.asaasWebhookEvents.push(eventId);if(d.asaasWebhookEvents.length>5000)d.asaasWebhookEvents=d.asaasWebhookEvents.slice(-4000);
+   
+
+d.asaasWebhookEvents.push(eventId);if(d.asaasWebhookEvents.length>5000)d.asaasWebhookEvents=d.asaasWebhookEvents.slice(-4000);
   await save(d);return send(res,200,{ok:true});
  }
 
@@ -254,27 +261,36 @@ if(req.method==='POST'&&p==='/api/pix-key'){
  }
 
  if(req.method==='POST'&&p==='/api/my-pix-withdrawal'){
-  if(me.role!=='participant')err('Somente participantes podem solicitar saque.',403);
-  if(limited(req,'pix-withdrawal',me.id,3,60000))return send(res,429,{error:'Aguarde um minuto antes de solicitar outro Pix.'});
-  const b=await body(req),raw=String(b.amount??'').trim().replace(',','.'),amount=Number(raw);
-  if(!/^\d+(?:\.\d{1,2})?$/.test(raw)||!Number.isFinite(amount)||amount<1)err('Informe um valor a partir de R$ 1,00, com até duas casas decimais.');
-  const cents=Math.round(amount*100),participant=d.participants.find(x=>x.id===me.id);
-  if(!participant?.pixKeyEncrypted||!participant?.pixKeyType)err('Cadastre sua chave Pix antes de solicitar o saque.');
-  if(!Asaas.configured()||!Asaas.webhookConfigured())err('O Pix ainda não está liberado. A administração precisa configurar Asaas e o webhook.');
-  const eligible=(d.adEarnings||[]).filter(x=>x.participantId===me.id&&x.status==='approved_unpaid'&&(d.adCampaigns||[]).some(c=>c.id===x.campaignId&&c.contractStatus==='received'));
-  const availableCents=eligible.reduce((n,x)=>n+Math.round(Number(x.amount||0)*100),0);
-  if(cents>availableCents)err('O valor solicitado ultrapassa seu saldo disponível para saque.',409);
-  const withdrawalId=crypto.randomUUID(),allocations=[];let remaining=cents;
-  for(const source of eligible){if(remaining<=0)break;const sourceCents=Math.round(Number(source.amount||0)*100),take=Math.min(sourceCents,remaining);if(take>0)allocations.push({source,take});remaining-=take;}
-  if(remaining!==0)err('Não foi possível reservar o saldo solicitado. Atualize a carteira e tente novamente.',409);
-  const transfer=await Asaas.transferPix({value:cents/100,pixAddressKey:decryptSecret(participant.pixKeyEncrypted),pixAddressKeyType:participant.pixKeyType,description:'WYNCORE saque parcial',externalReference:'wyncore-earning:'+withdrawalId});
-  const now=new Date().toISOString(),withdrawalEarning={id:withdrawalId,participantId:me.id,campaignId:allocations[0]?.source.campaignId||null,amount:cents/100,status:'payout_pending',payoutProvider:'asaas',asaasTransferId:transfer.id,payoutRequestedAt:now,createdAt:now,selfServiceWithdrawal:true,allocations:allocations.map(a=>({earningId:a.source.id,amount:a.take/100}))};
-  for(const a of allocations){const left=Math.round(Math.round(Number(a.source.amount||0)*100)-a.take)/100;a.source.amount=left;if(left===0)a.source.status='allocated';a.source.updatedAt=now;}
-  d.adEarnings.unshift(withdrawalEarning);await save(d);
-  return send(res,202,{ok:true,status:'payout_pending',amount:cents/100,transferId:transfer.id,message:'Solicitação de Pix enviada. O saldo será atualizado quando o Asaas confirmar a transferência.'});
- }
+   if(me.role!=='participant')err('Somente participantes podem solicitar saque.',403);
+   if(limited(req,'pix-withdrawal',me.id,3,60000))return send(res,429,{error:'Aguarde um minuto antes de solicitar outro Pix.'});
+   const b=await body(req),raw=String(b.amount??'').trim().replace(',','.'),amount=Number(raw);
+   if(!/^\\d+(?:\\.\\d{1,2})?$/.test(raw)||!Number.isFinite(amount)||amount<1)err('Informe um valor a partir de R$ 1,00, com até duas casas decimais.');
+   if(!Asaas.configured()||!Asaas.webhookConfigured())err('O Pix ainda não está liberado. A administração precisa configurar Asaas e o webhook.');
+   return await withLock('wallet',async()=>{
+    const state=await load(),participant=state.participants.find(x=>x.id===me.id&&x.status==='active');
+    if(!participant?.pixKeyEncrypted||!participant?.pixKeyType)err('Cadastre sua chave Pix antes de solicitar o saque.');
+    const pixAddressKey=decryptSecret(participant.pixKeyEncrypted);
+    const amountCents=Math.round(amount*100),withdrawalId=crypto.randomUUID(),now=new Date().toISOString();
+    const reservation=Payouts.reserveWithdrawal(state,{participantId:me.id,amountCents,withdrawalId,now});
+    await save(state);
+    let transfer;
+    try{
+     transfer=await Asaas.transferPix({value:amountCents/100,pixAddressKey,pixAddressKeyType:participant.pixKeyType,description:'WYNCORE saque',externalReference:'wyncore-earning:'+withdrawalId});
+    }catch(error){
+     reservation.status='payout_review_required';
+     reservation.payoutError=String(error.message||'Falha ou resposta inconclusiva do Asaas.').slice(0,300);
+     reservation.updatedAt=new Date().toISOString();
+     await save(state);
+     return send(res,503,{ok:false,status:reservation.status,amount:amountCents/100,withdrawalId,message:'O saldo ficou reservado para evitar um segundo Pix. A resposta do Asaas precisa ser reconciliada antes de liberar ou reenviar este valor.'});
+    }
+    Payouts.attachTransfer(reservation,transfer,new Date().toISOString());
+    await save(state);
+    return send(res,202,{ok:true,status:'payout_pending',amount:amountCents/100,transferId:transfer.id,withdrawalId,message:'Solicitação de Pix enviada. O saldo foi reservado e será atualizado quando o Asaas confirmar a transferência.'});
+   });
+  }
+  
 
- if(req.method==='GET'&&p==='/api/ad-workspace'){
+if(req.method==='GET'&&p==='/api/ad-workspace'){
   const campaigns=d.adCampaigns||[],reviews=d.adReviews||[];
   if(me.role==='admin')return send(res,200,{campaigns,reviews,earnings:d.adEarnings||[],adscendConversions:d.adscendConversions||[],adscendIntegration:{configured:Adscend.configured(),postbackConfigured:Adscend.postbackConfigured(),postbackUrl:Adscend.postbackConfigured()&&process.env.WYNCORE_PUBLIC_URL?String(process.env.WYNCORE_PUBLIC_URL).replace(/\/$/,'')+'/api/webhooks/adscend?token='+encodeURIComponent(process.env.ADSCEND_POSTBACK_SECRET)+'&user=[SB1]&time=[UTS]&ip=[IP]&offer=[SB2]':null},paypalIntegration:{configured:Paypal.configured(),mode:Paypal.mode},advertiserInquiries:d.advertiserInquiries||[],participants:d.participants.map(x=>({id:x.id,name:x.name,email:x.email,phone:x.phone,role:x.role,status:x.status,createdAt:x.createdAt,pixKeyType:x.pixKeyType,pixKeyConfigured:Boolean(x.pixKeyEncrypted),payoutCountry:x.payoutCountry||'BR',paypalEmailConfigured:Boolean(x.paypalEmailEncrypted)})),summary:{campaigns:campaigns.length,open:campaigns.filter(x=>x.status==='open').length,reviews:reviews.length,pending:reviews.filter(x=>x.status==='pending').length,accepted:reviews.filter(x=>x.status==='accepted').length,contracted:campaigns.reduce((n,x)=>n+(Number(x.contractValue)||0),0),received:campaigns.filter(x=>x.contractStatus==='received').reduce((n,x)=>n+(Number(x.contractValue)||0),0)}});
   if(me.role!=='participant')err('Acesso não permitido.',403);
