@@ -87,6 +87,20 @@ function attachWatchMonitor(card,campaignId){
   loadSdk('https://player.vimeo.com/api/player.js',()=>Boolean(window.Vimeo&&window.Vimeo.Player)).then(()=>{const player=new window.Vimeo.Player(vm);player.on('play',()=>state.playing=true);player.on('pause',()=>{state.playing=false;state.last=null});player.on('timeupdate',d=>sample(d.seconds,d.duration,state.playing));player.on('seeked',d=>{if(state.last!==null&&Math.abs(d.seconds-state.last)>2.2){state.invalid=true;if(status)status.textContent='Salto de trecho detectado. Reinicie o vídeo.'}});player.on('ended',d=>{sample(d.seconds,d.duration,true);complete()})}).catch(e=>{if(status)status.textContent=e.message+' A avaliação ficará bloqueada.'});
  }
 }
+
+async function loadAdscendOffers(){
+ const host=$('open-campaigns');if(!host)return;
+ try{
+  const result=await api('/adscend/offers');
+  const section=document.createElement('section');section.className='adscend-offers';
+  const items=Array.isArray(result.offers)?result.offers:[];
+  section.innerHTML='<div class="item-head"><div><p class="eyebrow">REDE INTERNACIONAL · ADSCEND</p><h3>Vídeos recompensados</h3></div><span class="pill">'+esc(result.country||'')+'</span></div>'+
+   (items.length?items.map(x=>'<article class="item"><h4>'+esc(x.title)+'</h4><p>'+esc(x.description)+'</p><p><b>Recompensa estimada:</b> '+(Number.isFinite(Number(x.participantEstimateUsd))?'US$ '+Number(x.participantEstimateUsd).toFixed(2):'a confirmar')+'</p><p class="muted">Estimativa em dólar. A conclusão e o crédito dependem da confirmação da Adscend; não é saldo garantido.</p><a class="primary" href="'+esc(x.clickUrl)+'" target="_blank" rel="noopener noreferrer">Abrir vídeo / campanha ↗</a></article>').join(''):'<p class="muted">Nenhum vídeo recompensado elegível foi encontrado para este país agora.</p>');
+  host.prepend(section);
+ }catch(e){
+  if(e.status===422){const note=document.createElement('p');note.className='muted';note.textContent='A rede internacional ainda não identificou a região desta conexão.';host.prepend(note)}
+ }
+}
 function renderParticipant(){
  $('pix-key-form').onsubmit=async e=>{e.preventDefault();const m=$('pix-key-message');try{const r=await api('/pix-key',{method:'POST',body:JSON.stringify({type:$('pix-key-type').value,key:$('pix-key-value').value})});m.textContent=r.message;m.style.color='#8fe0c9'}catch(x){m.textContent=x.message;m.style.color='#ff9b9b'}};
  $('open-campaigns').innerHTML=data.campaigns.length?data.campaigns.map(c=>{
@@ -98,6 +112,8 @@ function renderParticipant(){
  $('my-earnings').innerHTML=(data.earnings||[]).length?data.earnings.map(x=>'<article class="item"><div class="item-head"><h3>'+esc(data.campaignHistory?.[x.campaignId]||(data.campaigns.find(c=>c.id===x.campaignId)||{}).title||'Campanha')+'</h3><span class="pill">'+(x.status==='paid'?'Pix concluído':x.status==='payout_pending'?'Pix em processamento':'Aprovado, aguardando pagamento')+'</span></div><p>Valor: '+money(x.amount)+'</p><small class="muted">'+date(x.paidAt||x.createdAt)+'</small></article>').join(''):'<div class="empty">Nenhuma recompensa aprovada ainda. O valor só aparece aqui depois que a avaliação for aceita pela equipe.</div>';
  $('my-reviews').innerHTML=data.reviews.length?data.reviews.map(r=>'<article class="item"><div class="item-head"><h3>'+esc(data.campaignHistory?.[r.campaignId]||(data.campaigns.find(c=>c.id===r.campaignId)||{}).title||'Avaliação')+'</h3><span class="pill">'+esc(r.status)+'</span></div><p>Clareza '+r.clarity+'/5 · Credibilidade '+r.trust+'/5 · Relevância '+r.relevance+'/5</p><p>'+esc(r.comment)+'</p><small class="muted">'+date(r.createdAt)+'</small></article>').join(''):'<div class="empty">Você ainda não enviou avaliações.</div>';
  $('open-campaigns').querySelectorAll('.campaign-watch').forEach(card=>{const btn=card.querySelector('[data-start-review]');if(btn)attachWatchMonitor(card,btn.dataset.startReview)});
+ loadAdscendOffers();
+
  $('open-campaigns').onclick=e=>{const btn=e.target.closest('button[data-start-review]');if(!btn)return;const form=$('open-campaigns').querySelector('form[data-campaign="'+btn.dataset.startReview+'"]');if(form){form.classList.remove('hidden');btn.textContent='Avaliação liberada';btn.disabled=true;form.scrollIntoView({behavior:'smooth',block:'center'})}};
 }
 $('open-campaigns').onsubmit=async e=>{const f=e.target.closest('form[data-campaign]');if(!f)return;e.preventDefault();const v=Object.fromEntries(new FormData(f));try{await api('/ad-reviews',{method:'POST',body:JSON.stringify({campaignId:f.dataset.campaign,...v})});await load()}catch(x){alert(x.message)}}
