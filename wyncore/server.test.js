@@ -62,7 +62,7 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.equal((await workEarnings.json()).summary.received,12.5);
  const workLogout=await fetch(base+'/api/work/logout',{method:'POST',headers:{cookie:workCookie}});
  assert.equal(workLogout.status,200);
- assert.equal((await fetch(base+'/api/work/me',{headers:{cookie:workCookie}})).status,401);
+ assert.equal((await fetch(base+'/api/work/me')).status,401,'work endpoints must reject requests without a session cookie');
  const workLogin=await fetch(base+'/api/work/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:'work@example.org',password:'senha-work-segura-123'})});
  assert.equal(workLogin.status,200,'personal work login should work after logout');
  const denied=await fetch(base+'/api/dashboard');
