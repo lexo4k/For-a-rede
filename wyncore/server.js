@@ -7,6 +7,7 @@ const COOKIE='wyncore_session',SESSION_MS=8*60*60*1000;
 const PUBLIC_FILES=new Set(['/','/index.html','/wallet.html','/wallet.css','/wallet.js','/styles.css','/app.js','/manifest.webmanifest','/icon.svg','/sw.js','/sobre.html','/privacidade.html','/termos.html','/robots.txt','/sitemap.xml','/guia-aprendizagem.html','/guia-estagio.html','/seguranca-oportunidades.html','/organizar-candidatura.html']);
 const MIME={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml','.webmanifest':'application/manifest+json','.xml':'application/xml; charset=utf-8','.txt':'text/plain; charset=utf-8'};
 const rate=new Map();
+function validCPF(value){const d=String(value||'').replace(/\D/g,'');if(d.length!==11)return false;let sum=0;for(let i=0;i<9;i++)sum+=Number(d[i])*(10-i);let r=(sum*10)%11;if(r===10)r=0;if(r!==Number(d[9]))return false;sum=0;for(let i=0;i<10;i++)sum+=Number(d[i])*(11-i);r=(sum*10)%11;if(r===10)r=0;return r===Number(d[10])}
 function normalizePhone(value){let digits=String(value||'').replace(/\D/g,'');if(digits.startsWith('55')&&(digits.length===12||digits.length===13))digits=digits.slice(2);return digits;}
 function assertConfig(){if(PASSWORD.length<12)throw Error('Configure WYNCORE_OWNER_PASSWORD com pelo menos 12 caracteres.');if(SECRET.length<32)throw Error('Configure WYNCORE_SESSION_SECRET com pelo menos 32 caracteres.')}
 function safeEqual(a,b){const x=Buffer.from(String(a)),y=Buffer.from(String(b));return x.length===y.length&&crypto.timingSafeEqual(x,y)}
@@ -145,12 +146,13 @@ async function handler(req,res){try{
   if(me.role!=='participant'&&me.role!=='admin')err('Conta sem permissão para depósitos.',403);
   const token=process.env.MERCADOPAGO_ACCESS_TOKEN||'',webhookSecret=process.env.MERCADOPAGO_WEBHOOK_SECRET||'',webhookUrl=process.env.MERCADOPAGO_WEBHOOK_URL||'';
   if(!token||!webhookSecret||!webhookUrl.startsWith('https://'))return send(res,503,{error:'Depósitos Pix ainda não estão habilitados. Falta configurar as credenciais e o webhook seguro do Mercado Pago.'});
-  const b=await body(req),amount=Number(b.amount),email=String(me.email&&me.email!=='owner'?me.email:b.email||'').trim().toLowerCase();
+  const b=await body(req),amount=Number(b.amount),email=String(me.email&&me.email!=='owner'?me.email:b.email||'').trim().toLowerCase(),cpf=String(b.cpf||'').replace(/\D/g,'');
   if(!Number.isFinite(amount)||amount<5||amount>5000)err('O depósito deve ser entre R$ 5,00 e R$ 5.000,00.');
   if(!/^\\S+@\\S+\\.\\S+$/.test(email))err('Informe um e-mail válido do pagador para gerar o Pix.');
+  if(!validCPF(cpf))err('Informe um CPF válido do pagador.');
   if(limited(req,'wallet-deposit',me.id,5,3600000))return send(res,429,{error:'Limite de solicitações de depósito atingido. Aguarde uma hora.'});
   const deposit={id:crypto.randomUUID(),participantId:me.id,amount:Number(amount.toFixed(2)),currency:'BRL',status:'pending',createdAt:new Date().toISOString(),provider:'mercado_pago'};
-  const payload={transaction_amount:deposit.amount,description:'Depósito de carteira WYNCORE',payment_method_id:'pix',payer:{email},external_reference:deposit.id,notification_url:webhookUrl};
+  const payload={transaction_amount:deposit.amount,description:'Depósito de carteira WYNCORE',payment_method_id:'pix',payer:{email,identification:{type:'CPF',number:cpf}},external_reference:deposit.id,notification_url:webhookUrl};
   let response;try{response=await fetch('https://api.mercadopago.com/v1/payments',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json','X-Idempotency-Key':deposit.id},body:JSON.stringify(payload),signal:AbortSignal.timeout(15000)})}catch{return send(res,503,{error:'O Mercado Pago está temporariamente indisponível. Nenhum depósito foi criado.'})}
   const result=await response.json().catch(()=>({}));
   if(!response.ok||!result.id||!result.point_of_interaction?.transaction_data?.qr_code)return send(res,502,{error:'O provedor não conseguiu criar a cobrança Pix. Nenhum saldo foi alterado.'});
