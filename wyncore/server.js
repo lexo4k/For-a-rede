@@ -77,7 +77,7 @@ async function handler(req,res){
  if(!req.__wyncoreStateLock){
   let requestPath='/';
   try{requestPath=new URL(req.url,'http://localhost').pathname}catch{}
-  const apiRequest=requestPath.startsWith('/api/')||(!PUBLIC_FILES.has(requestPath)&&requestPath!=='/'&&requestPath!=='/health'&&!/\\.[a-z0-9]+$/i.test(requestPath));
+  const apiRequest=requestPath.startsWith('/api/')||(!PUBLIC_FILES.has(requestPath)&&requestPath!=='/'&&requestPath!=='/health'&&!/\.[a-z0-9]+$/i.test(requestPath));
   if(apiRequest){req.__wyncoreStateLock=true;return withLock('state',()=>handler(req,res))}
  }
  try{
