@@ -115,6 +115,8 @@ async function loadAdscendOffers(){
  }
 }
 function renderParticipant(){
+ const payoutCountry=$('payout-country');if(payoutCountry)payoutCountry.value=data.payoutProfile?.country||'BR';
+ $('payout-profile-form').onsubmit=async e=>{e.preventDefault();const m=$('payout-profile-message');try{const r=await api('/payout-profile',{method:'POST',body:JSON.stringify({country:$('payout-country').value,paypalEmail:$('paypal-email').value})});m.textContent=r.message;m.style.color='#8fe0c9'}catch(x){m.textContent=x.message;m.style.color='#ff9b9b'}};
  $('pix-key-form').onsubmit=async e=>{e.preventDefault();const m=$('pix-key-message');try{const r=await api('/pix-key',{method:'POST',body:JSON.stringify({type:$('pix-key-type').value,key:$('pix-key-value').value})});m.textContent=r.message;m.style.color='#8fe0c9'}catch(x){m.textContent=x.message;m.style.color='#ff9b9b'}};
  $('open-campaigns').innerHTML=data.campaigns.length?data.campaigns.map(c=>{
   const done=data.reviews.some(r=>r.campaignId===c.id);
