@@ -73,7 +73,14 @@ function limited(req,scope,identity,limit=10,windowMs=900000){const forwarded=St
 function hashPassword(p,salt=crypto.randomBytes(16).toString('hex')){return new Promise((resolve,reject)=>crypto.scrypt(String(p),salt,64,(e,k)=>e?reject(e):resolve(salt+':'+k.toString('hex'))))}
 async function verifyPassword(p,stored){if(!stored||!stored.includes(':'))return false;const [salt,key]=stored.split(':');const got=await hashPassword(p,salt);return safeEqual(got.split(':')[1],key)}
 function actor(session,d){if(!session)return null;if(session.role==='admin'&&session.id==='owner')return{id:'owner',role:'admin',email:'owner'};return d.participants.find(p=>p.id===session.id&&p.status==='active'&&p.role===session.role)||null}
-async function handler(req,res){try{
+async function handler(req,res){
+ if(!req.__wyncoreStateLock){
+  let requestPath='/';
+  try{requestPath=new URL(req.url,'http://localhost').pathname}catch{}
+  const apiRequest=requestPath.startsWith('/api/')||(!PUBLIC_FILES.has(requestPath)&&requestPath!=='/'&&requestPath!=='/health'&&!/\\.[a-z0-9]+$/i.test(requestPath));
+  if(apiRequest){req.__wyncoreStateLock=true;return withLock('state',()=>handler(req,res))}
+ }
+ try{
  const url=new URL(req.url,'http://localhost');let p=url.pathname;if(p!=='/'&&!p.startsWith('/api/')&&!PUBLIC_FILES.has(p)&&p!=='/health'&&!/\.[a-z0-9]+$/i.test(p))p='/api'+p;
  if(req.method==='GET'&&(p==='/health'||p==='/api/health'))return send(res,200,{ok:true,service:'WYNCORE',storage:process.env.BLOB_READ_WRITE_TOKEN?'vercel-blob-private':'persistent-json',authConfigured:Boolean(PASSWORD&&SECRET.length>=32),ownerLoginConfigured:Boolean(PASSWORD),participantLoginConfigured:SECRET.length>=32,phoneLoginEnabled:SECRET.length>=32,googleEnabled:Boolean(GOOGLE_CLIENT_ID),googleClientId:GOOGLE_CLIENT_ID||null,signupAvailable:true,publicAccess:true});
  if(req.method==='POST'&&p==='/api/access-request'){
@@ -522,11 +529,6 @@ if(req.method==='GET'&&p==='/api/ad-workspace'){
  if(req.method==='GET'&&p==='/api/report.csv'){if(me.role==='participant')err('Relatório restrito à equipe.',403);const rows=[['Participante','Atividade','Estado','Valor registrado','Referência','Data'],...(d.tasks||[]).map(t=>['',t.title,t.status,t.value,'',t.updatedAt||t.createdAt]),...(d.assignments||[]).map(a=>[(d.participants||[]).find(x=>x.id===a.participantId)?.email||'',(d.programs||[]).find(x=>x.id===a.programId)?.title||'',a.state,a.reward,a.paymentReference||'',a.paidAt||a.createdAt])];res.writeHead(200,{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="wyncore-relatorio.csv"','Cache-Control':'no-store'});return res.end('\ufeff'+rows.map(r=>r.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(';')).join('\r\n'))}
  return send(res,404,{error:'Rota não encontrada.'});
  }catch(e){if(!e.status||e.status>=500)console.error('WYNCORE request error:',e);return send(res,e.status||500,{error:e.status?e.message:'Erro interno. Consulte os logs do servidor.'})}}
-function createServer(){return http.createServer((req,res)=>{
- const pathname=new URL(req.url,'http://localhost').pathname;
- const publicAsset=pathname==='/'||PUBLIC_FILES.has(pathname)||pathname==='/health';
- const apiRequest=!publicAsset&&(pathname.startsWith('/api/')||(!pathname.includes('.')&&pathname!='/health'));
- return apiRequest?withLock('state',()=>handler(req,res)):handler(req,res);
-})}
+function createServer(){return http.createServer(handler)}
 if(require.main===module){try{assertConfig();createServer().listen(PORT,'0.0.0.0',()=>process.stdout.write('WYNCORE listening on '+PORT+'\n'))}catch(e){process.stderr.write(e.message+'\n');process.exit(1)}}
 module.exports={createServer,handler,load,save,hashPassword,verifyPassword,validateOpportunity,limited,STATUSES};
