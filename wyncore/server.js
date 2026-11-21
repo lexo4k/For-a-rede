@@ -233,7 +233,12 @@ async function handler(req,res){try{
   d.adCampaigns.unshift(c);d.audit.unshift({id:crypto.randomUUID(),actorId:me.id,type:'ad_campaign_created',entityId:c.id,details:{client},at:new Date().toISOString()});await save(d);return send(res,201,c);
  }
 
- adMatch=p.match(/^\\/api\\/ad-campaigns\\/([\\w-]+)\\/pix$/);
+ if(req.method==='GET'&&adMatch){
+  if(me.role!=='admin')err('Somente administração.',403);
+  const c=(d.adCampaigns||[]).find(x=>x.id===adMatch[1]);if(!c?.asaasPaymentId)err('Ainda não existe cobrança Pix para esta campanha.',404);
+  const qr=await Asaas.getPixQrCode(c.asaasPaymentId);return send(res,200,{ok:true,paymentId:c.asaasPaymentId,payload:qr.payload,encodedImage:qr.encodedImage,expirationDate:qr.expirationDate});
+ }
+ adMatch=p.match(/^\/api\/ad-campaigns\/([\w-]+)\/pix$/);
  if(req.method==='POST'&&adMatch){
   if(me.role!=='admin')err('Somente administração.',403);
   const c=(d.adCampaigns||[]).find(x=>x.id===adMatch[1]);if(!c)return send(res,404,{error:'Campanha não encontrada.'});
@@ -304,7 +309,7 @@ async function handler(req,res){try{
 
 
 
- adMatch=p.match(/^\\/api\\/ad-earnings\\/([\\w-]+)\\/pay-pix$/);
+ adMatch=p.match(/^\/api\/ad-earnings\/([\w-]+)\/pay-pix$/);
  if(req.method==='POST'&&adMatch){
   if(me.role!=='admin')err('Somente administração.',403);
   const earning=(d.adEarnings||[]).find(x=>x.id===adMatch[1]);if(!earning)return send(res,404,{error:'Recompensa não encontrada.'});
