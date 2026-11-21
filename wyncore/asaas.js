@@ -41,7 +41,7 @@ async function createCustomer({ name, cpfCnpj, email, mobilePhone, externalRefer
   });
 }
 async function createPixCharge({ customer, value, description, externalReference }) {
-  const dueDate = new Date().toISOString().slice(0, 10);
+  const dueDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   return request('/payments', 'POST', { customer, billingType: 'PIX', value: Number(value), dueDate, description: String(description || 'Campanha WYNCORE').slice(0, 200), externalReference });
 }
 async function getPixQrCode(paymentId) {
