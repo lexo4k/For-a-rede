@@ -6,7 +6,8 @@ const os=require('node:os');
 const path=require('node:path');
 process.env.DATA_DIR=path.join(os.tmpdir(),'wyncore-ads-'+process.pid);
 process.env.WYNCORE_OWNER_PASSWORD='ads-test-owner-password-123';
-process.env.WYNCORE_SESSION_SECRET='ads-test-session-secret-with-at-least-32-characters';\nprocess.env.ASAAS_WEBHOOK_TOKEN='ads-test-webhook-token-with-more-than-32-characters';
+process.env.WYNCORE_SESSION_SECRET='ads-test-session-secret-with-at-least-32-characters';
+process.env.ASAAS_WEBHOOK_TOKEN='ads-test-webhook-token-with-more-than-32-characters';
 const {createServer}=require('./server');
 
 test('Asaas webhook is authenticated and idempotent',async t=>{
