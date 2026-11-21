@@ -208,6 +208,7 @@ async function handler(req,res){try{
  if(req.method==='POST'&&adMatch){
   if(me.role!=='admin')err('Somente administração.',403);
   const c=(d.adCampaigns||[]).find(x=>x.id===adMatch[1]);if(!c)return send(res,404,{error:'Campanha não encontrada.'});
+  if(adMatch[2]==='open'&&(Number(c.contractValue)<=0||c.contractStatus!=='received'))err('Campanha não pode ser publicada: confirme primeiro o recebimento real do orçamento do contratante.',409);
   c.status=({open:'open',pause:'paused',complete:'completed'})[adMatch[2]];c.updatedAt=new Date().toISOString();await save(d);return send(res,200,c);
  }
  adMatch=p.match(/^\/api\/ad-campaigns\/([\w-]+)\/contract-payment$/);
