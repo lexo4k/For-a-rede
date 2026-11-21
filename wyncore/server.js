@@ -257,7 +257,7 @@ if(req.method==='POST'&&p==='/api/pix-key'){
   if(me.role!=='participant')err('Somente participantes podem solicitar saque.',403);
   if(limited(req,'pix-withdrawal',me.id,3,60000))return send(res,429,{error:'Aguarde um minuto antes de solicitar outro Pix.'});
   const b=await body(req),raw=String(b.amount??'').trim().replace(',','.'),amount=Number(raw);
-  if(!/^\\d+(?:\\.\\d{1,2})?$/.test(raw)||!Number.isFinite(amount)||amount<1)err('Informe um valor a partir de R$ 1,00, com até duas casas decimais.');
+  if(!/^\d+(?:\.\d{1,2})?$/.test(raw)||!Number.isFinite(amount)||amount<1)err('Informe um valor a partir de R$ 1,00, com até duas casas decimais.');
   const cents=Math.round(amount*100),participant=d.participants.find(x=>x.id===me.id);
   if(!participant?.pixKeyEncrypted||!participant?.pixKeyType)err('Cadastre sua chave Pix antes de solicitar o saque.');
   if(!Asaas.configured()||!Asaas.webhookConfigured())err('O Pix ainda não está liberado. A administração precisa configurar Asaas e o webhook.');
