@@ -3,7 +3,7 @@
 Central pessoal para organizar oportunidades de avaliação, pesquisa e treinamento de dados.
 
 ## O que esta versão faz
-- Apresenta links para os portais oficiais OneForma, Welo Data, RWS TrainAI e Prolific.
+- Apresenta links para os portais oficiais OneForma, Welo Data, RWS TrainAI, Prolific, CrowdGen by Appen, TELUS Digital AI Community e Outlier.
 - Permite registrar tarefas encontradas nesses portais.
 - Organiza tarefas salvas, em andamento, enviadas para revisão e concluídas.
 - Guarda o acompanhamento localmente no navegador/dispositivo, sem enviar senhas ou documentos a um intermediário.
