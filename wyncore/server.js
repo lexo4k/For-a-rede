@@ -85,7 +85,8 @@ async function handler(req,res){try{
   d.asaasWebhookEvents.push(eventId);if(d.asaasWebhookEvents.length>5000)d.asaasWebhookEvents=d.asaasWebhookEvents.slice(-4000);
   await save(d);return send(res,200,{ok:true});
  }
-\n if(!p.startsWith('/api/')){const file=p==='/'?'/index.html':p;if(!PUBLIC_FILES.has(file))return send(res,404,{error:'Não encontrado'});const full=path.resolve(ROOT,'.'+file);try{const data=await fs.readFile(full);const extension=path.extname(full);const cachePolicy=['.html','.js','.css','.webmanifest'].includes(extension)?'no-cache':'public, max-age=3600';res.writeHead(200,{'Content-Type':MIME[extension]||'application/octet-stream','Cache-Control':cachePolicy});return res.end(data)}catch{return send(res,404,{error:'Arquivo não encontrado'})}}
+
+ if(!p.startsWith('/api/')){const file=p==='/'?'/index.html':p;if(!PUBLIC_FILES.has(file))return send(res,404,{error:'Não encontrado'});const full=path.resolve(ROOT,'.'+file);try{const data=await fs.readFile(full);const extension=path.extname(full);const cachePolicy=['.html','.js','.css','.webmanifest'].includes(extension)?'no-cache':'public, max-age=3600';res.writeHead(200,{'Content-Type':MIME[extension]||'application/octet-stream','Cache-Control':cachePolicy});return res.end(data)}catch{return send(res,404,{error:'Arquivo não encontrado'})}}
  if(req.method==='POST'&&p==='/api/advertiser-inquiries'){
   if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
   if(limited(req,'advertiser-inquiry',String(req.headers['x-forwarded-for']||req.socket.remoteAddress||'unknown'),5,3600000))return send(res,429,{error:'Limite de solicitações atingido. Tente novamente mais tarde.'});
@@ -219,7 +220,8 @@ async function handler(req,res){try{
   if(type==='PHONE'&&key.replace(/\\D/g,'').length!==11)err('Celular Pix precisa conter DDD e 11 dígitos.');
   const person=d.participants.find(x=>x.id===me.id);person.pixKeyEncrypted=encryptSecret(key);person.pixKeyType=type;person.pixKeyUpdatedAt=new Date().toISOString();await save(d);return send(res,200,{ok:true,message:'Chave Pix cadastrada para os repasses WYNCORE.'});
  }
-\n if(req.method==='GET'&&p==='/api/ad-workspace'){
+
+ if(req.method==='GET'&&p==='/api/ad-workspace'){
   const campaigns=d.adCampaigns||[],reviews=d.adReviews||[];
   if(me.role==='admin')return send(res,200,{campaigns,reviews,earnings:d.adEarnings||[],advertiserInquiries:d.advertiserInquiries||[],participants:d.participants.map(x=>({id:x.id,name:x.name,email:x.email,phone:x.phone,role:x.role,status:x.status,createdAt:x.createdAt,pixKeyType:x.pixKeyType,pixKeyConfigured:Boolean(x.pixKey)})),summary:{campaigns:campaigns.length,open:campaigns.filter(x=>x.status==='open').length,reviews:reviews.length,pending:reviews.filter(x=>x.status==='pending').length,accepted:reviews.filter(x=>x.status==='accepted').length,contracted:campaigns.reduce((n,x)=>n+(Number(x.contractValue)||0),0),received:campaigns.filter(x=>x.contractStatus==='received').reduce((n,x)=>n+(Number(x.contractValue)||0),0)}});
   if(me.role!=='participant')err('Acesso não permitido.',403);
@@ -254,7 +256,8 @@ async function handler(req,res){try{
   c.asaasCustomerId=customer.id;c.asaasPaymentId=payment.id;c.contractStatus='awaiting_pix';c.pixCreatedAt=new Date().toISOString();await save(d);
   return send(res,201,{ok:true,paymentId:payment.id,invoiceUrl:payment.invoiceUrl||null,payload:qr.payload,encodedImage:qr.encodedImage,expirationDate:qr.expirationDate});
  }
-\n let leadMatch=p.match(/^\/api\/advertiser-inquiries\/([\w-]+)\/(contacted|decline|create-campaign)$/);
+
+ let leadMatch=p.match(/^\/api\/advertiser-inquiries\/([\w-]+)\/(contacted|decline|create-campaign)$/);
  if(req.method==='POST'&&leadMatch){
   if(me.role!=='admin')err('Somente administração.',403);
   const lead=(d.advertiserInquiries||[]).find(x=>x.id===leadMatch[1]);if(!lead)return send(res,404,{error:'Solicitação não encontrada.'});
@@ -302,7 +305,8 @@ async function handler(req,res){try{
    earning.asaasTransferId=transfer.id;earning.status='payout_pending';earning.payoutRequestedAt=new Date().toISOString();earning.payoutError=null;return true;
   }catch(e){earning.payoutError=String(e.message||'Falha ao iniciar Pix').slice(0,300);return false;}
  }
-\n adMatch=p.match(/^\/api\/ad-reviews\/([\w-]+)\/(accept|reject)$/);
+
+ adMatch=p.match(/^\/api\/ad-reviews\/([\w-]+)\/(accept|reject)$/);
  if(req.method==='POST'&&adMatch){
   if(me.role!=='admin')err('Somente administração.',403);
   const review=(d.adReviews||[]).find(x=>x.id===adMatch[1]);if(!review)return send(res,404,{error:'Avaliação não encontrada.'});
@@ -322,7 +326,8 @@ async function handler(req,res){try{
   const ok=await tryAutomaticPix(earning,d);await save(d);if(!ok)err(earning.payoutError||'Cadastre uma chave Pix válida para o participante.',400);
   return send(res,202,{ok:true,status:earning.status,transferId:earning.asaasTransferId,message:'Pix solicitado. A confirmação final chegará pelo webhook Asaas.'});
  }
-\n adMatch=p.match(/^\/api\/ad-earnings\/([\w-]+)\/mark-paid$/);
+
+ adMatch=p.match(/^\/api\/ad-earnings\/([\w-]+)\/mark-paid$/);
  if(req.method==='POST'&&adMatch){
   if(me.role!=='admin')err('Somente administração.',403);
   const earning=(d.adEarnings||[]).find(x=>x.id===adMatch[1]);if(!earning)return send(res,404,{error:'Lançamento não encontrado.'});
