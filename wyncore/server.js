@@ -69,7 +69,7 @@ async function handler(req,res){try{
   if(req.method==='POST'&&p==='/api/work/register'){
    const b=await body(req),name=String(b.name||'').trim().slice(0,90),email=String(b.email||'').trim().toLowerCase(),pass=String(b.password||'');
    if(limited(req,'work-register',email,5,3600000))return send(res,429,{error:'Muitas tentativas de cadastro. Aguarde uma hora.'});
-   if(name.length<2||!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)||pass.length<10)err('Informe nome, e-mail válido e senha com pelo menos 10 caracteres.');
+   if(name.length<2||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||pass.length<10)err('Informe nome, e-mail válido e senha com pelo menos 10 caracteres.');
    if(d.workAccounts.some(x=>x.email===email))err('Este e-mail já possui uma conta WYNCORE Work.',409);
    const account={id:crypto.randomUUID(),name,email,passwordHash:await hashPassword(pass),createdAt:new Date().toISOString()};
    d.workAccounts.push(account);await save(d);
@@ -98,7 +98,7 @@ async function handler(req,res){try{
    const task={id:crypto.randomUUID(),accountId:account.id,title,platform,note,url:taskUrl,status,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
    d.workTasks.unshift(task);await save(d);return send(res,201,{task});
   }
-  const taskMatch=p.match(/^\\/api\\/work\\/tasks\\/([\\w-]+)$/);
+  const taskMatch=p.match(/^\/api\/work\/tasks\/([\w-]+)$/);
   if(taskMatch){
    const task=d.workTasks.find(x=>x.id===taskMatch[1]&&x.accountId===account.id);
    if(!task)return send(res,404,{error:'Tarefa não encontrada.'});
