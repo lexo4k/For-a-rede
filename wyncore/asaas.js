@@ -6,7 +6,7 @@ const WEBHOOK_TOKEN = process.env.ASAAS_WEBHOOK_TOKEN || '';
 const BASE_URL = process.env.ASAAS_BASE_URL || (process.env.ASAAS_ENV === 'production' ? 'https://api.asaas.com/v3' : 'https://api-sandbox.asaas.com/v3');
 
 function configured() { return API_KEY.length > 20; }
-function webhookConfigured() { return WEBHOOK_TOKEN.length >= 32; }
+function webhookConfigured() { return WEBHOOK_TOKEN.length >= 32 && WEBHOOK_TOKEN.length <= 255 && !/\\s/.test(WEBHOOK_TOKEN); }
 function safeEqual(a, b) {
   const x = Buffer.from(String(a || ''));
   const y = Buffer.from(String(b || ''));
@@ -30,6 +30,20 @@ async function request(path, method = 'GET', data) {
   return result;
 }
 
+async function createWebhook({ url, email }) {
+  if (!webhookConfigured()) throw Object.assign(new Error('Configure ASAAS_WEBHOOK_TOKEN com 32 a 255 caracteres, sem espaços.'), { status: 503 });
+  return request('/webhooks', 'POST', {
+    name: 'WYNCORE - cobranças e repasses',
+    url,
+    email,
+    enabled: true,
+    interrupted: false,
+    apiVersion: 3,
+    authToken: WEBHOOK_TOKEN,
+    sendType: 'SEQUENTIALLY',
+    events: ['PAYMENT_RECEIVED', 'TRANSFER_DONE', 'TRANSFER_FAILED', 'TRANSFER_CANCELLED']
+  });
+}
 async function createCustomer({ name, cpfCnpj, email, mobilePhone, externalReference }) {
   return request('/customers', 'POST', {
     name: String(name || '').slice(0, 100),
@@ -57,4 +71,4 @@ async function transferPix({ value, pixAddressKey, pixAddressKeyType, descriptio
     externalReference
   });
 }
-module.exports = { configured, webhookConfigured, verifyWebhook, createCustomer, createPixCharge, getPixQrCode, transferPix };
+module.exports = { configured, webhookConfigured, verifyWebhook, createCustomer, createPixCharge, getPixQrCode, transferPix, createWebhook };
