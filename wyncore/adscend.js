@@ -6,7 +6,8 @@ function configured(){return Boolean(/^\d+$/.test(PUBLISHER_ID)&&API_KEY.length>
 function postbackConfigured(){return String(process.env.ADSCEND_POSTBACK_SECRET||'').length>=32}
 function countryCode(value){const code=String(value||'').trim().toUpperCase();return /^[A-Z]{2}$/.test(code)?code:''}
 function isCashRewardedVideo(offer,country){
- return Boolean(offer&&Array.isArray(offer.product_id)&&offer.product_id.some(v=>Number(v)===8)&&Number(offer.allowed_traffic)===3&&Array.isArray(offer.countries)&&offer.countries.includes(country));
+ const traffic=String(offer?.allowed_traffic??'').trim().toLowerCase();
+ return Boolean(offer&&Array.isArray(offer.product_id)&&offer.product_id.some(v=>Number(v)===8)&&['3','incent','incentive','cash'].includes(traffic)&&Array.isArray(offer.countries)&&offer.countries.some(v=>String(v).toUpperCase()===country));
 }
 async function getRewardedVideos({country,userId}){
  if(!configured())throw Object.assign(Error('Integração Adscend aguardando credenciais de publisher.'),{status:503});
