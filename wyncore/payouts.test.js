@@ -83,3 +83,14 @@ test('não permite vincular uma segunda transferência à mesma reserva', () => 
   attachTransfer(payout, { id: 'tr_800' }, 'first');
   assert.throws(() => attachTransfer(payout, { id: 'tr_801' }, 'second'), /outra transferência/);
 });
+
+test('permite sacar recompensa Adscend somente após postback confirmado em BRL', () => {
+  const s = { adCampaigns: [], adEarnings: [
+    { id: 'a1', participantId: 'p1', provider: 'adscend', providerConfirmed: true, amount: 4.25, status: 'approved_unpaid' },
+    { id: 'a2', participantId: 'p1', provider: 'adscend', providerConfirmed: false, amount: 9, status: 'approved_unpaid' }
+  ] };
+  const payout = reserveWithdrawal(s, { participantId: 'p1', amountCents: 425, withdrawalId: 'wa1', now: 'now' });
+  assert.equal(payout.amount, 4.25);
+  assert.equal(s.adEarnings.find(x => x.id === 'a1').status, 'allocated');
+  assert.equal(s.adEarnings.find(x => x.id === 'a2').status, 'approved_unpaid');
+});
