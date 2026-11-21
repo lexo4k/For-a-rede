@@ -1,0 +1,28 @@
+name: WYNCORE CI
+on:
+  push:
+    branches:
+      - wyncore-personal-work-hub
+      - main
+    paths:
+      - 'wyncore/**'
+      - '.github/workflows/wyncore-ci.yml'
+  pull_request:
+    paths:
+      - 'wyncore/**'
+      - '.github/workflows/wyncore-ci.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: wyncore
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm test
