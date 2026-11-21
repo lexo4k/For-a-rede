@@ -25,7 +25,7 @@ Exemplo de formato de URL (não é um endpoint ativo até a configuração):
 
 Não inserir tokens no navegador, no GitHub, em HTML, em arquivos públicos ou no chat. Nunca usar credenciais de teste em produção. Começar com credenciais de teste e validar o ciclo completo em homologação.
 
-## Limites
+O provedor exige identificação do pagador no fluxo Pix; o CPF é validado no backend e enviado somente na requisição ao Mercado Pago.\n\n## Limites
 
 - O módulo não habilita saques nem repasses Pix de saída.
 - O saldo mostrado é um livro-caixa interno e não uma conta de pagamento regulada ou depósito bancário sob custódia da WYNCORE.
