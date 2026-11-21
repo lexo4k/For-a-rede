@@ -407,7 +407,7 @@ if(req.method==='POST'&&p==='/api/pix-key'){
   const b=await body(req),reference=String(b.reference||'').trim().slice(0,160);if(reference.length<4)err('Informe a referência de um pagamento realmente realizado.');
   earning.status='paid';earning.paymentReference=reference;earning.paidAt=new Date().toISOString();earning.paidBy=me.id;await save(d);return send(res,200,earning);
  }
- adMatch=p.match(/^\/api\/ad-earnings\/([\w-]+)\\/pay-paypal$/);
+ adMatch=p.match(/^\/api\/ad-earnings\/([\w-]+)\/pay-paypal$/);
  if(req.method==='POST'&&adMatch){
   if(me.role!=='admin')err('Somente administração.',403);
   const earning=(d.adEarnings||[]).find(x=>x.id===adMatch[1]);if(!earning)return send(res,404,{error:'Recompensa não encontrada.'});
@@ -420,7 +420,7 @@ if(req.method==='POST'&&p==='/api/pix-key'){
   const header=payout.batch_header||{};earning.paypalBatchId=header.payout_batch_id||null;earning.paypalBatchStatus=header.batch_status||'PENDING';earning.paypalMode=Paypal.mode;earning.status='payout_pending';earning.payoutProvider='paypal';earning.payoutRequestedAt=new Date().toISOString();await save(d);
   return send(res,202,{ok:true,status:earning.status,batchId:earning.paypalBatchId,batchStatus:earning.paypalBatchStatus,message:'Lote enviado ao PayPal. Confirme o estado final antes de considerar o pagamento concluído.'});
  }
- adMatch=p.match(/^\/api\/ad-earnings\/([\w-]+)\\/paypal-status$/);
+ adMatch=p.match(/^\/api\/ad-earnings\/([\w-]+)\/paypal-status$/);
  if(req.method==='POST'&&adMatch){
   if(me.role!=='admin')err('Somente administração.',403);
   const earning=(d.adEarnings||[]).find(x=>x.id===adMatch[1]);if(!earning||earning.payoutProvider!=='paypal'||!earning.paypalBatchId)err('Lote PayPal não encontrado.',404);
