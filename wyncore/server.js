@@ -236,7 +236,7 @@ async function handler(req,res){try{
   if(me.role!=='participant')err('Somente participantes podem cadastrar a chave Pix.',403);
   const b=await body(req),key=String(b.key||'').trim(),type=String(b.type||'').toUpperCase();
   if(!['CPF','CNPJ','EMAIL','PHONE','EVP'].includes(type)||key.length<5||key.length>180)err('Informe uma chave Pix válida e seu tipo.');
-  if(type==='EMAIL'&&!/^\\S+@\\S+\\.\\S+$/.test(key))err('E-mail Pix inválido.');
+  if(type==='EMAIL'&&!/^\S+@\S+\.\S+$/.test(key))err('E-mail Pix inválido.');
   if(type==='CPF'&&key.replace(/\\D/g,'').length!==11)err('CPF Pix precisa ter 11 dígitos.');
   if(type==='CNPJ'&&key.replace(/\\D/g,'').length!==14)err('CNPJ Pix precisa ter 14 dígitos.');
   if(type==='PHONE'&&key.replace(/\\D/g,'').length!==11)err('Celular Pix precisa conter DDD e 11 dígitos.');
@@ -251,9 +251,9 @@ async function handler(req,res){try{
  }
  if(req.method==='POST'&&p==='/api/integrations/asaas/webhook'){
   if(me.role!=='admin')err('Somente administração.',403);
-  const publicUrl=String(process.env.WYNCORE_PUBLIC_URL||'').replace(/\\/$/,'');
+  const publicUrl=String(process.env.WYNCORE_PUBLIC_URL||'').replace(/\/$/,'');
   const notifyEmail=String(process.env.WYNCORE_LEADS_TO||'').trim();
-  if(!publicUrl||!/^https:\\/\\//i.test(publicUrl))err('Configure WYNCORE_PUBLIC_URL com o endereço HTTPS público da aplicação.',503);
+  if(!publicUrl||!/^https:\/\//i.test(publicUrl))err('Configure WYNCORE_PUBLIC_URL com o endereço HTTPS público da aplicação.',503);
   if(!/^\\S+@\\S+\\.\\S+$/.test(notifyEmail))err('Configure WYNCORE_LEADS_TO com o e-mail que receberá alertas.',503);
   if(!Asaas.webhookConfigured())err('Configure ASAAS_WEBHOOK_TOKEN com 32 a 255 caracteres, sem espaços.',503);
   const d=await load();
