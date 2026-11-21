@@ -1,155 +1,54 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0b1020">
-  <meta name="description" content="WYNCORE conecta marcas a pesquisas de percepção sobre anúncios, vídeos e trailers, com campanhas financiadas e avaliações transparentes."><link rel="canonical" href="https://wyncore.vercel.app/"><meta property="og:url" content="https://wyncore.vercel.app/"><meta name="robots" content="index,follow"><meta property="og:type" content="website"><meta property="og:title" content="WYNCORE | Pesquisa de percepção para marcas"><meta property="og:description" content="Campanhas de pesquisa com anúncios e trailers, participantes e resultados organizados em uma plataforma.">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <link rel="manifest" href="manifest.webmanifest">
-  <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css">
-  <title>WYNCORE | Oportunidades e organização</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#07130f">
+<meta name="description" content="WYNCORE: vídeos, campanhas e recompensas confirmadas em um só lugar.">
+<title>WYNCORE — Vídeos e recompensas</title>
+<style>
+:root{color-scheme:dark;--bg:#07130f;--panel:#10221a;--panel2:#142b21;--line:#294638;--text:#f2f8f4;--muted:#a1b8aa;--mint:#a5e8c1;--gold:#e8c77e;--red:#ff9b9b}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 75% -10%,#1b4937 0,transparent 42%),var(--bg);color:var(--text);font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}.wrap{width:min(1080px,100%);margin:auto;padding:22px 18px 54px}.top{display:flex;align-items:center;justify-content:space-between;gap:14px}.brand{display:flex;align-items:center;gap:11px;font-weight:900;letter-spacing:1px}.logo{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(145deg,#b5f0cc,#66c995);color:#082016;font-size:25px}.brand small{display:block;font-size:9px;color:var(--muted);letter-spacing:2px;font-weight:600}.tag{border:1px solid var(--line);border-radius:99px;padding:7px 11px;color:var(--mint);font-size:11px}.hero{margin:38px 0 18px;padding:clamp(24px,5vw,48px);border:1px solid #38604b;border-radius:26px;background:linear-gradient(120deg,#183b2b,#0e2119 70%);position:relative;overflow:hidden}.eyebrow{color:var(--mint);font-size:10px;font-weight:800;letter-spacing:2px}.hero h1{font-size:clamp(32px,6vw,58px);line-height:1.02;letter-spacing:-2px;max-width:690px;margin:12px 0}.hero h1 em{font-style:normal;color:var(--mint)}.hero p{max-width:650px;color:#c0d2c7}.pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:22px}.pills span{font-size:11px;padding:8px 11px;border-radius:99px;background:#0a1b13;border:1px solid #315640;color:#d2e9da}.grid{display:grid;grid-template-columns:1fr .85fr;gap:16px;align-items:stretch}.panel{border:1px solid var(--line);border-radius:20px;background:linear-gradient(145deg,var(--panel),#0b1a13);padding:22px}.panel h2{font-size:20px;margin:4px 0 8px}.muted{color:var(--muted);font-size:13px}.field{display:block;margin:14px 0;color:#dcebe1;font-size:12px;font-weight:700}.field input{display:block;width:100%;margin-top:7px;padding:13px 14px;border-radius:11px;border:1px solid #345642;background:#07150e;color:var(--text);font:inherit}.field input:focus{outline:2px solid var(--mint);outline-offset:2px}.btn{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:12px;padding:13px 17px;background:linear-gradient(110deg,#b9f1ce,#78d6a5);color:#092016;font-weight:900;cursor:pointer;text-decoration:none}.btn:disabled{opacity:.55;cursor:wait}.btn.secondary{background:#1a392a;color:#e1f3e7;border:1px solid #3b634c}.switch{background:none;border:0;color:var(--mint);font-weight:800;padding:10px 0;cursor:pointer}.message{min-height:22px;color:var(--gold);font-size:12px}.hidden{display:none!important}.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px}.step{border:1px solid var(--line);border-radius:16px;padding:17px;background:#0d1d15}.step b{display:block;color:var(--mint);margin-bottom:5px}.step p{margin:0;color:var(--muted);font-size:12px}.notice{margin-top:16px;border:1px solid #594a2d;border-radius:14px;padding:14px;color:#e9d7a8;background:#211d12;font-size:12px}.footer{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:28px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:11px}.footer a{color:var(--mint);text-decoration:none}@media(max-width:760px){.grid{grid-template-columns:1fr}.hero{margin-top:24px}.steps{grid-template-columns:1fr}.tag{display:none}}
+</style>
 </head>
 <body>
-  <section id="auth-screen" class="auth-screen">
-    <div class="public-home">
-      <header class="public-top">
-        <a class="brand" href="/" aria-label="WYNCORE início"><span class="brand-mark">W</span><span>WYNCORE<small>ATIVIDADES · CONTEÚDO · PROGRESSO</small></span></a>
-        <a class="primary public-login-link" href="#login-form">Entrar</a>
-      </header>
-      <section class="public-hero">
-        <div class="public-hero-copy">
-          <p class="eyebrow">UMA PLATAFORMA INTEGRADA</p>
-          <h1>Atividades, conteúdo<br><em>e evolução em um só lugar.</em></h1>
-          <p>Participe de atividades publicadas pela equipe, acompanhe vídeos e materiais, envie suas entregas e consulte seu progresso. Tudo organizado dentro da WYNCORE.</p>
-          <div class="public-actions"><a class="primary" href="#access-form">Criar conta</a><a class="secondary" href="#platform-features">Conhecer a plataforma</a><a class="secondary" href="/anunciantes.html">Para empresas ↗</a><a class="secondary" href="/ads.html">WYNCORE Ads ↗</a><a class="secondary" href="/work.html">Minha área de trabalho ↗</a></div>
-          <p class="public-disclaimer">As atividades, critérios e decisões são apresentados com transparência dentro da plataforma.</p>
-        </div>
-        <div class="public-hero-mark" aria-hidden="true"><span>W</span><small>WYNCORE</small></div>
-      </section>
-      <section id="platform-features" class="public-section">
-        <div class="section-heading"><div><p class="eyebrow">POR DENTRO DA WYNCORE</p><h2>Uma experiência conectada do início ao fim</h2><p class="muted">Sem depender de uma coleção de links externos para organizar o trabalho diário.</p></div></div>
-        <div class="public-card-grid">
-          <article class="public-card"><span class="feature-icon">▶</span><h3>Vídeos e conteúdos</h3><p>Biblioteca de materiais autorizados, organizada por atividade e disponível na própria plataforma.</p></article>
-          <article class="public-card"><span class="feature-icon">✓</span><h3>Atividades e entregas</h3><p>Consulte instruções, acompanhe etapas e envie sua comprovação para análise.</p></article>
-          <article class="public-card"><span class="feature-icon">✦</span><h3>Níveis e progresso</h3><p>Acompanhe sua evolução, histórico, metas e critérios de progressão.</p></article>
-          <article class="public-card"><span class="feature-icon">♧</span><h3>Equipes</h3><p>Organização de participantes, convites e acompanhamento de equipes.</p></article>
-        </div>
-      </section>
-      <section class="public-section public-how">
-        <div><p class="eyebrow">FLUXO DA PLATAFORMA</p><h2>Um caminho claro para cada atividade.</h2></div>
-        <ol><li><strong>Participe</strong><span>Veja as atividades disponíveis e suas instruções.</span></li><li><strong>Realize</strong><span>Acesse o conteúdo e conclua as etapas solicitadas.</span></li><li><strong>Envie</strong><span>Registre sua entrega diretamente na plataforma.</span></li><li><strong>Acompanhe</strong><span>Consulte a revisão, o histórico e seu progresso.</span></li></ol>
-      </section>
-      <section class="public-auth">
-        <div class="section-heading"><div><p class="eyebrow">ÁREA DO PARTICIPANTE</p><h2>Entre para continuar sua jornada.</h2><p class="muted">A equipe analisa novas solicitações de acesso.</p></div></div>
-        <div class="auth-grid">
-          <form id="login-form" class="auth-card"><div class="brand-mark">W</div><p class="eyebrow">WYNCORE · ACESSO</p><h2>Entrar</h2><p class="muted">Use seu celular ou acesso administrativo e sua senha.</p><label>Celular ou acesso administrativo<input id="login-email" type="text" inputmode="text" autocomplete="username" placeholder="Seu celular ou ADMIN"></label><label>Senha<input id="owner-password" type="password" autocomplete="current-password" required></label><button class="primary" type="submit">Entrar</button><div id="google-login-button" class="google-login-placeholder" role="status">Verificando acesso Google...</div><p id="login-error" class="auth-error" role="alert"></p></form>
-          <form id="access-form" class="auth-card"><h2>Criar conta</h2><p class="muted">Solicite acesso gratuito à plataforma.</p><label>Nome completo<input id="access-name" autocomplete="name" required minlength="2"></label><label>Número de celular com DDD<input id="access-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(11) 99999-9999" required minlength="10"></label><label>E-mail (opcional)<input id="access-email" type="email" autocomplete="email" placeholder="voce@email.com"></label><label>Crie uma senha<input id="access-password" type="password" autocomplete="new-password" minlength="10" required></label><button class="primary" type="submit">Solicitar acesso</button><p id="access-message" class="auth-error" role="status"></p></form>
-        </div>
-      </section>
-      <footer class="public-footer"><span>© <span id="public-year">2026</span> WYNCORE</span><nav aria-label="Links institucionais"><a href="/sobre.html">Sobre</a><a href="/privacidade.html">Privacidade</a><a href="/termos.html">Termos de uso</a></nav></footer>
-    </div>
-  </section>
-  <aside class="sidebar hidden">
-    <a class="brand" href="#"><span class="brand-mark">W</span><span>WYNCORE<small>PRIVATE WORKSPACE</small></span></a>
-    <nav aria-label="Navegação principal">
-      <button class="nav-item active" data-view="overview">▦ <span>Início</span></button>
-      <button class="nav-item" data-view="videos">▶ <span>Vídeos e conteúdos</span></button>
-      
-      <button class="nav-item" data-view="levels">✦ <span>Níveis SL</span></button>
-      <button class="nav-item" data-view="referrals">♧ <span>Convites</span></button>
-      <button class="nav-item" data-view="team">♙ <span>Equipe e aprovações</span></button>
-      <button class="nav-item" data-view="opportunities">⌕ <span>Central de atividades</span></button>
-      <button class="nav-item" data-view="tasks">▤ <span>Minhas atividades</span></button>
-      <button class="nav-item" data-view="wallet">◈ <span>Histórico</span></button>
-      
-      <button class="nav-item" data-view="company">▣ <span>Parceiros</span></button>
-      <button class="nav-item" data-view="reports">▥ <span>Relatórios</span></button>
-    </nav>
-    <div class="sidebar-foot"><span class="status-dot"></span> <span id="server-status">Verificando servidor...</span></div>
-  </aside>
-  <main class="main hidden">
-    <header class="topbar">
-      <div><p class="eyebrow">WORKSPACE / <span id="user-role">CONTA</span></p><h1 id="page-title">Visão geral</h1></div>
-      <div class="owner-chip"><span class="avatar">W</span><span id="user-label">Conta<small>Área de trabalho</small></span><button id="logout-btn" class="secondary logout">Sair</button></div>
-    </header>
-    <section class="notice"><strong>Plataforma integrada</strong><span>Atividades, conteúdos, entregas, revisão, equipes e progresso reunidos no mesmo ambiente.</span></section>
-    
-    <section id="view-overview" class="view">
-      <div class="welcome"><div><p class="eyebrow">CENTRAL DE CONTROLE</p><h2>Seu progresso,<br><em>em um só lugar.</em></h2><p>Acesse conteúdos, realize atividades, envie entregas e acompanhe cada etapa.</p></div><div class="orb" aria-hidden="true">W</div></div>
-      <div class="metric-grid">
-        <article class="metric"><span>Estimativas</span><strong id="overview-estimated">R$ 0,00</strong><small>Não são saldo sacável</small></article>
-        <article class="metric"><span>A confirmar</span><strong id="overview-confirmed">R$ 0,00</strong><small>Dependem do contratante</small></article>
-        <article class="metric"><span>Recebido</span><strong id="overview-paid">R$ 0,00</strong><small>Registros marcados como recebidos</small></article>
-        <article class="metric"><span>Tarefas ativas</span><strong id="active-count">0</strong><small>Registros no servidor</small></article>
-      </div>
-      <div class="section-heading"><div><p class="eyebrow">COMECE POR AQUI</p><h3>Central de atividades</h3></div><button class="text-button" data-go="opportunities">Ver atividades →</button></div>
-      <div class="feature-grid">
-        <article class="feature"><div class="feature-icon">◉</div><h4>Conteúdos e vídeos</h4><p>Materiais organizados por atividade, com acesso dentro da plataforma.</p><span class="tag">Biblioteca</span></article>
-        <article class="feature"><div class="feature-icon">⌁</div><h4>Entregas e revisões</h4><p>Envie suas entregas e acompanhe a análise da equipe.</p><span class="tag">Acompanhamento</span></article>
-        <article class="feature"><div class="feature-icon">▣</div><h4>Níveis e equipes</h4><p>Acompanhe critérios de progresso e sua participação na equipe.</p><span class="tag">Progressão</span></article>
-      </div>
-      <div class="section-heading"><div><p class="eyebrow">FONTES PÚBLICAS</p><h3>Oportunidades com regras verificáveis</h3><p class="muted">Consulte as condições diretamente na fonte. A WYNCORE não garante seleção nem remuneração.</p></div></div>
-      <div class="feature-grid">
-        <article class="feature"><div class="feature-icon">⌂</div><h4>Aprendizagem profissional</h4><p>Programa formal de formação e trabalho protegido, com regras específicas para adolescentes e jovens.</p><a class="source-link" href="https://www.gov.br/trabalho-e-emprego/pt-br/assuntos/aprendizagem-profissional" target="_blank" rel="noopener noreferrer">Ministério do Trabalho e Emprego ↗</a></article>
-        <article class="feature"><div class="feature-icon">▣</div><h4>Regras e direitos do aprendiz</h4><p>Consulte faixa etária, contrato, jornada, matrícula escolar e direitos previstos.</p><a class="source-link" href="https://www.gov.br/trabalho-e-emprego/pt-br/noticias-e-conteudo/2026/julho/aprendizagem-profissional-regras-direitos-e-funcionamento-do-contrato-de-aprendizagem" target="_blank" rel="noopener noreferrer">Consultar regras oficiais ↗</a></article>
-        <article class="feature"><div class="feature-icon">✓</div><h4>Verifique antes de aceitar</h4><p>Não pague para conseguir vaga, não envie documentos a desconhecidos e confira a entidade formadora.</p><span class="tag">Segurança primeiro</span></article>
-      </div>
-    </section>
-    <section id="view-videos" class="view hidden"><div class="section-heading"><div><p class="eyebrow">CONTEÚDOS E CAMPANHAS</p><h3>Vídeos e tarefas</h3><p class="muted">Acompanhe conteúdos e atividades autorizadas pelos seus responsáveis e pelos termos da plataforma. Assistir a um vídeo não gera pagamento automaticamente.</p></div></div><div class="panel"><h4>Central de campanhas</h4><p class="muted">As campanhas de anúncios e trailers ficam na área dedicada, com vídeo, valor por avaliação, vagas remuneradas, histórico e carteira.</p><a class="primary" href="/ads.html">Abrir anúncios e trailers →</a></div><div class="section-heading"><div><h3>Atividades cadastradas</h3></div></div><div id="video-list" class="list panel"><p class="empty">Nenhuma atividade cadastrada.</p></div></section>
-    <section id="view-stage" class="view hidden"><div class="section-heading"><div><p class="eyebrow">FORMAÇÃO E EXPERIÊNCIA</p><h3>Estágio e aprendizagem</h3><p class="muted">Organize processos seletivos e programas formativos legítimos.</p></div></div><div class="metric-grid"><article class="metric"><span>Estimativa de tarefas</span><strong id="stage-estimated">R$ 0,00</strong><small>Não é saldo disponível</small></article><article class="metric"><span>Aguardando confirmação</span><strong id="stage-confirmed">R$ 0,00</strong><small>Entrega aprovada</small></article><article class="metric"><span>Recebido registrado</span><strong id="stage-paid">R$ 0,00</strong><small>Pagamento informado como realizado</small></article><article class="metric"><span>Atividades</span><strong id="stage-count">0</strong><small>Em andamento ou concluídas</small></article></div><div class="feature-grid"><article class="feature"><div class="feature-icon">▣</div><h4>Jovem Aprendiz</h4><p>Programa formal com contrato, formação e direitos específicos para jovens elegíveis.</p><a class="source-link" href="https://portal.ciee.org.br/quero-uma-vaga/jovem-aprendiz/" target="_blank" rel="noopener noreferrer">Consultar vagas no CIEE ↗</a></article><article class="feature"><div class="feature-icon">✓</div><h4>Estágio</h4><p>Confira matrícula, termo de compromisso, instituição de ensino e plano de atividades.</p><a class="source-link" href="https://www.gov.br/trabalho-e-emprego/pt-br" target="_blank" rel="noopener noreferrer">Portal oficial ↗</a></article><article class="feature"><div class="feature-icon">⌕</div><h4>Controle de candidatura</h4><p>Registre cada vaga em Oportunidades e acompanhe a evolução em Minhas tarefas.</p><button class="secondary" data-go="opportunities">Abrir oportunidades</button></article></div></section>
-    <section id="view-levels" class="view hidden"><div class="section-heading"><div><p class="eyebrow">PROGRESSO</p><h3>Níveis SL</h3><p class="muted">Progressão demonstrativa baseada em atividades concluídas e registradas. Não exige depósito, compra ou convite pago.</p></div></div><div class="metric-grid"><article class="metric"><span>Nível atual</span><strong id="level-current">SL1</strong><small>Progressão por atividades concluídas</small></article><article class="metric"><span>Atividades recebidas</span><strong id="level-count">0</strong><small>Registro manual, não bancário</small></article><article class="metric"><span>Próximo nível</span><strong id="level-next">SL2</strong><small>Meta de progresso</small></article><article class="metric"><span>Progresso</span><strong id="level-progress">0%</strong><small>Da próxima etapa</small></article></div><div class="panel"><h4>Critério transparente</h4><p class="muted">Os níveis são apenas uma ferramenta de organização do seu painel. Não representam níveis oficiais da SteadyLayout, não liberam saques e não garantem renda.</p></div></section>
-    <section id="view-referrals" class="view hidden"><div class="section-heading"><div><p class="eyebrow">REDE DE CONTATOS</p><h3>Indicações</h3><p class="muted">Acompanhe recomendações sem prometer comissões ou pagamentos que não tenham sido formalmente oferecidos e comprovados.</p></div></div><div class="panel"><h4>Regras de transparência</h4><p class="muted">Não convide pessoas com promessa de lucro garantido, não cobre taxa de entrada e não registre comissão sem contrato e origem financeira verificáveis. Esta versão não gera links de afiliado nem paga bônus por recrutamento.</p></div></section>
-    <section id="view-team" class="view hidden"><div class="section-heading"><div><p class="eyebrow">GESTÃO DE ACESSO</p><h3>Participantes e equipe</h3><p class="muted">Cadastre participantes diretamente, aprove solicitações e acompanhe os acessos.</p></div></div><form id="participant-form" class="panel form-grid"><label>Nome completo<input id="participant-name" required minlength="2" maxlength="90" autocomplete="name"></label><label>E-mail (obrigatório)<input id="participant-email" type="email" autocomplete="email" required></label><label>Celular com DDD (obrigatório)<input id="participant-phone" type="tel" placeholder="(11) 99999-9999" required minlength="10"></label><label>Senha inicial (mínimo 10 caracteres)<input id="participant-password" type="password" minlength="10" required autocomplete="new-password"></label><button class="primary" type="submit">＋ Cadastrar participante</button><p id="participant-message" class="auth-error" role="status"></p></form><div id="participant-list" class="list panel"><p class="empty">Carregando participantes...</p></div><div class="panel integration-panel"><h4>Conexão automática de campanhas</h4><p id="integration-status" class="muted">Verificando configuração...</p><p class="muted">Parceiros autorizados podem enviar campanhas assinadas por webhook. Cada campanha importada fica pendente de conferência e nunca cria saldo ou pagamento automaticamente.</p></div></section>
-    <section id="view-opportunities" class="view hidden">
-      <div class="section-heading"><div><p class="eyebrow">DESCOBERTA</p><h3>Oportunidades</h3><p class="muted">Cadastre campanhas com orçamento limitado. Elas só aparecem aos participantes depois da conferência manual de evidência de financiamento.</p></div></div>
-      <form id="opportunity-form" class="panel form-grid">
-        <label>Nome da oportunidade<input id="opp-title" required maxlength="90" placeholder="Ex.: campanha de divulgação"></label>
-        <label>Fonte / empresa<input id="opp-source" required maxlength="90" placeholder="Nome do contratante"></label>
-        <label>Recompensa por entrega aprovada (R$)<input id="opp-value" type="number" min="0.01" max="1000000" step="0.01" required placeholder="0,00"></label>
-        <label>Orçamento total da campanha (R$)<input id="opp-budget" type="number" min="0.01" max="100000000" step="0.01" required placeholder="Ex.: 500,00"></label>
-        <label>Link oficial / regras<input id="opp-url" type="url" placeholder="https://..."></label><label>Link do vídeo (opcional)<input id="opp-video" type="url" placeholder="YouTube ou vídeo MP4 em HTTPS"></label>
-        <button class="primary" type="submit">＋ Registrar oportunidade</button>
-      </form>
-      <div id="opportunity-list" class="list panel"><p class="empty">Nenhuma oportunidade registrada.</p></div>
-    </section>
-    <section id="view-tasks" class="view hidden">
-      <div class="section-heading"><div><p class="eyebrow">ACOMPANHAMENTO</p><h3>Minhas tarefas</h3><p class="muted">O registro de uma tarefa não confirma aprovação nem pagamento pelo contratante.</p></div></div>
-      <div id="task-list" class="list panel"><p class="empty">Nenhuma tarefa em andamento.</p></div>
-    </section>
-    <section id="view-wallet" class="view hidden">
-      <div class="section-heading"><div><p class="eyebrow">CONTROLE FINANCEIRO</p><h3>Carteira</h3></div></div>
-      <div class="metric-grid">
-        <article class="metric"><span>Estimado</span><strong id="wallet-estimated">R$ 0,00</strong><small>Informação não garantida</small></article>
-        <article class="metric"><span>Confirmado</span><strong id="wallet-confirmed">R$ 0,00</strong><small>Receita liquidada pelo parceiro</small></article>
-        <article class="metric"><span>Recebido</span><strong id="wallet-paid">R$ 0,00</strong><small>Repasse Pix ainda depende do provedor</small></article>
-      </div>
-      <div class="panel"><h4>Como a carteira funciona</h4><p class="muted">A participação só entra como confirmada quando a rede parceira informa que a conversão foi liquidada. Conversões em análise não são saldo disponível. O envio por Pix só poderá ser marcado como recebido após confirmação real do provedor de pagamentos.</p></div>
-    </section>
-    <section id="view-pix" class="view hidden">
-      <div class="section-heading"><div><p class="eyebrow">PAGAMENTOS BRASIL</p><h3>Pix e comprovantes</h3><p class="muted">Central de acompanhamento. Esta versão não cria cobranças, QR Codes, chaves Pix nem movimenta dinheiro.</p></div></div>
-      <div class="metric-grid"><article class="metric"><span>Integração Pix</span><strong id="pix-status">Não conectada</strong><small>Sem provedor autorizado</small></article><article class="metric"><span>Registros Pix</span><strong id="pix-record-count">0</strong><small>Referências anotadas manualmente</small></article><article class="metric"><span>Transferências automáticas</span><strong>Desativadas</strong><small>Sem acesso bancário</small></article><article class="metric"><span>Validação bancária</span><strong>Não disponível</strong><small>Comprovantes não são validados pelo banco</small></article></div>
-      <div class="feature-grid"><article class="feature"><div class="feature-icon">▧</div><h4>Recebimento empresarial</h4><p>Uma empresa formal e seu responsável legal poderão avaliar um provedor Pix compatível, com conta empresarial e contrato próprios.</p><span class="tag">Aguardando responsável legal</span></article><article class="feature"><div class="feature-icon">✓</div><h4>Conferência de comprovantes</h4><p>Guarde somente referências não sensíveis de transações já confirmadas. Não envie senha, token, chave privada ou dados bancários neste painel.</p><span class="tag">Registro, não processamento</span></article><article class="feature"><div class="feature-icon">⌁</div><h4>Conexão futura</h4><p>A integração exige provedor autorizado, conta elegível, credenciais guardadas no servidor e testes de homologação antes de qualquer ativação.</p><span class="tag">Desativada por padrão</span></article></div>
-      <div class="panel"><h4>Atalho do Pix</h4><p class="muted">Use o Pix diretamente no aplicativo da sua instituição financeira. Este atalho abre as informações oficiais do Banco Central; ele não inicia transferências nem pede dados bancários.</p><a class="primary pix-action" href="https://www.bcb.gov.br/estabilidadefinanceira/pix" target="_blank" rel="noopener noreferrer">Abrir informações oficiais do Pix ↗</a></div>
-      <div class="panel"><h4>Estado de segurança</h4><p class="muted">Nenhuma chave Pix foi cadastrada e nenhum QR Code de cobrança é gerado. O WYNCORE não solicita depósito de participantes e não promete rendimento. Os valores do painel são registros, não saldo bancário.</p></div>
-    </section>
-
-    <section id="view-company" class="view hidden">
-      <div class="section-heading"><div><p class="eyebrow">OPERAÇÃO COMERCIAL</p><h3>WYNCORE Company</h3><p class="muted">Funil comercial e custos. Registros internos, sem cobrança ou movimentação financeira.</p></div></div>
-      <div class="metric-grid"><article class="metric"><span>Empresas no funil</span><strong id="company-leads-count">0</strong><small>Contatos comerciais</small></article><article class="metric"><span>Contratos registrados</span><strong id="company-contracts-count">0</strong><small>Etapa marcada manualmente</small></article><article class="metric"><span>Custos anotados</span><strong id="company-cost-total">R$ 0,00</strong><small>Não é extrato bancário</small></article></div>
-      <form id="company-lead-form" class="panel form-grid"><h4>Adicionar empresa interessada</h4><label>Nome da empresa<input id="company-name" required maxlength="100"></label><label>Contato (opcional)<input id="company-contact" maxlength="120" placeholder="E-mail comercial ou site"></label><label>Canal<select id="company-channel"><option value="email">E-mail</option><option value="site">Site</option><option value="phone">Telefone</option></select></label><label>Observações<input id="company-notes" maxlength="500"></label><button class="primary" type="submit">Salvar empresa</button><p class="muted">O registro é salvo no servidor após confirmação.</p></form>
-      <div id="company-lead-list" class="panel list"><p class="empty">Nenhuma empresa cadastrada.</p></div>
-      <form id="company-cost-form" class="panel form-grid"><h4>Registrar custo operacional</h4><label>Descrição<input id="company-cost-description" required maxlength="120"></label><label>Categoria<select id="company-cost-category"><option value="operacional">Operacional</option><option value="marketing">Marketing</option><option value="tecnologia">Tecnologia</option><option value="servicos">Serviços</option><option value="outro">Outro</option></select></label><label>Valor registrado (R$)<input id="company-cost-amount" type="number" min="0.01" step="0.01" required></label><button class="primary" type="submit">Salvar custo</button></form>
-      <div id="company-cost-list" class="panel list"><p class="empty">Nenhum custo anotado.</p></div>
-    </section>
-    <section id="view-reports" class="view hidden">
-      <div class="section-heading"><div><p class="eyebrow">TRANSPARÊNCIA</p><h3>Relatórios</h3></div></div>
-      <div class="panel"><p id="report-summary" class="muted">Ainda não há atividade registrada.</p><button id="export-btn" class="secondary">Exportar relatório CSV</button></div>
-    </section>
-    <footer>WYNCORE · Atividades, conteúdo e WYNCORE Ads</footer>
-  </main>
-  <script src="app.js"></script>
+<div class="wrap">
+<header class="top"><div class="brand"><span class="logo">W</span><span>WYNCORE<small>VÍDEOS · CAMPANHAS · RECOMPENSAS</small></span></div><span class="tag">UMA CONTA. UM APLICATIVO.</span></header>
+<section class="hero">
+<p class="eyebrow">SEU ESPAÇO DE PARTICIPAÇÃO</p>
+<h1>Assista. Participe.<br><em>Acompanhe suas recompensas.</em></h1>
+<p>Encontre vídeos e campanhas disponíveis, conclua as atividades solicitadas e acompanhe tudo na mesma carteira. Sem precisar criar contas em vários serviços para usar a WYNCORE.</p>
+<div class="pills"><span>▶ Vídeos e campanhas</span><span>✓ Atividades em um só lugar</span><span>◈ Histórico e carteira</span></div>
+</section>
+<div class="grid">
+<section class="panel">
+<p class="eyebrow">COMO FUNCIONA</p><h2>Uma jornada simples</h2>
+<div class="steps">
+<div class="step"><b>01 · Entrar</b><p>Use seu celular e uma senha para acessar sua conta.</p></div>
+<div class="step"><b>02 · Assistir</b><p>Veja apenas conteúdos e ofertas realmente disponíveis.</p></div>
+<div class="step"><b>03 · Receber</b><p>Acompanhe a confirmação da recompensa e o histórico.</p></div>
+</div>
+<div class="notice">Importante: a WYNCORE não inventa vídeos, ganhos ou saldo. As recompensas dependem de campanhas ativas, regras do parceiro e confirmação válida. Se não houver vídeo disponível, isso será informado claramente.</div>
+</section>
+<section class="panel">
+<div id="login-box"><p class="eyebrow">ACESSO À WYNCORE</p><h2>Entrar na minha conta</h2><p class="muted">Um único acesso para vídeos, campanhas e carteira.</p>
+<form id="login-form"><label class="field">Celular ou acesso administrativo<input id="identifier" autocomplete="username" required placeholder="Seu celular ou ADMIN"></label><label class="field">Senha<input id="password" type="password" autocomplete="current-password" required></label><button class="btn" type="submit" style="width:100%">Entrar e ver vídeos</button></form>
+<p class="message" id="login-message" role="status"></p><button class="switch" id="show-signup" type="button">Ainda não tenho conta · Criar acesso</button></div>
+<div id="signup-box" class="hidden"><p class="eyebrow">NOVO PARTICIPANTE</p><h2>Criar minha conta</h2><p class="muted">O cadastro é gratuito. O acesso pode precisar de aprovação.</p>
+<form id="signup-form"><label class="field">Nome completo<input id="signup-name" autocomplete="name" required minlength="2"></label><label class="field">Celular com DDD<input id="signup-phone" type="tel" autocomplete="tel" inputmode="tel" required minlength="10" placeholder="(11) 99999-9999"></label><label class="field">Criar senha<input id="signup-password" type="password" autocomplete="new-password" required minlength="10" placeholder="Mínimo de 10 caracteres"></label><button class="btn" type="submit" style="width:100%">Solicitar acesso</button></form>
+<p class="message" id="signup-message" role="status"></p><button class="switch" id="show-login" type="button">Já tenho conta · Voltar ao login</button></div>
+</section>
+</div>
+<footer class="footer"><span>© 2026 WYNCORE</span><span><a href="/privacidade.html">Privacidade</a> · <a href="/termos.html">Termos</a> · <a href="/sobre.html">Sobre</a></span></footer>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+async function api(path,data){const r=await fetch('/api'+path,{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(d.error||'Não foi possível concluir.');return d}
+$('show-signup').onclick=()=>{$('login-box').classList.add('hidden');$('signup-box').classList.remove('hidden')};
+$('show-login').onclick=()=>{$('signup-box').classList.add('hidden');$('login-box').classList.remove('hidden')};
+$('login-form').onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;$('login-message').textContent='Verificando acesso...';try{await api('/login',{identifier:$('identifier').value,password:$('password').value});location.href='/ads.html'}catch(x){$('login-message').textContent=x.message}finally{b.disabled=false}};
+$('signup-form').onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;$('signup-message').textContent='Enviando solicitação...';try{const r=await api('/access-request',{name:$('signup-name').value,phone:$('signup-phone').value,password:$('signup-password').value});$('signup-message').textContent=r.message;e.target.reset()}catch(x){$('signup-message').textContent=x.message}finally{b.disabled=false}};
+(async()=>{try{const r=await fetch('/api/me',{credentials:'same-origin',cache:'no-store'});if(r.ok)location.replace('/ads.html')}catch{}})();
+</script>
 </body>
 </html>
