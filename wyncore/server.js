@@ -1,6 +1,6 @@
 'use strict';
 const http=require('node:http'),fs=require('node:fs/promises'),path=require('node:path'),crypto=require('node:crypto');
-const D=require('./domain');
+const D=require('./domain'),Asaas=require('./asaas');
 const ROOT=__dirname,DATA_DIR=process.env.DATA_DIR||path.join(ROOT,'data'),DATA_FILE=path.join(DATA_DIR,'wyncore.json');
 const PORT=Number(process.env.PORT||3000),PASSWORD=process.env.WYNCORE_OWNER_PASSWORD||'',SECRET=process.env.WYNCORE_SESSION_SECRET||'',PARTNER_SECRET=process.env.WYNCORE_PARTNER_WEBHOOK_SECRET||'',GOOGLE_CLIENT_ID=process.env.WYNCORE_GOOGLE_CLIENT_ID||'',PROD=process.env.NODE_ENV==='production';
 const COOKIE='wyncore_session',SESSION_MS=8*60*60*1000;
@@ -21,12 +21,12 @@ async function load(){
  if(process.env.BLOB_READ_WRITE_TOKEN){
   const {get}=require('@vercel/blob');
   const found=await get('wyncore/data.json',{access:'private',useCache:false});
-  if(!found)return D.ensureState({opportunities:[],tasks:[],events:[],users:[],workAccounts:[],workTasks:[],workLedger:[],adCampaigns:[],adReviews:[],advertiserInquiries:[]});
+  if(!found)return D.ensureState({opportunities:[],tasks:[],events:[],users:[],workAccounts:[],workTasks:[],workLedger:[],adCampaigns:[],adReviews:[],adEarnings:[],advertiserInquiries:[],asaasWebhookEvents:[]});
   const raw=await new Response(found.stream).text();
   const d=JSON.parse(raw);
-  return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],workAccounts:d.workAccounts||[],workTasks:d.workTasks||[],workLedger:d.workLedger||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[],advertiserInquiries:d.advertiserInquiries||[]});
+  return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],workAccounts:d.workAccounts||[],workTasks:d.workTasks||[],workLedger:d.workLedger||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[],adEarnings:d.adEarnings||[],advertiserInquiries:d.advertiserInquiries||[],asaasWebhookEvents:d.asaasWebhookEvents||[]});
  }
- try{const d=JSON.parse(await fs.readFile(DATA_FILE,'utf8'));return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],workAccounts:d.workAccounts||[],workTasks:d.workTasks||[],workLedger:d.workLedger||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[],advertiserInquiries:d.advertiserInquiries||[]})}catch(e){if(e.code!=='ENOENT')throw e;return D.ensureState({opportunities:[],tasks:[],events:[],users:[],workAccounts:[],workTasks:[],workLedger:[]})}
+ try{const d=JSON.parse(await fs.readFile(DATA_FILE,'utf8'));return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],workAccounts:d.workAccounts||[],workTasks:d.workTasks||[],workLedger:d.workLedger||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[],advertiserInquiries:d.advertiserInquiries||[]})}catch(e){if(e.code!=='ENOENT')throw e;return D.ensureState({opportunities:[],tasks:[],events:[],users:[],workAccounts:[],workTasks:[],workLedger:[],adCampaigns:[],adReviews:[],adEarnings:[],advertiserInquiries:[],asaasWebhookEvents:[]})}
 }
 async function save(d){
  if(process.env.BLOB_READ_WRITE_TOKEN){
@@ -54,7 +54,35 @@ async function handler(req,res){try{
   const d=await load();if(d.users.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone))||d.participants.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone)))err('Este e-mail ou telefone já está cadastrado.',409);
   const person=D.requestAccess(d,{name,email,phone});d.users.push({id:person.id,email,phone,passwordHash:await hashPassword(pass)});await save(d);return send(res,201,{ok:true,message:'Cadastro recebido. Aguarde a liberação da equipe.'});
  }
- if(!p.startsWith('/api/')){const file=p==='/'?'/index.html':p;if(!PUBLIC_FILES.has(file))return send(res,404,{error:'Não encontrado'});const full=path.resolve(ROOT,'.'+file);try{const data=await fs.readFile(full);const extension=path.extname(full);const cachePolicy=['.html','.js','.css','.webmanifest'].includes(extension)?'no-cache':'public, max-age=3600';res.writeHead(200,{'Content-Type':MIME[extension]||'application/octet-stream','Cache-Control':cachePolicy});return res.end(data)}catch{return send(res,404,{error:'Arquivo não encontrado'})}}
+
+ if(req.method==='POST'&&p==='/api/webhooks/asaas'){
+  const token=req.headers['asaas-access-token'];
+  if(!Asaas.verifyWebhook(token))return send(res,401,{error:'Webhook Asaas não autenticado.'});
+  const event=await body(req),eventId=String(event.id||''),type=String(event.event||''),d=await load();
+  d.asaasWebhookEvents||=[];
+  if(!eventId)return send(res,400,{error:'Evento sem identificador.'});
+  if(d.asaasWebhookEvents.includes(eventId))return send(res,200,{ok:true,duplicate:true});
+  const payment=event.payment||{},transfer=event.transfer||{};
+  if(type==='PAYMENT_RECEIVED'&&String(payment.externalReference||'').startsWith('wyncore-campaign:')){
+   const campaignId=String(payment.externalReference).slice('wyncore-campaign:'.length);
+   const campaign=(d.adCampaigns||[]).find(x=>x.id===campaignId);
+   if(campaign&&String(payment.id)===String(campaign.asaasPaymentId)&&Number(payment.value)>=Number(campaign.contractValue)){
+    campaign.contractStatus='received';campaign.contractReference=payment.id;campaign.receivedAt=new Date().toISOString();campaign.updatedAt=campaign.receivedAt;
+   }
+  }
+  if(['TRANSFER_DONE','TRANSFER_FAILED','TRANSFER_CANCELLED'].includes(type)&&String(transfer.externalReference||'').startsWith('wyncore-earning:')){
+   const earningId=String(transfer.externalReference).slice('wyncore-earning:'.length);
+   const earning=(d.adEarnings||[]).find(x=>x.id===earningId&&String(x.asaasTransferId)===String(transfer.id));
+   if(earning){
+    if(type==='TRANSFER_DONE'){earning.status='paid';earning.paidAt=new Date().toISOString();earning.paymentReference=transfer.id;}
+    else{earning.status='approved_unpaid';earning.payoutError=String(transfer.failReason||type).slice(0,300);}
+    earning.updatedAt=new Date().toISOString();
+   }
+  }
+  d.asaasWebhookEvents.push(eventId);if(d.asaasWebhookEvents.length>5000)d.asaasWebhookEvents=d.asaasWebhookEvents.slice(-4000);
+  await save(d);return send(res,200,{ok:true});
+ }
+\n if(!p.startsWith('/api/')){const file=p==='/'?'/index.html':p;if(!PUBLIC_FILES.has(file))return send(res,404,{error:'Não encontrado'});const full=path.resolve(ROOT,'.'+file);try{const data=await fs.readFile(full);const extension=path.extname(full);const cachePolicy=['.html','.js','.css','.webmanifest'].includes(extension)?'no-cache':'public, max-age=3600';res.writeHead(200,{'Content-Type':MIME[extension]||'application/octet-stream','Cache-Control':cachePolicy});return res.end(data)}catch{return send(res,404,{error:'Arquivo não encontrado'})}}
  if(req.method==='POST'&&p==='/api/advertiser-inquiries'){
   if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
   if(limited(req,'advertiser-inquiry',String(req.headers['x-forwarded-for']||req.socket.remoteAddress||'unknown'),5,3600000))return send(res,429,{error:'Limite de solicitações atingido. Tente novamente mais tarde.'});
@@ -170,16 +198,27 @@ async function handler(req,res){try{
  const session=readSession(req);if(!session)return send(res,401,{error:'Sessão expirada.'});
  const d=await load(),me=actor(session,d);if(!me)return send(res,403,{error:'Conta inativa ou sem permissão.'});
  if(req.method==='GET'&&p==='/api/me')return send(res,200,{id:me.id,role:me.role,email:me.email,name:me.name||'Administrador'});
- if(req.method==='GET'&&p==='/api/integrations/status'){if(me.role!=='admin')err('Somente administrador.',403);return send(res,200,{advertisingNetwork:{configured:false,conversionValidation:false,reason:'Nenhuma rede de anunciantes está conectada.'},partnerCampaignWebhook:{configured:Boolean(PARTNER_SECRET),conversionValidation:Boolean(process.env.WYNCORE_CONVERSION_SECRET),reason:process.env.WYNCORE_CONVERSION_SECRET?'Webhook assinado de conversões configurado; falta homologação com parceiro e conciliação de liquidação.':'Webhook de campanhas pode importar campanhas; webhook de conversões ainda não configurado.'},pix:{providerConfigured:false,payoutsEnabled:false,bankVerification:false,reason:'Provedor Pix e credenciais de integração não configurados.'},automaticPaymentTransfers:false});}
+ if(req.method==='GET'&&p==='/api/integrations/status'){if(me.role!=='admin')err('Somente administrador.',403);return send(res,200,{advertisingNetwork:{configured:false,conversionValidation:false,reason:'Ainda não há contrato/API de rede de anúncios ou distribuidora de trailers conectada.'},partnerCampaignWebhook:{configured:Boolean(PARTNER_SECRET),conversionValidation:Boolean(process.env.WYNCORE_CONVERSION_SECRET),reason:'A importação de campanhas depende de contrato e credenciais emitidas pelo parceiro.'},pix:{provider:'Asaas',providerConfigured:Asaas.configured(),webhookConfigured:Asaas.webhookConfigured(),payoutsEnabled:Asaas.configured(),bankVerification:Asaas.configured()&&Asaas.webhookConfigured(),reason:Asaas.configured()?'Asaas conectado; confirme webhook e saldo disponível para liberar pagamentos reais.':'Configure ASAAS_API_KEY e ASAAS_WEBHOOK_TOKEN no ambiente do servidor.'},automaticPaymentTransfers:Asaas.configured()&&Asaas.webhookConfigured()});}
  if(req.method==='POST'&&p==='/api/campaign-feedback'){if(me.role!=='participant')err('Somente participantes podem avaliar campanhas.',403);if(limited(req,'campaign-feedback',me.id,30,3600000))return send(res,429,{error:'Limite de avaliações atingido. Tente novamente mais tarde.'});const b=await body(req),programId=String(b.programId||''),rating=Number(b.rating),comment=String(b.comment||'').trim().slice(0,300),program=d.programs.find(x=>x.id===programId&&x.status==='active'&&x.videoUrl);if(!program)err('Campanha de vídeo indisponível.',404);if(!Number.isInteger(rating)||rating<1||rating>5)err('Escolha uma avaliação entre 1 e 5.');let feedback=d.campaignFeedback.find(x=>x.programId===programId&&x.participantId===me.id);const now=new Date().toISOString();if(feedback){feedback.rating=rating;feedback.comment=comment;feedback.updatedAt=now;await save(d);return send(res,200,{ok:true,feedback,updated:true})}feedback={id:crypto.randomUUID(),programId,participantId:me.id,rating,comment,createdAt:now,updatedAt:now};d.campaignFeedback.unshift(feedback);await save(d);return send(res,201,{ok:true,feedback,updated:false});}
  if(req.method==='POST'&&p==='/api/participants'){if(me.role!=='admin')err('Somente administrador.',403);const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),phone=normalizePhone(b.phone),pass=String(b.password||'');if(name.length<2||!/^\S+@\S+\.\S+$/.test(email)||!phone||phone.length<10||phone.length>13||pass.length<10)err('Para cadastrar um participante, informe nome, e-mail válido, celular com DDD e senha com pelo menos 10 caracteres.');if(d.users.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone))||d.participants.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone)))err('Este e-mail ou telefone já está cadastrado.',409);const person=D.createParticipant(d,me,{name,email,phone});d.users.push({id:person.id,email,phone,passwordHash:await hashPassword(pass)});await save(d);return send(res,201,{ok:true,participant:{id:person.id,name:person.name,email:person.email,phone:person.phone,status:person.status},message:'Participante cadastrado. Aprove o acesso para liberar o login.'});}
 
 
 
 
- if(req.method==='GET'&&p==='/api/ad-workspace'){
+
+ if(req.method==='POST'&&p==='/api/pix-key'){
+  if(me.role!=='participant')err('Somente participantes podem cadastrar a chave Pix.',403);
+  const b=await body(req),key=String(b.key||'').trim(),type=String(b.type||'').toUpperCase();
+  if(!['CPF','CNPJ','EMAIL','PHONE','EVP'].includes(type)||key.length<5||key.length>180)err('Informe uma chave Pix válida e seu tipo.');
+  if(type==='EMAIL'&&!/^\\S+@\\S+\\.\\S+$/.test(key))err('E-mail Pix inválido.');
+  if(type==='CPF'&&key.replace(/\\D/g,'').length!==11)err('CPF Pix precisa ter 11 dígitos.');
+  if(type==='CNPJ'&&key.replace(/\\D/g,'').length!==14)err('CNPJ Pix precisa ter 14 dígitos.');
+  if(type==='PHONE'&&key.replace(/\\D/g,'').length!==11)err('Celular Pix precisa conter DDD e 11 dígitos.');
+  const person=d.participants.find(x=>x.id===me.id);person.pixKey=key;person.pixKeyType=type;person.pixKeyUpdatedAt=new Date().toISOString();await save(d);return send(res,200,{ok:true,message:'Chave Pix cadastrada para os repasses WYNCORE.'});
+ }
+\n if(req.method==='GET'&&p==='/api/ad-workspace'){
   const campaigns=d.adCampaigns||[],reviews=d.adReviews||[];
-  if(me.role==='admin')return send(res,200,{campaigns,reviews,earnings:d.adEarnings||[],advertiserInquiries:d.advertiserInquiries||[],participants:d.participants.map(x=>({id:x.id,name:x.name,email:x.email,phone:x.phone,role:x.role,status:x.status,createdAt:x.createdAt})),summary:{campaigns:campaigns.length,open:campaigns.filter(x=>x.status==='open').length,reviews:reviews.length,pending:reviews.filter(x=>x.status==='pending').length,accepted:reviews.filter(x=>x.status==='accepted').length,contracted:campaigns.reduce((n,x)=>n+(Number(x.contractValue)||0),0),received:campaigns.filter(x=>x.contractStatus==='received').reduce((n,x)=>n+(Number(x.contractValue)||0),0)}});
+  if(me.role==='admin')return send(res,200,{campaigns,reviews,earnings:d.adEarnings||[],advertiserInquiries:d.advertiserInquiries||[],participants:d.participants.map(x=>({id:x.id,name:x.name,email:x.email,phone:x.phone,role:x.role,status:x.status,createdAt:x.createdAt,pixKeyType:x.pixKeyType,pixKeyConfigured:Boolean(x.pixKey)})),summary:{campaigns:campaigns.length,open:campaigns.filter(x=>x.status==='open').length,reviews:reviews.length,pending:reviews.filter(x=>x.status==='pending').length,accepted:reviews.filter(x=>x.status==='accepted').length,contracted:campaigns.reduce((n,x)=>n+(Number(x.contractValue)||0),0),received:campaigns.filter(x=>x.contractStatus==='received').reduce((n,x)=>n+(Number(x.contractValue)||0),0)}});
   if(me.role!=='participant')err('Acesso não permitido.',403);
   const mine=reviews.filter(x=>x.participantId===me.id);const earnings=(d.adEarnings||[]).filter(x=>x.participantId===me.id);return send(res,200,{campaigns:campaigns.filter(x=>x.status==='open'),reviews:mine,earnings,earningSummary:{approvedUnpaid:earnings.filter(x=>x.status==='approved_unpaid').reduce((n,x)=>n+x.amount,0),paid:earnings.filter(x=>x.status==='paid').reduce((n,x)=>n+x.amount,0)},campaignHistory:Object.fromEntries(mine.map(r=>{const c=campaigns.find(x=>x.id===r.campaignId);return [r.campaignId,c?c.title:'Campanha encerrada']}))});
  }
@@ -193,7 +232,21 @@ async function handler(req,res){try{
   const c={id:crypto.randomUUID(),title,client,brief,channel,objective,mediaUrl,contractValue:value,rewardPerReview:reward,maxParticipants,contractStatus:'not_recorded',status:'draft',createdBy:me.id,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
   d.adCampaigns.unshift(c);d.audit.unshift({id:crypto.randomUUID(),actorId:me.id,type:'ad_campaign_created',entityId:c.id,details:{client},at:new Date().toISOString()});await save(d);return send(res,201,c);
  }
- let leadMatch=p.match(/^\/api\/advertiser-inquiries\/([\w-]+)\/(contacted|decline|create-campaign)$/);
+
+ adMatch=p.match(/^\\/api\\/ad-campaigns\\/([\\w-]+)\\/pix$/);
+ if(req.method==='POST'&&adMatch){
+  if(me.role!=='admin')err('Somente administração.',403);
+  const c=(d.adCampaigns||[]).find(x=>x.id===adMatch[1]);if(!c)return send(res,404,{error:'Campanha não encontrada.'});
+  if(c.contractStatus==='received')err('Esta campanha já está paga.',409);
+  if(!Number(c.contractValue)||!c.advertiserDocument||!c.advertiserEmail)err('Cadastre CPF/CNPJ e e-mail do contratante antes de gerar o Pix.');
+  if(c.asaasPaymentId)err('Esta campanha já possui uma cobrança Pix. Consulte a cobrança existente antes de gerar outra.',409);
+  const customer=await Asaas.createCustomer({name:c.client,cpfCnpj:c.advertiserDocument,email:c.advertiserEmail,mobilePhone:c.advertiserPhone,externalReference:'wyncore-client:'+c.id});
+  const payment=await Asaas.createPixCharge({customer:customer.id,value:c.contractValue,description:'WYNCORE - '+c.title,externalReference:'wyncore-campaign:'+c.id});
+  const qr=await Asaas.getPixQrCode(payment.id);
+  c.asaasCustomerId=customer.id;c.asaasPaymentId=payment.id;c.contractStatus='awaiting_pix';c.pixCreatedAt=new Date().toISOString();await save(d);
+  return send(res,201,{ok:true,paymentId:payment.id,invoiceUrl:payment.invoiceUrl||null,payload:qr.payload,encodedImage:qr.encodedImage,expirationDate:qr.expirationDate});
+ }
+\n let leadMatch=p.match(/^\/api\/advertiser-inquiries\/([\w-]+)\/(contacted|decline|create-campaign)$/);
  if(req.method==='POST'&&leadMatch){
   if(me.role!=='admin')err('Somente administração.',403);
   const lead=(d.advertiserInquiries||[]).find(x=>x.id===leadMatch[1]);if(!lead)return send(res,404,{error:'Solicitação não encontrada.'});
@@ -237,7 +290,7 @@ async function handler(req,res){try{
   if(me.role!=='admin')err('Somente administração.',403);
   const review=(d.adReviews||[]).find(x=>x.id===adMatch[1]);if(!review)return send(res,404,{error:'Avaliação não encontrada.'});
   const b=await body(req),note=String(b.note||'').trim().slice(0,500);if(review.status!=='pending')err('Esta avaliação já foi revisada.',409);
-  review.status=adMatch[2]==='accept'?'accepted':'rejected';review.reviewNote=note;review.reviewedBy=me.id;review.reviewedAt=new Date().toISOString();if(review.status==='accepted'){const campaign=(d.adCampaigns||[]).find(x=>x.id===review.campaignId);if(campaign&&Number(campaign.rewardPerReview)>0){const already=(d.adEarnings||[]).some(x=>x.reviewId===review.id);if(!already){d.adEarnings||=[];const count=d.adEarnings.filter(x=>x.campaignId===campaign.id).length;if(count>=Number(campaign.maxParticipants))err('Limite remunerado desta campanha já foi atingido.',409);d.adEarnings.unshift({id:crypto.randomUUID(),reviewId:review.id,campaignId:campaign.id,participantId:review.participantId,amount:Number(campaign.rewardPerReview),status:'approved_unpaid',createdAt:new Date().toISOString()});}}}await save(d);return send(res,200,review);
+  review.status=adMatch[2]==='accept'?'accepted':'rejected';review.reviewNote=note;review.reviewedBy=me.id;review.reviewedAt=new Date().toISOString();if(review.status==='accepted'){const campaign=(d.adCampaigns||[]).find(x=>x.id===review.campaignId);if(campaign&&Number(campaign.rewardPerReview)>0){const already=(d.adEarnings||[]).some(x=>x.reviewId===review.id);if(!already){d.adEarnings||=[];const count=d.adEarnings.filter(x=>x.campaignId===campaign.id).length;if(count>=Number(campaign.maxParticipants))err('Limite remunerado desta campanha já foi atingido.',409);d.adEarnings.unshift({id:crypto.randomUUID(),reviewId:review.id,campaignId:campaign.id,participantId:review.participantId,amount:Number(campaign.rewardPerReview),status:'approved_unpaid',createdAt:new Date().toISOString()});}}}await save(d);if(review.status==='accepted'){const earning=(d.adEarnings||[]).find(x=>x.reviewId===review.id);if(earning&&earning.status==='approved_unpaid'&&await tryAutomaticPix(earning,d))await save(d);}return send(res,200,review);
  }
 
 
