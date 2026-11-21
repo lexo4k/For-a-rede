@@ -10,7 +10,7 @@ Plataforma de campanhas de anúncios e trailers, avaliação de percepção, rec
 - Revisão administrativa, recompensa aprovada, carteira de campanha e relatório CSV.
 - Adaptador Asaas para cobrança Pix de contratantes, QR Code dinâmico, webhook autenticado e idempotente, transferência Pix para participantes e confirmação de repasse via webhook.
 - Chaves Pix de participantes criptografadas em repouso com AES-256-GCM.
-- Persistência em Vercel Blob privado ou disco persistente.
+- Persistência transacional em PostgreSQL (preferencial), com migração inicial de dados existentes no Blob/disco; alternativa de JSON em disco persistente de instância única.\n- Reservas de carteira serializadas por lock transacional no PostgreSQL, evitando saques concorrentes entre instâncias.
 - Testes automatizados executados por GitHub Actions no Node.js 22.
 
 ## Executar e testar
@@ -26,7 +26,7 @@ npm start
 
 Abra http://localhost:3000. O administrador entra com **ADMIN** e a senha de ambiente. Participantes solicitam acesso e aguardam aprovação. Testes: `npm test`.
 
-## Integração Pix Asaas
+## Armazenamento de produção\n\nConfigure `DATABASE_URL` com uma instância PostgreSQL gerenciada para que todas as rotas de API leiam e gravem o estado dentro de uma transação protegida por advisory lock. Na primeira requisição, se a tabela estiver vazia, o WYNCORE importa o estado existente do Vercel Blob privado ou do arquivo em `DATA_DIR` e passa a usar o banco. Não remova o Blob nem o disco antigo até validar a migração e manter um backup.\n\nSem PostgreSQL, o saque só pode ser habilitado com `WYNCORE_PAYOUT_STORAGE_MODE=single_writer`, `DATA_DIR` absoluto e diferente do diretório efêmero padrão, em um único serviço com disco persistente anexado.\n\n## Integração Pix Asaas
 A integração está implementada no código, mas só movimenta dinheiro quando credenciais válidas e webhook forem configurados no ambiente. Comece no Sandbox.
 
 Variáveis:
