@@ -22,7 +22,7 @@ async function getRewardedVideos({country,userId}){
  const payload=await response.json(),rows=Array.isArray(payload.offers)?payload.offers:[];
  const offers=rows.filter(x=>isCashRewardedVideo(x,cc)).map(x=>{
   let clickUrl='',streamUrl='';
-  try{const u=new URL(x.click_url);if(u.protocol==='https:'){u.searchParams.set('sub1',String(userId).slice(0,60));clickUrl=u.href}}catch{}
+  try{const u=new URL(x.click_url);if(u.protocol==='https:'){u.searchParams.set('sub1',String(userId).slice(0,60));u.searchParams.set('sub2',String(x.offer_id||''));clickUrl=u.href}}catch{}
   for(const raw of [x.video_streaming_url,x.video_streaming_ios_url,x.video_url]){try{const u=new URL(raw);if(u.protocol==='https:'){streamUrl=u.href;break}}catch{}}
   const payout=Number(x.payout);
   return {id:String(x.offer_id||''),title:String(x.name||'Vídeo recompensado').slice(0,160),description:String(x.description||'Assista ao vídeo e conclua as condições informadas pela campanha.').slice(0,1200),clickUrl,streamUrl,publisherPayoutUsd:Number.isFinite(payout)&&payout>0?payout:null,participantEstimateUsd:Number.isFinite(payout)&&payout>0?Math.round(payout*USER_SHARE*100)/100:null,country:cc,provider:'Adscend Media',rewardStatus:'pending_partner_confirmation'};
