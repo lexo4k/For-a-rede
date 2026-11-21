@@ -51,3 +51,14 @@ Opcionalmente, configure o Resend para receber um e-mail sempre que uma empresa 
 - `WYNCORE_LEADS_TO`: caixa de entrada comercial que receberá os pedidos.
 
 Sem essas três variáveis, o formulário continua recebendo e armazenando solicitações no painel administrativo, mas não envia e-mail. Configure as variáveis apenas no ambiente do servidor, nunca no navegador ou no repositório.
+
+## Configuração assistida pelo painel
+
+Depois de publicar a aplicação e configurar as variáveis abaixo no ambiente do servidor, entre como administrador e clique em **Configurar webhook Asaas** na área de integrações:
+- `ASAAS_ENV=sandbox` inicialmente;
+- `ASAAS_API_KEY` da conta Sandbox;
+- `ASAAS_WEBHOOK_TOKEN` aleatório, 32 a 255 caracteres, sem espaços e diferente da API key;
+- `WYNCORE_PUBLIC_URL` com a origem HTTPS pública da aplicação, sem barra final;
+- `WYNCORE_LEADS_TO` com o e-mail de alertas comerciais.
+
+O painel registra o webhook no Asaas com os eventos de recebimento e transferência usados pela WYNCORE. A criação do webhook não substitui a homologação: faça uma cobrança de teste no Sandbox e confirme o evento no painel e nos logs do Asaas antes de ativar produção.
