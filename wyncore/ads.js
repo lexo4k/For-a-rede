@@ -1,3 +1,4 @@
+// WYNCORE Ads dashboard: login, evaluator approvals, advertiser leads, campaigns and reviews.
 'use strict';
 const $=id=>document.getElementById(id);let me=null,data=null;
 const money=n=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(n)||0);
