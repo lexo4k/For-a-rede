@@ -254,7 +254,7 @@ async function handler(req,res){try{
   const publicUrl=String(process.env.WYNCORE_PUBLIC_URL||'').replace(/\/$/,'');
   const notifyEmail=String(process.env.WYNCORE_LEADS_TO||'').trim();
   if(!publicUrl||!/^https:\/\//i.test(publicUrl))err('Configure WYNCORE_PUBLIC_URL com o endereço HTTPS público da aplicação.',503);
-  if(!/^\\S+@\\S+\\.\\S+$/.test(notifyEmail))err('Configure WYNCORE_LEADS_TO com o e-mail que receberá alertas.',503);
+  if(!/^\S+@\S+\.\S+$/.test(notifyEmail))err('Configure WYNCORE_LEADS_TO com o e-mail que receberá alertas.',503);
   if(!Asaas.webhookConfigured())err('Configure ASAAS_WEBHOOK_TOKEN com 32 a 255 caracteres, sem espaços.',503);
   const d=await load();
   if(d.asaasWebhookId)return send(res,200,{ok:true,alreadyConfigured:true,id:d.asaasWebhookId,url:d.asaasWebhookUrl});
