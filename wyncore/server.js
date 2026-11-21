@@ -249,6 +249,19 @@ async function handler(req,res){try{
   if(me.role!=='participant')err('Acesso não permitido.',403);
   const mine=reviews.filter(x=>x.participantId===me.id);const earnings=(d.adEarnings||[]).filter(x=>x.participantId===me.id);return send(res,200,{campaigns:campaigns.filter(x=>x.status==='open'),reviews:mine,earnings,earningSummary:{approvedUnpaid:earnings.filter(x=>x.status==='approved_unpaid').reduce((n,x)=>n+x.amount,0),paid:earnings.filter(x=>x.status==='paid').reduce((n,x)=>n+x.amount,0)},campaignHistory:Object.fromEntries(mine.map(r=>{const c=campaigns.find(x=>x.id===r.campaignId);return [r.campaignId,c?c.title:'Campanha encerrada']}))});
  }
+ if(req.method==='POST'&&p==='/api/integrations/asaas/webhook'){
+  if(me.role!=='admin')err('Somente administração.',403);
+  const publicUrl=String(process.env.WYNCORE_PUBLIC_URL||'').replace(/\\/$/,'');
+  const notifyEmail=String(process.env.WYNCORE_LEADS_TO||'').trim();
+  if(!publicUrl||!/^https:\\/\\//i.test(publicUrl))err('Configure WYNCORE_PUBLIC_URL com o endereço HTTPS público da aplicação.',503);
+  if(!/^\\S+@\\S+\\.\\S+$/.test(notifyEmail))err('Configure WYNCORE_LEADS_TO com o e-mail que receberá alertas.',503);
+  if(!Asaas.webhookConfigured())err('Configure ASAAS_WEBHOOK_TOKEN com 32 a 255 caracteres, sem espaços.',503);
+  const d=await load();
+  if(d.asaasWebhookId)return send(res,200,{ok:true,alreadyConfigured:true,id:d.asaasWebhookId,url:d.asaasWebhookUrl});
+  const created=await Asaas.createWebhook({url:publicUrl+'/api/webhooks/asaas',email:notifyEmail});
+  d.asaasWebhookId=created.id;d.asaasWebhookUrl=publicUrl+'/api/webhooks/asaas';d.asaasWebhookCreatedAt=new Date().toISOString();await save(d);
+  return send(res,201,{ok:true,id:created.id,url:d.asaasWebhookUrl,message:'Webhook Asaas criado. Faça uma cobrança de teste no Sandbox e confirme o evento recebido.'});
+ }
  if(req.method==='POST'&&p==='/api/ad-campaigns'){
   if(me.role!=='admin')err('Somente administração pode criar campanhas.',403);
   const b=await body(req),title=String(b.title||'').trim().slice(0,120),client=String(b.client||'').trim().slice(0,120),brief=String(b.brief||'').trim().slice(0,3000),channel=String(b.channel||'digital'),objective=String(b.objective||'').trim().slice(0,500),mediaUrl=String(b.mediaUrl||'').trim().slice(0,2000),value=Number(b.contractValue||0),reward=Number(b.rewardPerReview||0),maxParticipants=Number(b.maxParticipants||0),advertiserDocument=String(b.advertiserDocument||'').replace(/\\D/g,'').slice(0,14),advertiserEmail=String(b.advertiserEmail||'').trim().toLowerCase(),advertiserPhone=normalizePhone(b.advertiserPhone);
