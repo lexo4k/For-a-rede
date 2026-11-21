@@ -4,7 +4,7 @@ const D=require('./domain');
 const ROOT=__dirname,DATA_DIR=process.env.DATA_DIR||path.join(ROOT,'data'),DATA_FILE=path.join(DATA_DIR,'wyncore.json');
 const PORT=Number(process.env.PORT||3000),PASSWORD=process.env.WYNCORE_OWNER_PASSWORD||'',SECRET=process.env.WYNCORE_SESSION_SECRET||'',PARTNER_SECRET=process.env.WYNCORE_PARTNER_WEBHOOK_SECRET||'',GOOGLE_CLIENT_ID=process.env.WYNCORE_GOOGLE_CLIENT_ID||'',PROD=process.env.NODE_ENV==='production';
 const COOKIE='wyncore_session',SESSION_MS=8*60*60*1000;
-const PUBLIC_FILES=new Set(['/','/index.html','/styles.css','/app.js','/manifest.webmanifest','/icon.svg','/sw.js','/sobre.html','/privacidade.html','/termos.html','/robots.txt','/sitemap.xml','/guia-aprendizagem.html','/guia-estagio.html','/seguranca-oportunidades.html','/organizar-candidatura.html']);
+const PUBLIC_FILES=new Set(['/','/index.html','/wallet.html','/wallet.css','/wallet.js','/styles.css','/app.js','/manifest.webmanifest','/icon.svg','/sw.js','/sobre.html','/privacidade.html','/termos.html','/robots.txt','/sitemap.xml','/guia-aprendizagem.html','/guia-estagio.html','/seguranca-oportunidades.html','/organizar-candidatura.html']);
 const MIME={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml','.webmanifest':'application/manifest+json','.xml':'application/xml; charset=utf-8','.txt':'text/plain; charset=utf-8'};
 const rate=new Map();
 function normalizePhone(value){let digits=String(value||'').replace(/\D/g,'');if(digits.startsWith('55')&&(digits.length===12||digits.length===13))digits=digits.slice(2);return digits;}
@@ -21,12 +21,12 @@ async function load(){
  if(process.env.BLOB_READ_WRITE_TOKEN){
   const {get}=require('@vercel/blob');
   const found=await get('wyncore/data.json',{access:'private',useCache:false});
-  if(!found)return D.ensureState({opportunities:[],tasks:[],events:[],users:[]});
+  if(!found)return D.ensureState({opportunities:[],tasks:[],events:[],users:[],deposits:[]});
   const raw=await new Response(found.stream).text();
   const d=JSON.parse(raw);
-  return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[]});
+  return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],deposits:d.deposits||[]});
  }
- try{const d=JSON.parse(await fs.readFile(DATA_FILE,'utf8'));return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[]})}catch(e){if(e.code!=='ENOENT')throw e;return D.ensureState({opportunities:[],tasks:[],events:[],users:[]})}
+ try{const d=JSON.parse(await fs.readFile(DATA_FILE,'utf8'));return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],deposits:d.deposits||[]})}catch(e){if(e.code!=='ENOENT')throw e;return D.ensureState({opportunities:[],tasks:[],events:[],users:[]})}
 }
 async function save(d){
  if(process.env.BLOB_READ_WRITE_TOKEN){
@@ -46,7 +46,31 @@ async function verifyPassword(p,stored){if(!stored||!stored.includes(':'))return
 function actor(session,d){if(!session)return null;if(session.role==='admin'&&session.id==='owner')return{id:'owner',role:'admin',email:'owner'};return d.participants.find(p=>p.id===session.id&&p.status==='active'&&p.role===session.role)||null}
 async function handler(req,res){try{
  const url=new URL(req.url,'http://localhost');let p=url.pathname;if(p!=='/'&&!p.startsWith('/api/')&&!PUBLIC_FILES.has(p)&&p!=='/health'&&!/\.[a-z0-9]+$/i.test(p))p='/api'+p;
- if(req.method==='GET'&&(p==='/health'||p==='/api/health'))return send(res,200,{ok:true,service:'WYNCORE',storage:process.env.BLOB_READ_WRITE_TOKEN?'vercel-blob-private':'persistent-json',authConfigured:Boolean(PASSWORD&&SECRET.length>=32),ownerLoginConfigured:Boolean(PASSWORD),participantLoginConfigured:SECRET.length>=32,phoneLoginEnabled:SECRET.length>=32,googleEnabled:Boolean(GOOGLE_CLIENT_ID),googleClientId:GOOGLE_CLIENT_ID||null,signupAvailable:true,publicAccess:true});
+ if(req.method==='GET'&&(p==='/health'||p==='/api/health')){const pixReady=Boolean(process.env.MERCADOPAGO_ACCESS_TOKEN&&process.env.MERCADOPAGO_WEBHOOK_SECRET&&process.env.MERCADOPAGO_WEBHOOK_URL?.startsWith('https://'));return send(res,200,{ok:true,service:'WYNCORE',storage:process.env.BLOB_READ_WRITE_TOKEN?'vercel-blob-private':'persistent-json',authConfigured:Boolean(PASSWORD&&SECRET.length>=32),ownerLoginConfigured:Boolean(PASSWORD),participantLoginConfigured:SECRET.length>=32,phoneLoginEnabled:SECRET.length>=32,googleEnabled:Boolean(GOOGLE_CLIENT_ID),googleClientId:GOOGLE_CLIENT_ID||null,signupAvailable:true,publicAccess:true,pix:{provider:'Mercado Pago',depositsEnabled:pixReady,payoutsEnabled:false}})};
+ if(req.method==='POST'&&p==='/api/webhooks/mercadopago'){
+  const token=process.env.MERCADOPAGO_ACCESS_TOKEN||'',secret=process.env.MERCADOPAGO_WEBHOOK_SECRET||'';
+  if(!token||!secret)return send(res,503,{error:'Webhook Pix ainda não configurado.'});
+  const raw=await rawBody(req);let payload={};try{payload=raw?JSON.parse(raw):{}}catch{return send(res,400,{error:'JSON inválido.'})}
+  const paymentId=String(url.searchParams.get('data.id')||url.searchParams.get('id')||payload.data?.id||'').trim();
+  const signature=String(req.headers['x-signature']||''),requestId=String(req.headers['x-request-id']||'');
+  const parts=Object.fromEntries(signature.split(',').map(x=>x.trim().split('=').map(y=>y.trim())));
+  const ts=parts.ts||'',v1=parts.v1||'';
+  if(!paymentId||!ts||!v1||!requestId)return send(res,401,{error:'Assinatura do webhook ausente.'});
+  const manifest='id:'+paymentId.toLowerCase()+';request-id:'+requestId+';ts:'+ts+';';
+  const expected=crypto.createHmac('sha256',secret).update(manifest).digest('hex');
+  if(!safeEqual(v1.toLowerCase(),expected))return send(res,401,{error:'Assinatura do webhook inválida.'});
+  let paymentResponse;try{paymentResponse=await fetch('https://api.mercadopago.com/v1/payments/'+encodeURIComponent(paymentId),{headers:{Authorization:'Bearer '+token,Accept:'application/json'},signal:AbortSignal.timeout(10000)})}catch{return send(res,503,{error:'Não foi possível consultar o pagamento no provedor.'})}
+  if(!paymentResponse.ok)return send(res,502,{error:'O provedor não confirmou a consulta do pagamento.'});
+  const payment=await paymentResponse.json(),d=await load(),deposit=d.deposits.find(x=>x.id===String(payment.external_reference||''));
+  if(!deposit)return send(res,200,{ok:true,ignored:true});
+  if(String(payment.currency_id||'')!=='BRL'||Math.round(Number(payment.transaction_amount)*100)!==Math.round(Number(deposit.amount)*100))return send(res,409,{error:'Valor ou moeda do pagamento não correspondem ao depósito.'});
+  if(payment.status==='approved'&&!deposit.confirmedAt){
+   deposit.status='confirmed';deposit.confirmedAt=new Date().toISOString();deposit.providerPaymentId=String(payment.id);
+   d.ledger.unshift({id:crypto.randomUUID(),participantId:deposit.participantId,kind:'wallet_deposit_confirmed',amount:deposit.amount,reference:String(payment.id),at:deposit.confirmedAt});
+   await save(d);
+  }else if(payment.status==='rejected'||payment.status==='cancelled'||payment.status==='refunded'){deposit.status=payment.status;deposit.updatedAt=new Date().toISOString();await save(d)}
+  return send(res,200,{ok:true,status:deposit.status});
+ }
  if(req.method==='POST'&&p==='/api/access-request'){
   if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
   const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),phone=normalizePhone(b.phone),pass=String(b.password||'');if(limited(req,'signup',email||phone,5,3600000))return send(res,429,{error:'Muitas tentativas de cadastro para este contato. Aguarde um pouco.'});
@@ -102,7 +126,7 @@ async function handler(req,res){try{
  const session=readSession(req);if(!session)return send(res,401,{error:'Sessão expirada.'});
  const d=await load(),me=actor(session,d);if(!me)return send(res,403,{error:'Conta inativa ou sem permissão.'});
  if(req.method==='GET'&&p==='/api/me')return send(res,200,{id:me.id,role:me.role,email:me.email,name:me.name||'Administrador'});
- if(req.method==='GET'&&p==='/api/integrations/status'){if(me.role!=='admin')err('Somente administrador.',403);return send(res,200,{advertisingNetwork:{configured:false,conversionValidation:false,reason:'Nenhuma rede de anunciantes está conectada.'},partnerCampaignWebhook:{configured:Boolean(PARTNER_SECRET),conversionValidation:Boolean(process.env.WYNCORE_CONVERSION_SECRET),reason:process.env.WYNCORE_CONVERSION_SECRET?'Webhook assinado de conversões configurado; falta homologação com parceiro e conciliação de liquidação.':'Webhook de campanhas pode importar campanhas; webhook de conversões ainda não configurado.'},pix:{providerConfigured:false,payoutsEnabled:false,bankVerification:false,reason:'Provedor Pix e credenciais de integração não configurados.'},automaticPaymentTransfers:false});}
+ if(req.method==='GET'&&p==='/api/integrations/status'){if(me.role!=='admin')err('Somente administrador.',403);const pixReady=Boolean(process.env.MERCADOPAGO_ACCESS_TOKEN&&process.env.MERCADOPAGO_WEBHOOK_SECRET&&process.env.MERCADOPAGO_WEBHOOK_URL?.startsWith('https://'));return send(res,200,{advertisingNetwork:{configured:false,conversionValidation:false,reason:'Nenhuma rede de anunciantes está conectada.'},partnerCampaignWebhook:{configured:Boolean(PARTNER_SECRET),conversionValidation:Boolean(process.env.WYNCORE_CONVERSION_SECRET),reason:process.env.WYNCORE_CONVERSION_SECRET?'Webhook assinado de conversões configurado; falta homologação com parceiro e conciliação de liquidação.':'Webhook de campanhas pode importar campanhas; webhook de conversões ainda não configurado.'},pix:{provider:'Mercado Pago',providerConfigured:Boolean(process.env.MERCADOPAGO_ACCESS_TOKEN),depositsEnabled:pixReady,payoutsEnabled:false,bankVerification:pixReady,reason:pixReady?'Pix de entrada configurado; repasses de saída ainda exigem integração própria.':'Configure as credenciais Mercado Pago e o webhook HTTPS para habilitar depósitos Pix.'},automaticPaymentTransfers:false});}
  if(req.method==='POST'&&p==='/api/campaign-feedback'){if(me.role!=='participant')err('Somente participantes podem avaliar campanhas.',403);if(limited(req,'campaign-feedback',me.id,30,3600000))return send(res,429,{error:'Limite de avaliações atingido. Tente novamente mais tarde.'});const b=await body(req),programId=String(b.programId||''),rating=Number(b.rating),comment=String(b.comment||'').trim().slice(0,300),program=d.programs.find(x=>x.id===programId&&x.status==='active'&&x.videoUrl);if(!program)err('Campanha de vídeo indisponível.',404);if(!Number.isInteger(rating)||rating<1||rating>5)err('Escolha uma avaliação entre 1 e 5.');let feedback=d.campaignFeedback.find(x=>x.programId===programId&&x.participantId===me.id);const now=new Date().toISOString();if(feedback){feedback.rating=rating;feedback.comment=comment;feedback.updatedAt=now;await save(d);return send(res,200,{ok:true,feedback,updated:true})}feedback={id:crypto.randomUUID(),programId,participantId:me.id,rating,comment,createdAt:now,updatedAt:now};d.campaignFeedback.unshift(feedback);await save(d);return send(res,201,{ok:true,feedback,updated:false});}
  if(req.method==='POST'&&p==='/api/participants'){if(me.role!=='admin')err('Somente administrador.',403);const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),phone=normalizePhone(b.phone),pass=String(b.password||'');if(name.length<2||!/^\S+@\S+\.\S+$/.test(email)||!phone||phone.length<10||phone.length>13||pass.length<10)err('Para cadastrar um participante, informe nome, e-mail válido, celular com DDD e senha com pelo menos 10 caracteres.');if(d.users.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone))||d.participants.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone)))err('Este e-mail ou telefone já está cadastrado.',409);const person=D.createParticipant(d,me,{name,email,phone});d.users.push({id:person.id,email,phone,passwordHash:await hashPassword(pass)});await save(d);return send(res,201,{ok:true,participant:{id:person.id,name:person.name,email:person.email,phone:person.phone,status:person.status},message:'Participante cadastrado. Aprove o acesso para liberar o login.'});}
  if(req.method==='GET'&&p==='/api/dashboard'){
@@ -110,6 +134,31 @@ async function handler(req,res){try{
   return send(res,200,D.snapshot(d,me));
  }
  
+ if(req.method==='GET'&&p==='/api/wallet'){
+  const deposits=(d.deposits||[]).filter(x=>me.role==='admin'||x.participantId===me.id);
+  const ledger=(d.ledger||[]).filter(x=>me.role==='admin'||x.participantId===me.id);
+  const confirmed=ledger.reduce((n,x)=>n+Number(x.amount||0),0);
+  const pixReady=Boolean(process.env.MERCADOPAGO_ACCESS_TOKEN&&process.env.MERCADOPAGO_WEBHOOK_SECRET&&process.env.MERCADOPAGO_WEBHOOK_URL?.startsWith('https://'));
+  return send(res,200,{currency:'BRL',confirmed:Number(confirmed.toFixed(2)),deposits,ledger,pix:{provider:'Mercado Pago',depositsEnabled:pixReady,payoutsEnabled:false}});
+ }
+ if(req.method==='POST'&&p==='/api/wallet/deposits'){
+  if(me.role!=='participant'&&me.role!=='admin')err('Conta sem permissão para depósitos.',403);
+  const token=process.env.MERCADOPAGO_ACCESS_TOKEN||'',webhookSecret=process.env.MERCADOPAGO_WEBHOOK_SECRET||'',webhookUrl=process.env.MERCADOPAGO_WEBHOOK_URL||'';
+  if(!token||!webhookSecret||!webhookUrl.startsWith('https://'))return send(res,503,{error:'Depósitos Pix ainda não estão habilitados. Falta configurar as credenciais e o webhook seguro do Mercado Pago.'});
+  const b=await body(req),amount=Number(b.amount),email=String(me.email&&me.email!=='owner'?me.email:b.email||'').trim().toLowerCase();
+  if(!Number.isFinite(amount)||amount<5||amount>5000)err('O depósito deve ser entre R$ 5,00 e R$ 5.000,00.');
+  if(!/^\\S+@\\S+\\.\\S+$/.test(email))err('Informe um e-mail válido do pagador para gerar o Pix.');
+  if(limited(req,'wallet-deposit',me.id,5,3600000))return send(res,429,{error:'Limite de solicitações de depósito atingido. Aguarde uma hora.'});
+  const deposit={id:crypto.randomUUID(),participantId:me.id,amount:Number(amount.toFixed(2)),currency:'BRL',status:'pending',createdAt:new Date().toISOString(),provider:'mercado_pago'};
+  const payload={transaction_amount:deposit.amount,description:'Depósito de carteira WYNCORE',payment_method_id:'pix',payer:{email},external_reference:deposit.id,notification_url:webhookUrl};
+  let response;try{response=await fetch('https://api.mercadopago.com/v1/payments',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json','X-Idempotency-Key':deposit.id},body:JSON.stringify(payload),signal:AbortSignal.timeout(15000)})}catch{return send(res,503,{error:'O Mercado Pago está temporariamente indisponível. Nenhum depósito foi criado.'})}
+  const result=await response.json().catch(()=>({}));
+  if(!response.ok||!result.id||!result.point_of_interaction?.transaction_data?.qr_code)return send(res,502,{error:'O provedor não conseguiu criar a cobrança Pix. Nenhum saldo foi alterado.'});
+  deposit.providerPaymentId=String(result.id);deposit.qrCode=result.point_of_interaction.transaction_data.qr_code;deposit.qrCodeBase64=result.point_of_interaction.transaction_data.qr_code_base64||null;deposit.ticketUrl=result.point_of_interaction.transaction_data.ticket_url||null;deposit.expiresAt=result.date_of_expiration||null;
+  d.deposits.unshift(deposit);await save(d);
+  return send(res,201,{ok:true,deposit:{id:deposit.id,amount:deposit.amount,status:deposit.status,qrCode:deposit.qrCode,qrCodeBase64:deposit.qrCodeBase64,ticketUrl:deposit.ticketUrl,expiresAt:deposit.expiresAt}});
+ }
+ if(req.method==='POST'&&p==='/api/wallet/withdrawals')return send(res,503,{error:'Saques Pix automáticos ainda não estão habilitados. O provedor de saída e a validação do destinatário precisam ser configurados; nenhum saldo foi debitado.'});
  if(req.method==='GET'&&p==='/api/company'){if(me.role!=='admin')err('Somente administrador.',403);return send(res,200,{leads:d.companyLeads||[],costs:d.companyCosts||[]})}
  if(req.method==='POST'&&p==='/api/company/leads'){if(me.role!=='admin')err('Somente administrador.',403);const b=await body(req),company=String(b.company||'').trim().slice(0,100),contact=String(b.contact||'').trim().slice(0,120),channel=String(b.channel||'email'),notes=String(b.notes||'').trim().slice(0,500);if(company.length<2||!['email','site','phone'].includes(channel))err('Informe a empresa e um canal de contato válido.');const lead={id:crypto.randomUUID(),company,contact,channel,notes,status:'prospect',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};d.companyLeads.unshift(lead);await save(d);return send(res,201,lead)}
  if(req.method==='PATCH'&&p.startsWith('/api/company/leads/')&&p.split('/').length===5){if(me.role!=='admin')err('Somente administrador.',403);const lead=(d.companyLeads||[]).find(x=>x.id===p.split('/').pop());if(!lead)return send(res,404,{error:'Empresa não encontrada.'});const b=await body(req);if(!['prospect','contacted','proposal','contracted','inactive'].includes(b.status))err('Etapa inválida.');lead.status=b.status;lead.updatedAt=new Date().toISOString();await save(d);return send(res,200,lead)}
