@@ -250,10 +250,11 @@ async function handler(req,res){try{
   if(c.contractStatus==='received')err('Esta campanha já está paga.',409);
   if(!Number(c.contractValue)||!c.advertiserDocument||!c.advertiserEmail)err('Cadastre CPF/CNPJ e e-mail do contratante antes de gerar o Pix.');
   if(c.asaasPaymentId)err('Esta campanha já possui uma cobrança Pix. Consulte a cobrança existente antes de gerar outra.',409);
-  const customer=await Asaas.createCustomer({name:c.client,cpfCnpj:c.advertiserDocument,email:c.advertiserEmail,mobilePhone:c.advertiserPhone,externalReference:'wyncore-client:'+c.id});
+  const customer=c.asaasCustomerId?{id:c.asaasCustomerId}:await Asaas.createCustomer({name:c.client,cpfCnpj:c.advertiserDocument,email:c.advertiserEmail,mobilePhone:c.advertiserPhone,externalReference:'wyncore-client:'+c.id});
+  c.asaasCustomerId=customer.id;await save(d);
   const payment=await Asaas.createPixCharge({customer:customer.id,value:c.contractValue,description:'WYNCORE - '+c.title,externalReference:'wyncore-campaign:'+c.id});
+  c.asaasPaymentId=payment.id;c.contractStatus='awaiting_pix';c.pixCreatedAt=new Date().toISOString();await save(d);
   const qr=await Asaas.getPixQrCode(payment.id);
-  c.asaasCustomerId=customer.id;c.asaasPaymentId=payment.id;c.contractStatus='awaiting_pix';c.pixCreatedAt=new Date().toISOString();await save(d);
   return send(res,201,{ok:true,paymentId:payment.id,invoiceUrl:payment.invoiceUrl||null,payload:qr.payload,encodedImage:qr.encodedImage,expirationDate:qr.expirationDate});
  }
 
