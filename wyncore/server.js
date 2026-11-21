@@ -233,7 +233,7 @@ async function handler(req,res){try{
   d.adCampaigns.unshift(c);d.audit.unshift({id:crypto.randomUUID(),actorId:me.id,type:'ad_campaign_created',entityId:c.id,details:{client},at:new Date().toISOString()});await save(d);return send(res,201,c);
  }
 
- let adMatch=p.match(/^\/api\/ad-campaigns\/([\w-]+)\/pix$/);
+ let let adMatch=p.match(/^\/api\/ad-campaigns\/([\w-]+)\/pix$/);
  if(req.method==='GET'&&adMatch){
   if(me.role!=='admin')err('Somente administração.',403);
   const c=(d.adCampaigns||[]).find(x=>x.id===adMatch[1]);if(!c?.asaasPaymentId)err('Ainda não existe cobrança Pix para esta campanha.',404);
