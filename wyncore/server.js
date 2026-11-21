@@ -68,7 +68,7 @@ async function handler(req,res){try{
    deposit.status='confirmed';deposit.confirmedAt=new Date().toISOString();deposit.providerPaymentId=String(payment.id);
    d.ledger.unshift({id:crypto.randomUUID(),participantId:deposit.participantId,kind:'wallet_deposit_confirmed',amount:deposit.amount,reference:String(payment.id),at:deposit.confirmedAt});
    await save(d);
-  }else if(payment.status==='rejected'||payment.status==='cancelled'||payment.status==='refunded'){deposit.status=payment.status;deposit.updatedAt=new Date().toISOString();await save(d)}
+  }else if(payment.status==='refunded'&&deposit.status==='confirmed'&&!deposit.reversedAt){deposit.status='refunded';deposit.reversedAt=new Date().toISOString();d.ledger.unshift({id:crypto.randomUUID(),participantId:deposit.participantId,kind:'wallet_deposit_reversed',amount:-deposit.amount,reference:String(payment.id),at:deposit.reversedAt});await save(d)}else if(payment.status==='rejected'||payment.status==='cancelled'){deposit.status=payment.status;deposit.updatedAt=new Date().toISOString();await save(d)}
   return send(res,200,{ok:true,status:deposit.status});
  }
  if(req.method==='POST'&&p==='/api/access-request'){
