@@ -1,13 +1,14 @@
 'use strict';
 const $=id=>document.getElementById(id);
 const platforms=[
+{id:'hubdata',name:'Hub Data',type:'Gravação de tarefas reais para treinamento de IA',desc:'Até R$ 30/h em tarefas residenciais e até R$ 70/h em tarefas profissionais, conforme tarefa disponível e aprovação. Saques e prazos seguem as condições da conta.',url:'https://app.hubdata.org/pt',tag:'Até R$ 30/h em casa · até R$ 70/h no trabalho'},
 {id:'oneforma',name:'OneForma',type:'Avaliação e dados para IA',desc:'Projetos de avaliação de buscas, imagens, linguagem e dados.',url:'https://www.oneforma.com/jobs/',tag:'Projetos por tarefa'},
 {id:'welodata',name:'Welo Data',type:'Qualidade de anúncios e buscas',desc:'Projetos de avaliação de anúncios, relevância e qualidade de resultados.',url:'https://jobs.lever.co/weloglobal',tag:'Avaliação de anúncios'},
 {id:'rws',name:'RWS TrainAI',type:'Treinamento e avaliação de IA',desc:'Projetos linguísticos, avaliação de conteúdo e qualidade de dados.',url:'https://www.rws.com/artificial-intelligence/train-ai-data-services/train-ai-community/',tag:'Projetos de IA'},
 {id:'prolific',name:'Prolific',type:'Estudos e pesquisas',desc:'Pesquisas acadêmicas e estudos de usuários, conforme elegibilidade.',url:'https://www.prolific.com/participants',tag:'Pesquisas remuneradas'},
 {id:'crowdgen',name:'CrowdGen by Appen',type:'Treinamento e avaliação de IA',desc:'Projetos de dados e IA com qualificação por projeto.',url:'https://crowdgen.com/',tag:'Projetos globais'},
 {id:'telus',name:'TELUS Digital AI Community',type:'Avaliação de anúncios e internet',desc:'Vagas remotas de avaliação de anúncios, buscas e conteúdo.',url:'https://jobs.telusdigital.com/search/cfm5/ai-community/jobs',tag:'Avaliação de anúncios'},
-{id:'outlier',name:'Outlier',type:'Treinamento de modelos de IA',desc:'Projetos de avaliação e treinamento de IA conforme especialidade.',url:'https://outlier.ai/',tag:'Tarefas de IA'}
+{id:'outlier',name:'Outlier',type:'Treinamento de modelos de IA',desc:'Projetos de avaliação e treinamento de IA conforme especialidade. A taxa aparece antes de iniciar; pagamentos semanais às terças, após qualificação.',url:'https://outlier.ai/',tag:'Pagamento semanal · projetos seletivos'}
 ];
 const labels={saved:'Salva',started:'Em andamento',submitted:'Enviada para revisão',done:'Concluída'};
 let tasks=[],earnings=[],filter='all',me=null;
