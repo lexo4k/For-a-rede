@@ -28,7 +28,6 @@ jobs:
         run: node --check wyncore/server.test.js
       - name: Check nested Work API route syntax
         run: |
-          node --check 'wyncore/api/work/[...path].js'
           node --check wyncore/api/work/me.js
           node --check wyncore/api/work/register.js
           node --check wyncore/api/work/login.js
@@ -41,7 +40,6 @@ jobs:
           test -s wyncore/work.html
           test -s wyncore/work.css
           test -s wyncore/work.js
-          test -s 'wyncore/api/work/[...path].js'
           test -s wyncore/api/work/me.js
           test -s wyncore/api/work/register.js
           test -s wyncore/api/work/login.js
