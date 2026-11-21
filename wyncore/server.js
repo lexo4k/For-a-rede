@@ -290,7 +290,7 @@ if(req.method==='POST'&&p==='/api/pix-key'){
    if(me.role!=='participant')err('Somente participantes podem solicitar saque.',403);
    if(limited(req,'pix-withdrawal',me.id,3,60000))return send(res,429,{error:'Aguarde um minuto antes de solicitar outro Pix.'});
    const b=await body(req),raw=String(b.amount??'').trim().replace(',','.'),amount=Number(raw);
-   if(!/^\\d+(?:\\.\\d{1,2})?$/.test(raw)||!Number.isFinite(amount)||amount<1)err('Informe um valor a partir de R$ 1,00, com até duas casas decimais.');
+   if(!/^\d+(?:\.\d{1,2})?$/.test(raw)||!Number.isFinite(amount)||amount<1)err('Informe um valor a partir de R$ 1,00, com até duas casas decimais.');
    if(!Asaas.configured()||!Asaas.webhookConfigured())err('O Pix ainda não está liberado. A administração precisa configurar Asaas e o webhook.');
    if(!payoutStorageSafe())err('Saque temporariamente bloqueado: configure armazenamento persistente de instância única com WYNCORE_PAYOUT_STORAGE_MODE=single_writer. O armazenamento atual não garante reserva transacional contra saques simultâneos.',503);
    return await withLock('wallet',async()=>{
