@@ -33,6 +33,13 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.equal(healthData.ownerLoginConfigured,true);
  assert.equal(healthData.participantLoginConfigured,true);
  assert.equal(healthData.signupAvailable,true);
+ assert.equal(typeof healthData.supabaseConfigured,'boolean');
+ assert.equal(typeof healthData.integrations?.adscend?.configured,'boolean');
+ assert.equal(typeof healthData.integrations?.adscend?.postbackConfigured,'boolean');
+ assert.equal(typeof healthData.integrations?.asaas?.configured,'boolean');
+ assert.equal(typeof healthData.integrations?.asaas?.webhookConfigured,'boolean');
+ assert.equal(typeof healthData.integrations?.paypal?.configured,'boolean');
+ assert.equal(typeof healthData.integrations?.payoutStorageSafe,'boolean');
  assert.equal(healthData.googleEnabled,true,'Google login should expose its configured client id');
  const appAssets=await Promise.all(['/','/index.html','/app.js','/styles.css','/sw.js','/manifest.webmanifest','/work.html','/work.css','/work.js'].map(path=>fetch(base+path)));
  for(const asset of appAssets){assert.equal(asset.status,200);assert.equal(asset.headers.get('cache-control'),'no-cache','application shell assets must revalidate after deployment')}
