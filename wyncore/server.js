@@ -63,11 +63,13 @@ async function handler(req,res){try{
   const d=await load();const lead={id:crypto.randomUUID(),company,contact,email,phone,objective,budget,status:'new',createdAt:new Date().toISOString()};d.advertiserInquiries.unshift(lead);await save(d);return send(res,201,{ok:true,message:'Solicitação recebida. A equipe comercial fará a análise e entrará em contato.'});
  }
  if(SECRET.length<32)return send(res,503,{error:'A autenticação de sessão ainda não está configurada no servidor. O pedido de cadastro pode ser recebido, mas a entrada ficará indisponível até a configuração.'});
- if(p.startsWith('/api/work/')){
+ if(p==='/api/work'){
   if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
   const d=await load();d.workAccounts||=[];d.workTasks||=[];d.workLedger||=[];
-  if(req.method==='POST'&&p==='/api/work/register'){
-   const b=await body(req),name=String(b.name||'').trim().slice(0,90),email=String(b.email||'').trim().toLowerCase(),pass=String(b.password||'');
+  let b={},action=String(url.searchParams.get('action')||'');
+  if(['POST','PATCH','DELETE'].includes(req.method)){b=await body(req);action=String(b.action||action)}
+  if(req.method==='POST'&&action==='register'){
+   const name=String(b.name||'').trim().slice(0,90),email=String(b.email||'').trim().toLowerCase(),pass=String(b.password||'');
    if(limited(req,'work-register',email,5,3600000))return send(res,429,{error:'Muitas tentativas de cadastro. Aguarde uma hora.'});
    if(name.length<2||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||pass.length<10)err('Informe nome, e-mail válido e senha com pelo menos 10 caracteres.');
    if(d.workAccounts.some(x=>x.email===email))err('Este e-mail já possui uma conta WYNCORE Work.',409);
@@ -76,53 +78,51 @@ async function handler(req,res){try{
    const user={id:account.id,role:'work',email:account.email,name:account.name};
    return send(res,201,{ok:true,user},{'Set-Cookie':cookie(makeSession(user),SESSION_MS/1000)});
   }
-  if(req.method==='POST'&&p==='/api/work/login'){
-   const b=await body(req),email=String(b.email||'').trim().toLowerCase(),pass=String(b.password||'');
+  if(req.method==='POST'&&action==='login'){
+   const email=String(b.email||'').trim().toLowerCase(),pass=String(b.password||'');
    if(limited(req,'work-login',email,10,900000))return send(res,429,{error:'Muitas tentativas. Aguarde 15 minutos.'});
    const account=d.workAccounts.find(x=>x.email===email);
    if(!account||!await verifyPassword(pass,account.passwordHash))return send(res,401,{error:'E-mail ou senha incorretos.'});
    const user={id:account.id,role:'work',email:account.email,name:account.name};
    return send(res,200,{ok:true,user},{'Set-Cookie':cookie(makeSession(user),SESSION_MS/1000)});
   }
-  if(req.method==='POST'&&p==='/api/work/logout')return send(res,200,{ok:true},{'Set-Cookie':cookie('',0)});
+  if(req.method==='POST'&&action==='logout')return send(res,200,{ok:true},{'Set-Cookie':cookie('',0)});
   const session=readSession(req);
   if(!session||session.role!=='work')return send(res,401,{error:'Entre na sua conta WYNCORE Work.'});
   const account=d.workAccounts.find(x=>x.id===session.id);
   if(!account)return send(res,401,{error:'Conta não encontrada. Entre novamente.'});
-  if(req.method==='GET'&&p==='/api/work/me')return send(res,200,{id:account.id,name:account.name,email:account.email});
-  if(req.method==='GET'&&p==='/api/work/tasks')return send(res,200,{tasks:d.workTasks.filter(x=>x.accountId===account.id)});
-  if(req.method==='POST'&&p==='/api/work/tasks'){
-   const b=await body(req),title=String(b.title||'').trim().slice(0,120),platform=String(b.platform||'').trim().slice(0,50),note=String(b.note||'').trim().slice(0,500),urlValue=String(b.url||'').trim(),status=String(b.status||'saved');
+  if(req.method==='GET'&&action==='me')return send(res,200,{id:account.id,name:account.name,email:account.email});
+  if(req.method==='GET'&&action==='tasks')return send(res,200,{tasks:d.workTasks.filter(x=>x.accountId===account.id)});
+  if(req.method==='POST'&&action==='create-task'){
+   const title=String(b.title||'').trim().slice(0,120),platform=String(b.platform||'').trim().slice(0,50),note=String(b.note||'').trim().slice(0,500),urlValue=String(b.url||'').trim(),status=String(b.status||'saved');
    if(title.length<2||!platform||!['saved','started','submitted','done'].includes(status))err('Confira título, plataforma e status.');
    let taskUrl='';if(urlValue){let u;try{u=new URL(urlValue)}catch{}if(!u||u.protocol!=='https:')err('O link precisa ser HTTPS válido.');taskUrl=u.href}
    const task={id:crypto.randomUUID(),accountId:account.id,title,platform,note,url:taskUrl,status,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
    d.workTasks.unshift(task);await save(d);return send(res,201,{task});
   }
-  const taskMatch=p.match(/^\/api\/work\/tasks\/([\w-]+)$/);
-  if(taskMatch){
-   const task=d.workTasks.find(x=>x.id===taskMatch[1]&&x.accountId===account.id);
+  if(['PATCH','DELETE'].includes(req.method)&&['update-task','delete-task'].includes(action)){
+   const task=d.workTasks.find(x=>x.id===String(b.taskId||'')&&x.accountId===account.id);
    if(!task)return send(res,404,{error:'Tarefa não encontrada.'});
-   if(req.method==='PATCH'){
-    const b=await body(req);if(b.status!==undefined){if(!['saved','started','submitted','done'].includes(b.status))err('Status inválido.');task.status=b.status}
+   if(req.method==='PATCH'&&action==='update-task'){
+    if(b.status!==undefined){if(!['saved','started','submitted','done'].includes(b.status))err('Status inválido.');task.status=b.status}
     if(b.note!==undefined)task.note=String(b.note||'').trim().slice(0,500);
     task.updatedAt=new Date().toISOString();await save(d);return send(res,200,{task});
    }
-   if(req.method==='DELETE'){d.workTasks=d.workTasks.filter(x=>x.id!==task.id);await save(d);return send(res,200,{ok:true})}
+   if(req.method==='DELETE'&&action==='delete-task'){d.workTasks=d.workTasks.filter(x=>x.id!==task.id);await save(d);return send(res,200,{ok:true})}
   }
-  if(req.method==='GET'&&p==='/api/work/earnings'){
+  if(req.method==='GET'&&action==='earnings'){
    const items=d.workLedger.filter(x=>x.accountId===account.id);
    return send(res,200,{items,summary:{reported:items.reduce((n,x)=>n+Number(x.amount||0),0),received:items.filter(x=>x.status==='received').reduce((n,x)=>n+Number(x.amount||0),0)}});
   }
-  if(req.method==='POST'&&p==='/api/work/earnings'){
-   const b=await body(req),platform=String(b.platform||'').trim().slice(0,50),description=String(b.description||'').trim().slice(0,120),amount=Number(b.amount),status=String(b.status||'reported'),reference=String(b.reference||'').trim().slice(0,120);
+  if(req.method==='POST'&&action==='create-earning'){
+   const platform=String(b.platform||'').trim().slice(0,50),description=String(b.description||'').trim().slice(0,120),amount=Number(b.amount),status=String(b.status||'reported'),reference=String(b.reference||'').trim().slice(0,120);
    if(!platform||description.length<2||!Number.isFinite(amount)||amount<=0||amount>1000000||!['reported','received'].includes(status))err('Informe plataforma, descrição e valor válido.');
    if(status==='received'&&reference.length<4)err('Para marcar como recebido, informe uma referência pessoal do comprovante.');
    const item={id:crypto.randomUUID(),accountId:account.id,platform,description,amount:Math.round(amount*100)/100,status,reference,createdAt:new Date().toISOString(),manual:true};
    d.workLedger.unshift(item);await save(d);return send(res,201,{item});
   }
-  return send(res,404,{error:'Rota Work não encontrada.'});
- }
- if(req.method==='POST'&&p==='/api/google-login'){
+  return send(res,404,{error:'Ação Work não encontrada.'});
+ } if(req.method==='POST'&&p==='/api/google-login'){
   if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
   if(!GOOGLE_CLIENT_ID)return send(res,503,{error:'O acesso Google ainda aguarda a configuração do Client ID OAuth no servidor.'});
   const b=await body(req),credential=String(b.credential||'');if(!credential||credential.length>12000)return send(res,400,{error:'Credencial Google inválida.'});
