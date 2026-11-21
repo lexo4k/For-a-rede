@@ -95,7 +95,7 @@ async function handler(req,res){
   let requestPath='/';
   try{requestPath=new URL(req.url,'http://localhost').pathname}catch{}
   const apiRequest=requestPath.startsWith('/api/')||(!PUBLIC_FILES.has(requestPath)&&requestPath!=='/'&&requestPath!=='/health'&&!/\.[a-z0-9]+$/i.test(requestPath));
-  if(apiRequest){req.__wyncoreStateLock=true;return Storage.withTransaction(()=>withLock('state',()=>handler(req,res)))}
+  if(apiRequest){req.__wyncoreStateLock=true;return Storage.withTransaction(()=>withLock('state',()=>handler(req,res))).catch(error=>{console.error('WYNCORE storage transaction error:',error);if(!res.headersSent)send(res,503,{error:'Armazenamento temporariamente indisponível. Nenhuma alteração foi confirmada.'})})}
  }
  try{
  const url=new URL(req.url,'http://localhost');let p=url.pathname;if(p!=='/'&&!p.startsWith('/api/')&&!PUBLIC_FILES.has(p)&&p!=='/health'&&!/\.[a-z0-9]+$/i.test(p))p='/api'+p;
