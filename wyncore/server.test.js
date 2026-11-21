@@ -45,6 +45,9 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.equal((await fetch(base+'/guia-estagio.html')).status,200);
  assert.equal((await fetch(base+'/seguranca-oportunidades.html')).status,200);
  assert.equal((await fetch(base+'/organizar-candidatura.html')).status,200);
+ const workHealth=await fetch(base+'/api/work?action=health');
+ assert.equal(workHealth.status,200,'single Work API endpoint should be deployed and reachable');
+ assert.equal((await workHealth.json()).service,'WYNCORE Work');
  const workSignup=await fetch(base+'/api/work',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'register',name:'Conta Work Teste',email:'work@example.org',password:'senha-work-segura-123'})});
  assert.equal(workSignup.status,201,'personal work account should register and sign in');
  const workCookie=workSignup.headers.get('set-cookie').split(';')[0];
