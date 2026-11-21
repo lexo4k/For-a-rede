@@ -40,7 +40,7 @@ O sistema tem backend e armazenamento, mas ainda não está conectado a contrata
 
 Os espaços publicitários da página são apenas posições visuais. Nenhuma rede de anúncios está conectada e nenhuma impressão ou receita é fabricada. Não use inventário publicitário comum com recompensa em dinheiro por visualização/clique: só integre campanhas cujo contrato autorize expressamente esse tipo de incentivo.
 
-Veja [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) para os requisitos técnicos e critérios de ativação das integrações de anúncios e Pix.
+Veja [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) para os requisitos técnicos e critérios de ativação das integrações de anúncios e Pix. A avaliação específica do MobSPOT está em [docs/MOBSPOT-COMPATIBILITY.md](docs/MOBSPOT-COMPATIBILITY.md).
 
 ## Módulos inspirados na experiência SL
 A interface inclui áreas para conteúdos e campanhas, aprendizagem/estágio, progressão visual SL1–SL9 e acompanhamento de indicações. A progressão é administrativa e não cria direito financeiro. A progressão é demonstrativa e baseada em atividades aprovadas/registradas no fluxo. Não representa níveis oficiais de terceiros, não cria saldo, não oferece comissões por recrutamento e não processa depósitos ou saques.
