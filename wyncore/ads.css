@@ -15,3 +15,6 @@
 .watch-check input{width:18px;height:18px;accent-color:var(--gold);padding:0}
 .watch-confirm .primary:disabled{opacity:.45;cursor:not-allowed;filter:grayscale(.5)}
 @media(max-width:520px){.watch-confirm{align-items:stretch;flex-direction:column}.watch-confirm .primary{width:100%}}
+
+.campaign-watch .reward-line{font-size:15px;font-weight:800;color:#a7f0d1}
+#earning-summary{margin:12px 0}
