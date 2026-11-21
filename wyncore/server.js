@@ -129,7 +129,29 @@ async function handler(req,res){try{
   if(mediaUrl){let u;try{u=new URL(mediaUrl)}catch{}if(!u||u.protocol!=='https:'||u.username||u.password)err('O link do material precisa ser HTTPS válido.');}
   const d=await load();const lead={id:crypto.randomUUID(),company,contact,email,phone,cpfCnpj,objective,budget,channel,mediaUrl,status:'new',createdAt:new Date().toISOString()};d.advertiserInquiries.unshift(lead);await save(d);lead.notificationStatus=await notifyAdvertiserLead(lead);await save(d);return send(res,201,{ok:true,message:'Solicitação recebida. A equipe comercial fará a análise e entrará em contato.'});
  }
- if(SECRET.length<32)return send(res,503,{error:'A autenticação de sessão ainda não está configurada no servidor. O pedido de cadastro pode ser recebido, mas a entrada ficará indisponível até a configuração.'});
+ if((req.method==='GET'||req.method==='POST')&&p==='/api/webhooks/adscend'){
+   const expected=String(process.env.ADSCEND_POSTBACK_SECRET||''),provided=String(url.searchParams.get('token')||req.headers['x-adscend-token']||'');
+   if(expected.length<32||!safeEqual(provided,expected))return send(res,401,{error:'Postback Adscend não autenticado.'});
+   const params=req.method==='POST'?await body(req):Object.fromEntries(url.searchParams.entries());
+   const participantId=String(params.user||params.userid||params.sub1||'').trim(),offerId=String(params.offer||params.offer_id||params.sub2||'').trim(),watchTime=String(params.time||params.uts||'').trim(),ip=String(params.ip||'').trim();
+   if(!participantId||!offerId||!watchTime||watchTime.length>80)return send(res,400,{error:'Postback sem participante, oferta ou horário de conclusão.'});
+   return await withLock('wallet',async()=>{
+    const state=await load();state.adscendConversions||=[];state.adscendOfferSnapshots||=[];
+    const participant=(state.participants||[]).find(x=>x.id===participantId&&x.status==='active'&&x.role==='participant');
+    if(!participant)return send(res,404,{error:'Participante associado ao postback não encontrado.'});
+    const snapshot=state.adscendOfferSnapshots.find(x=>x.participantId===participantId&&x.offerId===offerId);
+    if(!snapshot)return send(res,409,{error:'Oferta não encontrada no histórico deste participante. Evento mantido sem crédito.'});
+    const suppliedId=String(params.transaction_id||params.transactionId||params.txid||'').trim();
+    const transactionId=suppliedId?suppliedId.slice(0,180):crypto.createHash('sha256').update([participantId,offerId,watchTime,ip].join(':')).digest('hex');
+    if(state.adscendConversions.some(x=>x.transactionId===transactionId))return send(res,200,{ok:true,duplicate:true});
+    const reportedPayout=Number(params.pay||params.payout);
+    const conversion={id:crypto.randomUUID(),provider:'adscend',participantId,offerId,transactionId,watchTime,ipHash:ip?crypto.createHash('sha256').update(ip).digest('hex'):null,publisherPayoutUsd:snapshot.publisherPayoutUsd??null,participantEstimateUsd:snapshot.participantEstimateUsd??null,reportedPayoutUsd:Number.isFinite(reportedPayout)&&reportedPayout>0?reportedPayout:null,currency:String(params.cur||'USD').slice(0,8).toUpperCase(),status:'video_completed_pending_partner_reconciliation',receivedAt:new Date().toISOString(),creditIssued:false};
+    state.adscendConversions.unshift(conversion);if(state.adscendConversions.length>10000)state.adscendConversions=state.adscendConversions.slice(0,10000);
+    await save(state);return send(res,200,{ok:true,received:true,status:conversion.status,credited:false});
+   });
+  }
+
+  if(SECRET.length<32)return send(res,503,{error:'A autenticação de sessão ainda não está configurada no servidor. O pedido de cadastro pode ser recebido, mas a entrada ficará indisponível até a configuração.'});
  if(p==='/api/work'){
   if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
   const d=await load();d.workAccounts||=[];d.workTasks||=[];d.workLedger||=[];
@@ -312,29 +334,7 @@ if(req.method==='GET'&&p==='/api/ad-workspace'){
    return send(res,200,{ok:true,...result,source:'Adscend Media',currency:'USD',rewardIsEstimate:true});
   }catch(e){return send(res,e.status||502,{error:e.status?e.message:'Não foi possível consultar a Adscend agora.'})}
  }
- if((req.method==='GET'||req.method==='POST')&&p==='/api/webhooks/adscend'){
-   const expected=String(process.env.ADSCEND_POSTBACK_SECRET||''),provided=String(url.searchParams.get('token')||req.headers['x-adscend-token']||'');
-   if(expected.length<32||!safeEqual(provided,expected))return send(res,401,{error:'Postback Adscend não autenticado.'});
-   const params=req.method==='POST'?await body(req):Object.fromEntries(url.searchParams.entries());
-   const participantId=String(params.user||params.userid||params.sub1||'').trim(),offerId=String(params.offer||params.offer_id||params.sub2||'').trim(),watchTime=String(params.time||params.uts||'').trim(),ip=String(params.ip||'').trim();
-   if(!participantId||!offerId||!watchTime||watchTime.length>80)return send(res,400,{error:'Postback sem participante, oferta ou horário de conclusão.'});
-   return await withLock('wallet',async()=>{
-    const state=await load();state.adscendConversions||=[];state.adscendOfferSnapshots||=[];
-    const participant=(state.participants||[]).find(x=>x.id===participantId&&x.status==='active'&&x.role==='participant');
-    if(!participant)return send(res,404,{error:'Participante associado ao postback não encontrado.'});
-    const snapshot=state.adscendOfferSnapshots.find(x=>x.participantId===participantId&&x.offerId===offerId);
-    if(!snapshot)return send(res,409,{error:'Oferta não encontrada no histórico deste participante. Evento mantido sem crédito.'});
-    const suppliedId=String(params.transaction_id||params.transactionId||params.txid||'').trim();
-    const transactionId=suppliedId?suppliedId.slice(0,180):crypto.createHash('sha256').update([participantId,offerId,watchTime,ip].join(':')).digest('hex');
-    if(state.adscendConversions.some(x=>x.transactionId===transactionId))return send(res,200,{ok:true,duplicate:true});
-    const reportedPayout=Number(params.pay||params.payout);
-    const conversion={id:crypto.randomUUID(),provider:'adscend',participantId,offerId,transactionId,watchTime,ipHash:ip?crypto.createHash('sha256').update(ip).digest('hex'):null,publisherPayoutUsd:snapshot.publisherPayoutUsd??null,participantEstimateUsd:snapshot.participantEstimateUsd??null,reportedPayoutUsd:Number.isFinite(reportedPayout)&&reportedPayout>0?reportedPayout:null,currency:String(params.cur||'USD').slice(0,8).toUpperCase(),status:'video_completed_pending_partner_reconciliation',receivedAt:new Date().toISOString(),creditIssued:false};
-    state.adscendConversions.unshift(conversion);if(state.adscendConversions.length>10000)state.adscendConversions=state.adscendConversions.slice(0,10000);
-    await save(state);return send(res,200,{ok:true,received:true,status:conversion.status,credited:false});
-   });
-  }
-
-  if(req.method==='POST'&&p==='/api/integrations/asaas/webhook'){
+ if(req.method==='POST'&&p==='/api/integrations/asaas/webhook'){
   if(me.role!=='admin')err('Somente administração.',403);
   const publicUrl=String(process.env.WYNCORE_PUBLIC_URL||'').replace(/\/$/,'');
   const notifyEmail=String(process.env.WYNCORE_LEADS_TO||'').trim();
