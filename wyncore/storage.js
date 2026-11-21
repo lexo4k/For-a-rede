@@ -79,20 +79,8 @@ async function withTransaction(work) {
     return context.run({
       mode: 'supabase-rpc',
       state: initialState,
-      updatedAt: result?.updated_at ?? null,
-      dirty: false
-    }, async () => {
-      const value = await work();
-      const current = context.getStore();
-      if (current?.dirty) {
-        await supabaseRpc('wyncore_state_write', {
-          p_secret: process.env.WYNCORE_SUPABASE_RPC_SECRET,
-          p_expected_updated_at: current.updatedAt,
-          p_state: current.state
-        });
-      }
-      return value;
-    });
+      updatedAt: result?.updated_at ?? null
+    }, work);
   }
 
   if (!String(process.env.DATABASE_URL || '').trim()) return work();
@@ -125,7 +113,12 @@ async function writeState(state) {
   if (!current) return false;
   current.state = structuredClone(state);
   if (current.mode === 'supabase-rpc') {
-    current.dirty = true;
+    const updatedAt = await supabaseRpc('wyncore_state_write', {
+      p_secret: process.env.WYNCORE_SUPABASE_RPC_SECRET,
+      p_expected_updated_at: current.updatedAt,
+      p_state: current.state
+    });
+    current.updatedAt = typeof updatedAt === 'string' ? updatedAt : updatedAt?.updated_at ?? current.updatedAt;
     return true;
   }
   await current.client.query(
