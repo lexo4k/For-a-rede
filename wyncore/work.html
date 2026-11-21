@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1424"><meta name="description" content="Central pessoal de oportunidades de avaliação e pesquisa.">
+<title>WYNCORE Work | Central pessoal</title><link rel="stylesheet" href="/work.css">
+</head>
+<body>
+<header class="top"><a class="brand" href="/work.html"><span class="mark">W</span><span>WYNCORE <b>WORK</b><small>SUA CENTRAL DE TRABALHO</small></span></a><span class="private">PAINEL PESSOAL</span></header>
+<main>
+<section class="hero"><p class="eyebrow">AVALIAÇÃO · PESQUISA · DADOS PARA IA</p><h1>Seu trabalho. Várias plataformas. Um só painel.</h1><p class="muted">Encontre os portais oficiais, organize suas tarefas e acompanhe cada candidatura sem compartilhar suas senhas com intermediários.</p>
+<div class="stats"><article><span>Plataformas listadas</span><strong id="platform-count">4</strong></article><article><span>Tarefas acompanhadas</span><strong id="task-count">0</strong></article><article><span>Concluídas</span><strong id="done-count">0</strong></article></div></section>
+<section class="section"><div class="section-head"><div><p class="eyebrow">REDE DE OPORTUNIDADES</p><h2>Plataformas oficiais</h2></div><span class="hint">A disponibilidade depende do seu perfil e região.</span></div><div id="platforms" class="platform-grid"></div></section>
+<section class="section"><div class="section-head"><div><p class="eyebrow">SEU FLUXO</p><h2>Minhas tarefas</h2></div><button id="add-task" class="primary">+ Registrar tarefa</button></div>
+<div class="filters"><button class="filter active" data-filter="all">Todas</button><button class="filter" data-filter="saved">Salvas</button><button class="filter" data-filter="started">Em andamento</button><button class="filter" data-filter="submitted">Enviadas</button><button class="filter" data-filter="done">Concluídas</button></div>
+<div id="task-list" class="task-list"></div>
+</section>
+<section class="section note"><b>Como funciona a integração</b><p>Este painel reúne os acessos oficiais e permite acompanhar seu fluxo. A importação automática de tarefas exige API e autorização de cada plataforma. No momento, nenhuma conta externa está conectada e este painel não recebe pagamentos nem movimenta dinheiro. As plataformas pagam diretamente ao trabalhador, conforme seus próprios contratos e critérios.</p><p>Não informe senhas, documentos ou códigos de verificação aqui. Entre sempre pelo site oficial.</p></section>
+</main><footer>WYNCORE Work · Central pessoal de oportunidades</footer>
+<dialog id="task-dialog"><form method="dialog" id="task-form"><div class="dialog-head"><div><p class="eyebrow">ACOMPANHAMENTO</p><h2>Registrar tarefa</h2></div><button class="close" value="cancel" aria-label="Fechar">×</button></div>
+<label>Plataforma<select id="task-platform" required></select></label><label>Nome da tarefa<input id="task-title" required maxlength="120" placeholder="Ex.: Avaliação de resultados de busca"></label><label>Link oficial da tarefa (opcional)<input id="task-url" type="url" placeholder="https://..."></label><label>Status<select id="task-status"><option value="saved">Salva</option><option value="started">Em andamento</option><option value="submitted">Enviada para revisão</option><option value="done">Concluída</option></select></label><label>Observação<textarea id="task-note" rows="3" maxlength="500" placeholder="Prazo, instruções ou observações"></textarea></label><div class="dialog-actions"><button class="secondary" value="cancel">Cancelar</button><button id="save-task" class="primary" value="default">Salvar tarefa</button></div></form></dialog>
+<script src="/work.js"></script></body></html>
