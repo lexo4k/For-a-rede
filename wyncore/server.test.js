@@ -9,6 +9,7 @@ process.env.WYNCORE_OWNER_PASSWORD='test-password-with-more-than-12';
 process.env.WYNCORE_SESSION_SECRET='test-session-secret-with-more-than-32-characters';
 process.env.WYNCORE_GOOGLE_CLIENT_ID='wyncore-test-google-client';
 process.env.WYNCORE_CONVERSION_SECRET='wyncore-test-conversion-secret';
+process.env.ADSCEND_POSTBACK_SECRET='wyncore-test-adscend-postback-secret-with-32-chars';
 const {createServer,validateOpportunity,limited,STATUSES}=require('./server');
 let server,base,cookie;
 test('rate limiter tolerates serverless requests without a socket object',()=>{
@@ -172,6 +173,23 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  const participantProfile=(await (await fetch(base+'/api/dashboard',{headers:{cookie:participantLogin.headers.get('set-cookie').split(';')[0]}})).json()).participants;
  assert.ok(participantProfile===undefined,'participant dashboard must not expose the full team list');
  const participantCookie=participantLogin.headers.get('set-cookie').split(';')[0];
+ process.env.ADSCEND_POSTBACK_SECRET='wyncore-test-adscend-postback-secret-with-32-chars';
+ const adscendStorePath=path.join(process.env.DATA_DIR,'wyncore.json');
+ const adscendStore=JSON.parse(await fs.readFile(adscendStorePath,'utf8'));
+ adscendStore.adscendOfferSnapshots=[{participantId:participant.id,offerId:'offer-42',publisherPayoutUsd:0.5,participantEstimateUsd:0.35}];
+ await fs.writeFile(adscendStorePath,JSON.stringify(adscendStore));
+ const adscendPostbackUrl=base+'/api/webhooks/adscend?token='+encodeURIComponent(process.env.ADSCEND_POSTBACK_SECRET)+'&user='+encodeURIComponent(participant.id)+'&time=1795262400&ip=203.0.113.10&offer=offer-42';
+ const adscendPostback=await fetch(adscendPostbackUrl);
+ assert.equal(adscendPostback.status,200,'Adscend server-to-server postback must work without a participant session');
+ const adscendEvent=await adscendPostback.json();
+ assert.equal(adscendEvent.credited,false,'video completion alone must not create withdrawable money');
+ assert.equal(adscendEvent.status,'video_completed_pending_partner_reconciliation');
+ const adscendDuplicate=await fetch(adscendPostbackUrl);
+ assert.equal((await adscendDuplicate.json()).duplicate,true,'Adscend retries must be idempotent');
+ const adscendWorkspace=await (await fetch(base+'/api/ad-workspace',{headers:{cookie:participantCookie}})).json();
+ assert.equal(adscendWorkspace.adscendConversions.length,1);
+ assert.equal(adscendWorkspace.adscendConversions[0].creditIssued,false);
+
  const participantDash=await (await fetch(base+'/api/dashboard',{headers:{cookie:participantCookie}})).json();
  assert.equal(participantDash.participant.level,'SL2','participant should see the level assigned by admin');
  assert.equal(participantDash.assignments.length,1,'participant should only see their own assigned activity');
