@@ -181,13 +181,16 @@ async function handler(req,res){try{
   const campaigns=d.adCampaigns||[],reviews=d.adReviews||[];
   if(me.role==='admin')return send(res,200,{campaigns,reviews,advertiserInquiries:d.advertiserInquiries||[],participants:d.participants.map(x=>({id:x.id,name:x.name,email:x.email,phone:x.phone,role:x.role,status:x.status,createdAt:x.createdAt})),summary:{campaigns:campaigns.length,open:campaigns.filter(x=>x.status==='open').length,reviews:reviews.length,pending:reviews.filter(x=>x.status==='pending').length,accepted:reviews.filter(x=>x.status==='accepted').length,contracted:campaigns.reduce((n,x)=>n+(Number(x.contractValue)||0),0),received:campaigns.filter(x=>x.contractStatus==='received').reduce((n,x)=>n+(Number(x.contractValue)||0),0)}});
   if(me.role!=='participant')err('Acesso não permitido.',403);
-  const mine=reviews.filter(x=>x.participantId===me.id);return send(res,200,{campaigns:campaigns.filter(x=>x.status==='open'),reviews:mine,campaignHistory:Object.fromEntries(mine.map(r=>{const c=campaigns.find(x=>x.id===r.campaignId);return [r.campaignId,c?c.title:'Campanha encerrada']}))});
+  const mine=reviews.filter(x=>x.participantId===me.id);const earnings=(d.adEarnings||[]).filter(x=>x.participantId===me.id);return send(res,200,{campaigns:campaigns.filter(x=>x.status==='open'),reviews:mine,earnings,earningSummary:{approvedUnpaid:earnings.filter(x=>x.status==='approved_unpaid').reduce((n,x)=>n+x.amount,0),paid:earnings.filter(x=>x.status==='paid').reduce((n,x)=>n+x.amount,0)},campaignHistory:Object.fromEntries(mine.map(r=>{const c=campaigns.find(x=>x.id===r.campaignId);return [r.campaignId,c?c.title:'Campanha encerrada']}))});
  }
  if(req.method==='POST'&&p==='/api/ad-campaigns'){
   if(me.role!=='admin')err('Somente administração pode criar campanhas.',403);
-  const b=await body(req),title=String(b.title||'').trim().slice(0,120),client=String(b.client||'').trim().slice(0,120),brief=String(b.brief||'').trim().slice(0,3000),channel=String(b.channel||'digital'),objective=String(b.objective||'').trim().slice(0,500),mediaUrl=String(b.mediaUrl||'').trim().slice(0,2000),value=Number(b.contractValue||0);
-  if(title.length<3||client.length<2||brief.length<30||!['digital','video','social','display','other'].includes(channel)||!Number.isFinite(value)||value<0||value>100000000)err('Informe título, empresa, briefing com pelo menos 30 caracteres e valor de contrato válido.');if(mediaUrl){let u;try{u=new URL(mediaUrl)}catch{}if(!u||u.protocol!=='https:'||u.username||u.password)err('O link do anúncio precisa ser HTTPS válido.');}
-  const c={id:crypto.randomUUID(),title,client,brief,channel,objective,mediaUrl,contractValue:value,contractStatus:'not_recorded',status:'draft',createdBy:me.id,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+  const b=await body(req),title=String(b.title||'').trim().slice(0,120),client=String(b.client||'').trim().slice(0,120),brief=String(b.brief||'').trim().slice(0,3000),channel=String(b.channel||'digital'),objective=String(b.objective||'').trim().slice(0,500),mediaUrl=String(b.mediaUrl||'').trim().slice(0,2000),value=Number(b.contractValue||0),reward=Number(b.rewardPerReview||0),maxParticipants=Number(b.maxParticipants||0);
+  if(title.length<3||client.length<2||brief.length<30||!['digital','video','social','display','other'].includes(channel)||!Number.isFinite(value)||value<0||value>100000000||!Number.isFinite(reward)||reward<0||reward>100000||!Number.isInteger(maxParticipants)||maxParticipants<0||maxParticipants>100000)err('Confira título, empresa, briefing, contrato, recompensa por avaliação e limite de participantes.');
+  if(reward>0&&maxParticipants>0&&reward*maxParticipants>value)err('O orçamento do contrato não cobre a soma das recompensas previstas.');
+  if(mediaUrl){let u;try{u=new URL(mediaUrl)}catch{}if(!u||u.protocol!=='https:'||u.username||u.password)err('O link do anúncio precisa ser HTTPS válido.');}
+  if(channel==='video'&&!mediaUrl)err('Campanhas de vídeo precisam ter um link HTTPS do anúncio ou trailer.');
+  const c={id:crypto.randomUUID(),title,client,brief,channel,objective,mediaUrl,contractValue:value,rewardPerReview:reward,maxParticipants,contractStatus:'not_recorded',status:'draft',createdBy:me.id,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
   d.adCampaigns.unshift(c);d.audit.unshift({id:crypto.randomUUID(),actorId:me.id,type:'ad_campaign_created',entityId:c.id,details:{client},at:new Date().toISOString()});await save(d);return send(res,201,c);
  }
  let leadMatch=p.match(/^\/api\/advertiser-inquiries\/([\w-]+)\/(contacted|decline|create-campaign)$/);
@@ -209,7 +212,7 @@ async function handler(req,res){try{
  if(req.method==='POST'&&adMatch){
   if(me.role!=='admin')err('Somente administração.',403);
   const c=(d.adCampaigns||[]).find(x=>x.id===adMatch[1]);if(!c)return send(res,404,{error:'Campanha não encontrada.'});
-  if(adMatch[2]==='open'&&(Number(c.contractValue)<=0||c.contractStatus!=='received'))err('Campanha não pode ser publicada: confirme primeiro o recebimento real do orçamento do contratante.',409);
+  if(adMatch[2]==='open'&&(Number(c.contractValue)<=0||c.contractStatus!=='received'))err('Campanha não pode ser publicada: confirme primeiro o recebimento real do orçamento do contratante.',409);if(adMatch[2]==='open'&&(!Number(c.rewardPerReview)||!Number(c.maxParticipants)||!c.mediaUrl))err('Para publicar, informe recompensa por avaliação, limite de participantes e vídeo da campanha.',409);if(adMatch[2]==='open'&&Number(c.rewardPerReview)*Number(c.maxParticipants)>Number(c.contractValue))err('O orçamento não cobre as recompensas previstas.',409);
   c.status=({open:'open',pause:'paused',complete:'completed'})[adMatch[2]];c.updatedAt=new Date().toISOString();await save(d);return send(res,200,c);
  }
  adMatch=p.match(/^\/api\/ad-campaigns\/([\w-]+)\/contract-payment$/);
@@ -234,10 +237,18 @@ async function handler(req,res){try{
   if(me.role!=='admin')err('Somente administração.',403);
   const review=(d.adReviews||[]).find(x=>x.id===adMatch[1]);if(!review)return send(res,404,{error:'Avaliação não encontrada.'});
   const b=await body(req),note=String(b.note||'').trim().slice(0,500);if(review.status!=='pending')err('Esta avaliação já foi revisada.',409);
-  review.status=adMatch[2]==='accept'?'accepted':'rejected';review.reviewNote=note;review.reviewedBy=me.id;review.reviewedAt=new Date().toISOString();await save(d);return send(res,200,review);
+  review.status=adMatch[2]==='accept'?'accepted':'rejected';review.reviewNote=note;review.reviewedBy=me.id;review.reviewedAt=new Date().toISOString();if(review.status==='accepted'){const campaign=(d.adCampaigns||[]).find(x=>x.id===review.campaignId);if(campaign&&Number(campaign.rewardPerReview)>0){const already=(d.adEarnings||[]).some(x=>x.reviewId===review.id);if(!already){d.adEarnings||=[];const count=d.adEarnings.filter(x=>x.campaignId===campaign.id).length;if(count>=Number(campaign.maxParticipants))err('Limite remunerado desta campanha já foi atingido.',409);d.adEarnings.unshift({id:crypto.randomUUID(),reviewId:review.id,campaignId:campaign.id,participantId:review.participantId,amount:Number(campaign.rewardPerReview),status:'approved_unpaid',createdAt:new Date().toISOString()});}}}await save(d);return send(res,200,review);
  }
 
 
+ adMatch=p.match(/^\/api\/ad-earnings\/([\w-]+)\/mark-paid$/);
+ if(req.method==='POST'&&adMatch){
+  if(me.role!=='admin')err('Somente administração.',403);
+  const earning=(d.adEarnings||[]).find(x=>x.id===adMatch[1]);if(!earning)return send(res,404,{error:'Lançamento não encontrado.'});
+  if(earning.status!=='approved_unpaid')err('Este lançamento não está aguardando pagamento.',409);
+  const b=await body(req),reference=String(b.reference||'').trim().slice(0,160);if(reference.length<4)err('Informe a referência de um pagamento realmente realizado.');
+  earning.status='paid';earning.paymentReference=reference;earning.paidAt=new Date().toISOString();earning.paidBy=me.id;await save(d);return send(res,200,earning);
+ }
  if(req.method==='GET'&&p==='/api/ad-report.csv'){
   if(me.role!=='admin')err('Relatório restrito à administração.',403);
   const campaigns=d.adCampaigns||[],reviews=d.adReviews||[];
