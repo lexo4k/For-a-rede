@@ -4,7 +4,7 @@ on:
     branches: [wyncore-core, wyncore-platform-rebuild, wyncore-personal-work-hub]
     paths: ["wyncore/**", ".github/workflows/wyncore-check.yml"]
   pull_request:
-    branches: [forcarede-init]
+    branches: [forcarede-init, wyncore-platform-rebuild]
     paths: ["wyncore/**", ".github/workflows/wyncore-check.yml"]
 jobs:
   validate:
