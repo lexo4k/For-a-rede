@@ -20,7 +20,8 @@ test('Asaas webhook is authenticated and idempotent',async t=>{
  const first=await fetch(base+'/api/webhooks/asaas',{method:'POST',headers,body:payload});assert.equal(first.status,200);
  const duplicate=await fetch(base+'/api/webhooks/asaas',{method:'POST',headers,body:payload});assert.equal(duplicate.status,200);assert.equal((await duplicate.json()).duplicate,true);
 });
-\ntest('WYNCORE Ads complete campaign and evaluation flow',async t=>{
+
+test('WYNCORE Ads complete campaign and evaluation flow',async t=>{
  const server=createServer();await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const base='http://127.0.0.1:'+server.address().port;
  t.after(async()=>{await new Promise(resolve=>server.close(resolve));await fs.rm(process.env.DATA_DIR,{recursive:true,force:true})});
