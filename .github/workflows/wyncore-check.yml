@@ -22,9 +22,12 @@ jobs:
         run: node --check wyncore/app.js
       - name: Check service worker syntax
         run: node --check wyncore/sw.js
-      - name: Backend tests
+      - name: WYNCORE Ads backend tests
         working-directory: wyncore
-        run: npm test
+        run: node --test ads.test.js
+      - name: Core backend tests
+        working-directory: wyncore
+        run: node --test domain.test.js server.test.js
       - name: Required files
         run: |
           test -s wyncore/index.html
