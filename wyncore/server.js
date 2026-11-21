@@ -1,6 +1,6 @@
 'use strict';
 const http=require('node:http'),fs=require('node:fs/promises'),path=require('node:path'),crypto=require('node:crypto');
-const D=require('./domain'),Asaas=require('./asaas'),Adscend=require('./adscend'),Paypal=require('./paypal'),Payouts=require('./payouts');
+const D=require('./domain'),Asaas=require('./asaas'),Adscend=require('./adscend'),Paypal=require('./paypal'),Payouts=require('./payouts'),Storage=require('./storage');
 const ROOT=__dirname,DATA_DIR=process.env.DATA_DIR||path.join(ROOT,'data'),DATA_FILE=path.join(DATA_DIR,'wyncore.json');
 const PORT=Number(process.env.PORT||3000),PASSWORD=process.env.WYNCORE_OWNER_PASSWORD||'',SECRET=process.env.WYNCORE_SESSION_SECRET||'',PARTNER_SECRET=process.env.WYNCORE_PARTNER_WEBHOOK_SECRET||'',GOOGLE_CLIENT_ID=process.env.WYNCORE_GOOGLE_CLIENT_ID||'',PROD=process.env.NODE_ENV==='production';
 const COOKIE='wyncore_session',SESSION_MS=8*60*60*1000;
@@ -9,7 +9,7 @@ const MIME={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8',
 const rate=new Map();
 const operationLocks=new Map();
 async function withLock(key,work){const previous=operationLocks.get(key)||Promise.resolve();let release;const current=new Promise(resolve=>{release=resolve});operationLocks.set(key,current);await previous;try{return await work()}finally{release();if(operationLocks.get(key)===current)operationLocks.delete(key)}}
-function payoutStorageSafe(){return process.env.WYNCORE_PAYOUT_STORAGE_MODE==='single_writer'&&!process.env.VERCEL&&!process.env.BLOB_READ_WRITE_TOKEN}
+function payoutStorageSafe(){return Storage.payoutStorageSafe(process.env,DATA_DIR===path.join(ROOT,'data')?DATA_DIR:path.join(ROOT,'data'))}
 function normalizePhone(value){let digits=String(value||'').replace(/\D/g,'');if(digits.startsWith('55')&&(digits.length===12||digits.length===13))digits=digits.slice(2);return digits;}
 function isPlayableAdMedia(value){try{const u=new URL(String(value||''));if(u.protocol!=='https:'||u.username||u.password)return false;const host=u.hostname.toLowerCase();if(host==='youtu.be'||host==='youtube.com'||host.endsWith('.youtube.com')){const id=host==='youtu.be'?u.pathname.split('/').filter(Boolean)[0]:(u.pathname.startsWith('/embed/')?u.pathname.split('/')[2]:u.searchParams.get('v'));return /^[A-Za-z0-9_-]{11}$/.test(id||'')}if(host==='vimeo.com'||host.endsWith('.vimeo.com'))return /^\d+$/.test(u.pathname.split('/').filter(Boolean).pop()||'');return ['mp4','webm','ogg'].includes(u.pathname.toLowerCase().split('.').pop())}catch{return false}}
 function assertConfig(){if(PASSWORD.length<12)throw Error('Configure WYNCORE_OWNER_PASSWORD com pelo menos 12 caracteres.');if(SECRET.length<32)throw Error('Configure WYNCORE_SESSION_SECRET com pelo menos 32 caracteres.')}
@@ -25,6 +25,11 @@ function send(res,status,data,headers={}){res.writeHead(status,{'Content-Type':'
 async function rawBody(req){let raw='';for await(const c of req){raw+=c;if(raw.length>65536)throw Object.assign(Error('Corpo muito grande'),{status:413})}return raw}
 async function body(req){const raw=await rawBody(req);try{return raw?JSON.parse(raw):{}}catch{throw Object.assign(Error('JSON inválido'),{status:400})}}
 async function load(){
+ const stored=Storage.readState();
+ if(stored.active){
+  const d=stored.state||{opportunities:[],tasks:[],events:[],users:[],workAccounts:[],workTasks:[],workLedger:[],adCampaigns:[],adReviews:[],adEarnings:[],advertiserInquiries:[],asaasWebhookEvents:[],adscendOfferSnapshots:[],adscendConversions:[]};
+  return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],workAccounts:d.workAccounts||[],workTasks:d.workTasks||[],workLedger:d.workLedger||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[],adEarnings:d.adEarnings||[],advertiserInquiries:d.advertiserInquiries||[],asaasWebhookEvents:d.asaasWebhookEvents||[],adscendOfferSnapshots:d.adscendOfferSnapshots||[],adscendConversions:d.adscendConversions||[]});
+ }
  if(process.env.BLOB_READ_WRITE_TOKEN){
   const {get}=require('@vercel/blob');
   const found=await get('wyncore/data.json',{access:'private',useCache:false});
@@ -58,6 +63,7 @@ async function notifyAdvertiserLead(lead){
  }catch{return {status:'failed'}}
 }
 async function save(d){
+ if(await Storage.writeState(d))return;
  if(process.env.BLOB_READ_WRITE_TOKEN){
   const {put}=require('@vercel/blob');
   await put('wyncore/data.json',JSON.stringify(d),{access:'private',addRandomSuffix:false,allowOverwrite:true,contentType:'application/json'});
@@ -78,11 +84,11 @@ async function handler(req,res){
   let requestPath='/';
   try{requestPath=new URL(req.url,'http://localhost').pathname}catch{}
   const apiRequest=requestPath.startsWith('/api/')||(!PUBLIC_FILES.has(requestPath)&&requestPath!=='/'&&requestPath!=='/health'&&!/\.[a-z0-9]+$/i.test(requestPath));
-  if(apiRequest){req.__wyncoreStateLock=true;return withLock('state',()=>handler(req,res))}
+  if(apiRequest){req.__wyncoreStateLock=true;return Storage.withTransaction(()=>withLock('state',()=>handler(req,res)))}
  }
  try{
  const url=new URL(req.url,'http://localhost');let p=url.pathname;if(p!=='/'&&!p.startsWith('/api/')&&!PUBLIC_FILES.has(p)&&p!=='/health'&&!/\.[a-z0-9]+$/i.test(p))p='/api'+p;
- if(req.method==='GET'&&(p==='/health'||p==='/api/health'))return send(res,200,{ok:true,service:'WYNCORE',storage:process.env.BLOB_READ_WRITE_TOKEN?'vercel-blob-private':'persistent-json',authConfigured:Boolean(PASSWORD&&SECRET.length>=32),ownerLoginConfigured:Boolean(PASSWORD),participantLoginConfigured:SECRET.length>=32,phoneLoginEnabled:SECRET.length>=32,googleEnabled:Boolean(GOOGLE_CLIENT_ID),googleClientId:GOOGLE_CLIENT_ID||null,signupAvailable:true,publicAccess:true});
+ if(req.method==='GET'&&(p==='/health'||p==='/api/health'))return send(res,200,{ok:true,service:'WYNCORE',storage:Storage.databaseConfigured()?'postgres-transactional':process.env.BLOB_READ_WRITE_TOKEN?'vercel-blob-private':'single-writer-json',authConfigured:Boolean(PASSWORD&&SECRET.length>=32),ownerLoginConfigured:Boolean(PASSWORD),participantLoginConfigured:SECRET.length>=32,phoneLoginEnabled:SECRET.length>=32,googleEnabled:Boolean(GOOGLE_CLIENT_ID),googleClientId:GOOGLE_CLIENT_ID||null,signupAvailable:true,publicAccess:true});
  if(req.method==='POST'&&p==='/api/access-request'){
   if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
   const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),phone=normalizePhone(b.phone),pass=String(b.password||'');if(limited(req,'signup',email||phone,5,3600000))return send(res,429,{error:'Muitas tentativas de cadastro para este contato. Aguarde um pouco.'});
