@@ -43,7 +43,7 @@ async function ensureSchema() {
 }
 
 async function supabaseRpc(name, payload) {
-  const base = String(process.env.WYNCORE_SUPABASE_URL).replace(/\\/$/, '');
+  const base = String(process.env.WYNCORE_SUPABASE_URL).replace(/\/$/, '');
   const endpoint = base + '/rest/v1/rpc/' + name;
   const response = await fetch(endpoint, {
     method: 'POST',
