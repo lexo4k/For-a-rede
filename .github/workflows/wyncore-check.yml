@@ -24,6 +24,8 @@ jobs:
         run: node --check wyncore/sw.js
       - name: Check personal work hub syntax
         run: node --check wyncore/work.js
+      - name: Check server integration test syntax
+        run: node --check wyncore/server.test.js
       - name: Verify personal work hub assets
         run: |
           test -s wyncore/work.html
