@@ -425,8 +425,9 @@ if(req.method==='POST'&&p==='/api/pix-key'){
   if(me.role!=='admin')err('Somente administração.',403);
   const earning=(d.adEarnings||[]).find(x=>x.id===adMatch[1]);if(!earning||earning.payoutProvider!=='paypal'||!earning.paypalBatchId)err('Lote PayPal não encontrado.',404);
   const result=await Paypal.getBatch(earning.paypalBatchId),header=result.batch_header||{};earning.paypalBatchStatus=header.batch_status||earning.paypalBatchStatus;earning.paypalCheckedAt=new Date().toISOString();
-  if(['SUCCESS','SUCCESS_WITH_WARNING'].includes(earning.paypalBatchStatus)){earning.status='paid';earning.paidAt=earning.paypalCheckedAt;earning.paymentReference=earning.paypalBatchId}
-  else if(['DENIED','CANCELED','RETURNED'].includes(earning.paypalBatchStatus)){earning.status='approved_unpaid';earning.payoutError='PayPal: '+earning.paypalBatchStatus;earning.payoutProvider=null;earning.paypalBatchId=null}
+  const item=(result.items||[])[0],itemStatus=String(item?.transaction_status||'').toUpperCase();
+  if(['SUCCESS','SUCCESS_WITH_WARNING'].includes(earning.paypalBatchStatus)&&itemStatus==='SUCCESS'){earning.status='paid';earning.paidAt=earning.paypalCheckedAt;earning.paymentReference=item.payout_item_id||earning.paypalBatchId}
+  else if(['DENIED','CANCELED','RETURNED'].includes(earning.paypalBatchStatus)||['FAILED','BLOCKED','RETURNED','REFUNDED','ONHOLD','UNCLAIMED'].includes(itemStatus)){earning.status='approved_unpaid';earning.payoutError='PayPal: '+(itemStatus||earning.paypalBatchStatus);earning.payoutProvider=null;earning.paypalBatchId=null}
   await save(d);return send(res,200,{ok:true,status:earning.status,batchStatus:earning.paypalBatchStatus});
  }
  if(req.method==='GET'&&p==='/api/ad-report.csv'){
