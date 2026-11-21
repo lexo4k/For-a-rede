@@ -9,7 +9,7 @@ const MIME={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8',
 const rate=new Map();
 function normalizePhone(value){let digits=String(value||'').replace(/\D/g,'');if(digits.startsWith('55')&&(digits.length===12||digits.length===13))digits=digits.slice(2);return digits;}
 function assertConfig(){if(PASSWORD.length<12)throw Error('Configure WYNCORE_OWNER_PASSWORD com pelo menos 12 caracteres.');if(SECRET.length<32)throw Error('Configure WYNCORE_SESSION_SECRET com pelo menos 32 caracteres.')}
-function safeEqual(a,b){const x=Buffer.from(String(a)),y=Buffer.from(String(b));return x.length===y.length&&crypto.timingSafeEqual(x,y)}
+function safeEqual(a,b){const x=Buffer.from(String(a)),y=Buffer.from(String(b));return x.length===y.length&&crypto.timingSafeEqual(x,y)}\nfunction secretKey(){return crypto.createHash('sha256').update(SECRET).digest()}\nfunction encryptSecret(value){const iv=crypto.randomBytes(12),cipher=crypto.createCipheriv('aes-256-gcm',secretKey(),iv),encrypted=Buffer.concat([cipher.update(String(value),'utf8'),cipher.final()]);return [iv.toString('base64url'),cipher.getAuthTag().toString('base64url'),encrypted.toString('base64url')].join('.')}\nfunction decryptSecret(value){const [iv,tag,data]=String(value||'').split('.');if(!iv||!tag||!data)throw Error('Chave Pix criptografada inválida.');const decipher=crypto.createDecipheriv('aes-256-gcm',secretKey(),Buffer.from(iv,'base64url'));decipher.setAuthTag(Buffer.from(tag,'base64url'));return Buffer.concat([decipher.update(Buffer.from(data,'base64url')),decipher.final()]).toString('utf8')}
 function sign(v){return crypto.createHmac('sha256',SECRET).update(v).digest('base64url')}
 function makeSession(user){const p=JSON.stringify({exp:Date.now()+SESSION_MS,...user}),v=Buffer.from(p).toString('base64url');return v+'.'+sign(v)}
 function readSession(req){const t=(req.headers.cookie||'').split(';').map(x=>x.trim()).find(x=>x.startsWith(COOKIE+'='))?.slice(COOKIE.length+1);if(!t)return null;const [v,s,...rest]=t.split('.');if(!v||!s||rest.length||!safeEqual(s,sign(v)))return null;try{const u=JSON.parse(Buffer.from(v,'base64url').toString());return u.exp>Date.now()?u:null}catch{return null}}
@@ -214,7 +214,7 @@ async function handler(req,res){try{
   if(type==='CPF'&&key.replace(/\\D/g,'').length!==11)err('CPF Pix precisa ter 11 dígitos.');
   if(type==='CNPJ'&&key.replace(/\\D/g,'').length!==14)err('CNPJ Pix precisa ter 14 dígitos.');
   if(type==='PHONE'&&key.replace(/\\D/g,'').length!==11)err('Celular Pix precisa conter DDD e 11 dígitos.');
-  const person=d.participants.find(x=>x.id===me.id);person.pixKey=key;person.pixKeyType=type;person.pixKeyUpdatedAt=new Date().toISOString();await save(d);return send(res,200,{ok:true,message:'Chave Pix cadastrada para os repasses WYNCORE.'});
+  const person=d.participants.find(x=>x.id===me.id);person.pixKeyEncrypted=encryptSecret(key);person.pixKeyType=type;person.pixKeyUpdatedAt=new Date().toISOString();await save(d);return send(res,200,{ok:true,message:'Chave Pix cadastrada para os repasses WYNCORE.'});
  }
 \n if(req.method==='GET'&&p==='/api/ad-workspace'){
   const campaigns=d.adCampaigns||[],reviews=d.adReviews||[];
@@ -293,9 +293,9 @@ async function handler(req,res){try{
 
  async function tryAutomaticPix(earning,d){
   const participant=(d.participants||[]).find(x=>x.id===earning.participantId),campaign=(d.adCampaigns||[]).find(x=>x.id===earning.campaignId);
-  if(!Asaas.configured()||!Asaas.webhookConfigured()||!participant?.pixKey||!participant?.pixKeyType||campaign?.contractStatus!=='received')return false;
+  if(!Asaas.configured()||!Asaas.webhookConfigured()||!participant?.pixKeyEncrypted||!participant?.pixKeyType||campaign?.contractStatus!=='received')return false;
   try{
-   const transfer=await Asaas.transferPix({value:earning.amount,pixAddressKey:participant.pixKey,pixAddressKeyType:participant.pixKeyType,description:'WYNCORE recompensa',externalReference:'wyncore-earning:'+earning.id});
+   const transfer=await Asaas.transferPix({value:earning.amount,pixAddressKey:decryptSecret(participant.pixKeyEncrypted),pixAddressKeyType:participant.pixKeyType,description:'WYNCORE recompensa',externalReference:'wyncore-earning:'+earning.id});
    earning.asaasTransferId=transfer.id;earning.status='payout_pending';earning.payoutRequestedAt=new Date().toISOString();earning.payoutError=null;return true;
   }catch(e){earning.payoutError=String(e.message||'Falha ao iniciar Pix').slice(0,300);return false;}
  }
