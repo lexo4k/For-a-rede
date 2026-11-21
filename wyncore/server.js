@@ -148,7 +148,7 @@ async function handler(req,res){try{
   if(!token||!webhookSecret||!webhookUrl.startsWith('https://'))return send(res,503,{error:'Depósitos Pix ainda não estão habilitados. Falta configurar as credenciais e o webhook seguro do Mercado Pago.'});
   const b=await body(req),amount=Number(b.amount),email=String(me.email&&me.email!=='owner'?me.email:b.email||'').trim().toLowerCase(),cpf=String(b.cpf||'').replace(/\D/g,'');
   if(!Number.isFinite(amount)||amount<5||amount>5000)err('O depósito deve ser entre R$ 5,00 e R$ 5.000,00.');
-  if(!/^\\S+@\\S+\\.\\S+$/.test(email))err('Informe um e-mail válido do pagador para gerar o Pix.');
+  if(!email||email.length>254||!email.includes('@')||email.indexOf('@')!==email.lastIndexOf('@')||!email.split('@')[1].includes('.'))err('Informe um e-mail válido do pagador para gerar o Pix.');
   if(!validCPF(cpf))err('Informe um CPF válido do pagador.');
   if(limited(req,'wallet-deposit',me.id,5,3600000))return send(res,429,{error:'Limite de solicitações de depósito atingido. Aguarde uma hora.'});
   const deposit={id:crypto.randomUUID(),participantId:me.id,amount:Number(amount.toFixed(2)),currency:'BRL',status:'pending',createdAt:new Date().toISOString(),provider:'mercado_pago'};
