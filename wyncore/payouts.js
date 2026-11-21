@@ -13,7 +13,7 @@ function reserveWithdrawal(state, { participantId, amountCents, withdrawalId, no
   const eligible = state.adEarnings.filter(e =>
     e.participantId === participantId &&
     e.status === 'approved_unpaid' &&
-    campaigns.get(e.campaignId)?.contractStatus === 'received'
+    (e.provider === 'adscend' && e.providerConfirmed === true || campaigns.get(e.campaignId)?.contractStatus === 'received')
   );
   const available = eligible.reduce((sum, e) => sum + cents(e.amount || 0), 0);
   if (amountCents > available) {
