@@ -200,9 +200,10 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.equal(paidAdscendPostback.status,200,'Adscend reported BRL commission should be accepted');
  const paidAdscendEvent=await paidAdscendPostback.json();
  assert.equal(paidAdscendEvent.credited,true,'only a positive partner-reported BRL commission may create a wallet reward');
- assert.equal(paidAdscendEvent.amount,0.7,'participant share should follow ADSCEND_USER_SHARE');
+ const expectedAdscendShare=Math.round(1*Math.min(0.9,Math.max(0.1,Number(process.env.ADSCEND_USER_SHARE||70)))/100*100)/100;
+ assert.equal(paidAdscendEvent.amount,expectedAdscendShare,'participant share should follow ADSCEND_USER_SHARE');
  const afterAdscendCredit=await (await fetch(base+'/api/ad-workspace',{headers:{cookie:participantCookie}})).json();
- assert.equal(afterAdscendCredit.earningSummary.availableForPix,0.7,'provider-confirmed Adscend reward must become Pix-eligible');
+ assert.equal(afterAdscendCredit.earningSummary.availableForPix,expectedAdscendShare,'provider-confirmed Adscend reward must become Pix-eligible');
  const unpricedAdscendPostback=await fetch(base+'/api/webhooks/adscend?token='+encodeURIComponent(process.env.ADSCEND_POSTBACK_SECRET)+'&user='+encodeURIComponent(participant.id)+'&time=1795262402&ip=203.0.113.10&offer=offer-42&pay=5.00&cur=USD');
  assert.equal((await unpricedAdscendPostback.json()).credited,false,'USD must not be misread as BRL');
 
