@@ -8,7 +8,8 @@
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "build": "npm test"
   },
   "dependencies": {
     "@vercel/blob": "^2.0.0",
