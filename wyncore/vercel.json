@@ -5,6 +5,27 @@
     },
     "api/work/[...path].js": {
       "maxDuration": 10
+    },
+    "api/work/me.js": {
+      "maxDuration": 10
+    },
+    "api/work/register.js": {
+      "maxDuration": 10
+    },
+    "api/work/login.js": {
+      "maxDuration": 10
+    },
+    "api/work/logout.js": {
+      "maxDuration": 10
+    },
+    "api/work/tasks.js": {
+      "maxDuration": 10
+    },
+    "api/work/tasks/[id].js": {
+      "maxDuration": 10
+    },
+    "api/work/earnings.js": {
+      "maxDuration": 10
     }
   }
 }
