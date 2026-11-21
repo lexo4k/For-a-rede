@@ -90,11 +90,71 @@ function limited(req,scope,identity,limit=10,windowMs=900000){const forwarded=St
 function hashPassword(p,salt=crypto.randomBytes(16).toString('hex')){return new Promise((resolve,reject)=>crypto.scrypt(String(p),salt,64,(e,k)=>e?reject(e):resolve(salt+':'+k.toString('hex'))))}
 async function verifyPassword(p,stored){if(!stored||!stored.includes(':'))return false;const [salt,key]=stored.split(':');const got=await hashPassword(p,salt);return safeEqual(got.split(':')[1],key)}
 function actor(session,d){if(!session)return null;if(session.role==='admin'&&session.id==='owner')return{id:'owner',role:'admin',email:'owner'};return d.participants.find(p=>p.id===session.id&&p.status==='active'&&p.role===session.role)||null}
+
+async function handlePixWithdrawal(req,res){
+ if(req.method!=='POST')return send(res,405,{error:'Método não permitido.'});
+ if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
+ if(SECRET.length<32)return send(res,503,{error:'Autenticação ainda não configurada.'});
+ const session=readSession(req);
+ if(!session)return send(res,401,{error:'Sessão expirada.'});
+ const me=await Storage.withTransaction(()=>withLock('state',async()=>{const state=await load();return actor(session,state)}));
+ if(!me)return send(res,403,{error:'Conta inativa ou sem permissão.'});
+ if(me.role!=='participant')return send(res,403,{error:'Somente participantes podem solicitar saque.'});
+ if(limited(req,'pix-withdrawal',me.id,3,60000))return send(res,429,{error:'Aguarde um minuto antes de solicitar outro Pix.'});
+ const b=await body(req),raw=String(b.amount??'').trim().replace(',','.'),amount=Number(raw);
+ if(!/^\\d+(?:\\.\\d{1,2})?$/.test(raw)||!Number.isFinite(amount)||amount<1)err('Informe um valor a partir de R$ 1,00, com até duas casas decimais.');
+ if(!Asaas.configured()||!Asaas.webhookConfigured())err('O Pix ainda não está liberado. A administração precisa configurar Asaas e o webhook.');
+ if(!payoutStorageSafe())err('Saque temporariamente bloqueado: configure PostgreSQL ou disco persistente de instância única. O armazenamento atual não garante reserva transacional contra saques simultâneos.',503);
+ const reservationData=await Storage.withTransaction(()=>withLock('state',async()=>{
+  const state=await load(),participant=state.participants.find(x=>x.id===me.id&&x.status==='active');
+  if(!participant?.pixKeyEncrypted||!participant?.pixKeyType)err('Cadastre sua chave Pix antes de solicitar o saque.');
+  const pixAddressKey=decryptSecret(participant.pixKeyEncrypted);
+  const amountCents=Math.round(amount*100),withdrawalId=crypto.randomUUID(),now=new Date().toISOString();
+  Payouts.reserveWithdrawal(state,{participantId:me.id,amountCents,withdrawalId,now});
+  await save(state);
+  return {pixAddressKey,pixAddressKeyType:participant.pixKeyType,amountCents,withdrawalId};
+ }));
+ let transfer;
+ try{
+  // Reservation is committed before contacting Asaas; no database transaction spans a network call.
+  transfer=await Asaas.transferPix({value:reservationData.amountCents/100,pixAddressKey:reservationData.pixAddressKey,pixAddressKeyType:reservationData.pixAddressKeyType,description:'WYNCORE saque',externalReference:'wyncore-earning:'+reservationData.withdrawalId});
+ }catch(error){
+  let finalStatus='payout_review_required';
+  try{
+   finalStatus=await Storage.withTransaction(()=>withLock('state',async()=>{
+    const state=await load(),reservation=(state.adEarnings||[]).find(x=>x.id===reservationData.withdrawalId&&x.selfServiceWithdrawal);
+    if(!reservation)return 'missing';
+    if(reservation.status==='payout_requested'){
+     reservation.status='payout_review_required';
+     reservation.payoutError=String(error.message||'Falha ou resposta inconclusiva do Asaas.').slice(0,300);
+     reservation.updatedAt=new Date().toISOString();
+     await save(state);
+    }
+    return reservation.status;
+   }));
+  }catch(updateError){console.error('WYNCORE Pix review status could not be saved:',updateError)}
+  return send(res,503,{ok:false,status:finalStatus,amount:reservationData.amountCents/100,withdrawalId:reservationData.withdrawalId,message:'O saldo permanece reservado. A resposta do Asaas precisa ser reconciliada antes de liberar ou reenviar este valor.'});
+ }
+ try{
+  const finalStatus=await Storage.withTransaction(()=>withLock('state',async()=>{
+   const state=await load(),reservation=(state.adEarnings||[]).find(x=>x.id===reservationData.withdrawalId&&x.selfServiceWithdrawal);
+   if(!reservation)throw new Error('Reserva não encontrada após a resposta do Asaas.');
+   Payouts.attachTransfer(reservation,transfer,new Date().toISOString());
+   await save(state);
+   return reservation.status;
+  }));
+  return send(res,202,{ok:true,status:finalStatus,amount:reservationData.amountCents/100,transferId:transfer.id,withdrawalId:reservationData.withdrawalId,message:finalStatus==='paid'?'Pix confirmado pelo Asaas.':'Solicitação de Pix enviada. O saldo foi reservado e será atualizado quando o Asaas confirmar a transferência.'});
+ }catch(error){
+  console.error('WYNCORE Pix transfer accepted but final reconciliation failed:',error);
+  return send(res,503,{ok:false,status:'payout_review_required',amount:reservationData.amountCents/100,withdrawalId:reservationData.withdrawalId,transferId:transfer.id,message:'O Asaas aceitou a transferência, mas a gravação final precisa ser reconciliada. O saldo continua reservado. Não repita o saque.'});
+ }
+}
 async function handler(req,res){
  if(!req.__wyncoreStateLock){
   let requestPath='/';
   try{requestPath=new URL(req.url,'http://localhost').pathname}catch{}
   const apiRequest=requestPath.startsWith('/api/')||(!PUBLIC_FILES.has(requestPath)&&requestPath!=='/'&&requestPath!=='/health'&&!/\.[a-z0-9]+$/i.test(requestPath));
+  if(apiRequest&&requestPath==='/api/my-pix-withdrawal'){req.__wyncoreStateLock=true;return handlePixWithdrawal(req,res).catch(error=>{console.error('WYNCORE Pix withdrawal error:',error);if(!res.headersSent)send(res,error.status||503,{error:error.status?error.message:'Não foi possível concluir a solicitação com segurança. Confira a carteira antes de tentar novamente.'})})}
   if(apiRequest){req.__wyncoreStateLock=true;return Storage.withTransaction(()=>withLock('state',()=>handler(req,res))).catch(error=>{console.error('WYNCORE storage transaction error:',error);if(!res.headersSent)send(res,503,{error:'Armazenamento temporariamente indisponível. Nenhuma alteração foi confirmada.'})})}
  }
  try{
@@ -310,38 +370,7 @@ if(req.method==='POST'&&p==='/api/pix-key'){
   const person=d.participants.find(x=>x.id===me.id);person.pixKeyEncrypted=encryptSecret(key);person.pixKeyType=type;person.pixKeyUpdatedAt=new Date().toISOString();await save(d);return send(res,200,{ok:true,message:'Chave Pix cadastrada para os repasses WYNCORE.'});
  }
 
- if(req.method==='POST'&&p==='/api/my-pix-withdrawal'){
-   if(me.role!=='participant')err('Somente participantes podem solicitar saque.',403);
-   if(limited(req,'pix-withdrawal',me.id,3,60000))return send(res,429,{error:'Aguarde um minuto antes de solicitar outro Pix.'});
-   const b=await body(req),raw=String(b.amount??'').trim().replace(',','.'),amount=Number(raw);
-   if(!/^\d+(?:\.\d{1,2})?$/.test(raw)||!Number.isFinite(amount)||amount<1)err('Informe um valor a partir de R$ 1,00, com até duas casas decimais.');
-   if(!Asaas.configured()||!Asaas.webhookConfigured())err('O Pix ainda não está liberado. A administração precisa configurar Asaas e o webhook.');
-   if(!payoutStorageSafe())err('Saque temporariamente bloqueado: configure armazenamento persistente de instância única com WYNCORE_PAYOUT_STORAGE_MODE=single_writer. O armazenamento atual não garante reserva transacional contra saques simultâneos.',503);
-   return await withLock('wallet',async()=>{
-    const state=await load(),participant=state.participants.find(x=>x.id===me.id&&x.status==='active');
-    if(!participant?.pixKeyEncrypted||!participant?.pixKeyType)err('Cadastre sua chave Pix antes de solicitar o saque.');
-    const pixAddressKey=decryptSecret(participant.pixKeyEncrypted);
-    const amountCents=Math.round(amount*100),withdrawalId=crypto.randomUUID(),now=new Date().toISOString();
-    const reservation=Payouts.reserveWithdrawal(state,{participantId:me.id,amountCents,withdrawalId,now});
-    await save(state);
-    let transfer;
-    try{
-     transfer=await Asaas.transferPix({value:amountCents/100,pixAddressKey,pixAddressKeyType:participant.pixKeyType,description:'WYNCORE saque',externalReference:'wyncore-earning:'+withdrawalId});
-    }catch(error){
-     reservation.status='payout_review_required';
-     reservation.payoutError=String(error.message||'Falha ou resposta inconclusiva do Asaas.').slice(0,300);
-     reservation.updatedAt=new Date().toISOString();
-     await save(state);
-     return send(res,503,{ok:false,status:reservation.status,amount:amountCents/100,withdrawalId,message:'O saldo ficou reservado para evitar um segundo Pix. A resposta do Asaas precisa ser reconciliada antes de liberar ou reenviar este valor.'});
-    }
-    Payouts.attachTransfer(reservation,transfer,new Date().toISOString());
-    await save(state);
-    return send(res,202,{ok:true,status:'payout_pending',amount:amountCents/100,transferId:transfer.id,withdrawalId,message:'Solicitação de Pix enviada. O saldo foi reservado e será atualizado quando o Asaas confirmar a transferência.'});
-   });
-  }
-  
-
-if(req.method==='GET'&&p==='/api/ad-workspace'){
+ if(req.method==='GET'&&p==='/api/ad-workspace'){
   const campaigns=d.adCampaigns||[],reviews=d.adReviews||[];
   if(me.role==='admin')return send(res,200,{campaigns,reviews,earnings:d.adEarnings||[],adscendConversions:d.adscendConversions||[],adscendIntegration:{configured:Adscend.configured(),postbackConfigured:Adscend.postbackConfigured(),postbackUrl:Adscend.postbackConfigured()&&process.env.WYNCORE_PUBLIC_URL?String(process.env.WYNCORE_PUBLIC_URL).replace(/\/$/,'')+'/api/webhooks/adscend?token='+encodeURIComponent(process.env.ADSCEND_POSTBACK_SECRET)+'&user=[SB1]&time=[UTS]&ip=[IP]&offer=[SB2]':null},payoutIntegration:{configured:Asaas.configured(),webhookConfigured:Asaas.webhookConfigured(),storageSafe:payoutStorageSafe(),ready:Asaas.configured()&&Asaas.webhookConfigured()&&payoutStorageSafe(),storage:Storage.databaseConfigured()?'PostgreSQL transacional':process.env.BLOB_READ_WRITE_TOKEN?'Vercel Blob (saques bloqueados)':'JSON em disco',reason:!Asaas.configured()?'Configure ASAAS_API_KEY.':!Asaas.webhookConfigured()?'Configure ASAAS_WEBHOOK_TOKEN com 32 a 255 caracteres.':!payoutStorageSafe()?'Configure DATABASE_URL ou disco persistente de instância única com DATA_DIR e WYNCORE_PAYOUT_STORAGE_MODE=single_writer.':'Armazenamento e Asaas configurados. Homologue no Sandbox antes de produção.'},paypalIntegration:{configured:Paypal.configured(),mode:Paypal.mode},advertiserInquiries:d.advertiserInquiries||[],participants:d.participants.map(x=>({id:x.id,name:x.name,email:x.email,phone:x.phone,role:x.role,status:x.status,createdAt:x.createdAt,pixKeyType:x.pixKeyType,pixKeyConfigured:Boolean(x.pixKeyEncrypted),payoutCountry:x.payoutCountry||'BR',paypalEmailConfigured:Boolean(x.paypalEmailEncrypted)})),summary:{campaigns:campaigns.length,open:campaigns.filter(x=>x.status==='open').length,reviews:reviews.length,pending:reviews.filter(x=>x.status==='pending').length,accepted:reviews.filter(x=>x.status==='accepted').length,contracted:campaigns.reduce((n,x)=>n+(Number(x.contractValue)||0),0),received:campaigns.filter(x=>x.contractStatus==='received').reduce((n,x)=>n+(Number(x.contractValue)||0),0)}});
   if(me.role!=='participant')err('Acesso não permitido.',403);

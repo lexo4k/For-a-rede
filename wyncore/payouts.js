@@ -66,8 +66,13 @@ function reserveWithdrawal(state, { participantId, amountCents, withdrawalId, no
 function attachTransfer(earning, transfer, now) {
   if (!earning || !earning.selfServiceWithdrawal) throw new Error('Solicitação de saque não encontrada.');
   if (!transfer || !transfer.id) throw new Error('Asaas não retornou o identificador da transferência.');
-  earning.asaasTransferId = String(transfer.id);
-  earning.status = 'payout_pending';
+  const transferId = String(transfer.id);
+  if (earning.asaasTransferId && earning.asaasTransferId !== transferId) {
+    throw new Error('A solicitação já está vinculada a outra transferência Asaas.');
+  }
+  earning.asaasTransferId = transferId;
+  // A webhook may beat the API response. Never downgrade a terminal state.
+  if (!['paid', 'approved_unpaid'].includes(earning.status)) earning.status = 'payout_pending';
   earning.updatedAt = now;
   return earning;
 }

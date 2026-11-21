@@ -58,3 +58,28 @@ test('falha do Asaas devolve a quantia à carteira como aprovada e não paga', (
   assert.equal(failed.amount, 3);
   assert.equal(failed.payoutError, 'Conta inválida');
 });
+
+test('resposta tardia da API não rebaixa webhook de sucesso recebido primeiro', () => {
+  const s = state();
+  const payout = reserveWithdrawal(s, { participantId: 'p1', amountCents: 300, withdrawalId: 'w6', now: 'now' });
+  applyTransferEvent(s, { id: 'tr_600', externalReference: 'wyncore-earning:w6' }, 'TRANSFER_DONE', 'done-first');
+  attachTransfer(payout, { id: 'tr_600' }, 'api-later');
+  assert.equal(payout.status, 'paid');
+  assert.equal(payout.paidAt, 'done-first');
+});
+
+test('resposta tardia da API preserva falha já confirmada pelo webhook', () => {
+  const s = state();
+  const payout = reserveWithdrawal(s, { participantId: 'p1', amountCents: 300, withdrawalId: 'w7', now: 'now' });
+  applyTransferEvent(s, { id: 'tr_700', externalReference: 'wyncore-earning:w7', failReason: 'Chave inválida' }, 'TRANSFER_FAILED', 'failed-first');
+  attachTransfer(payout, { id: 'tr_700' }, 'api-later');
+  assert.equal(payout.status, 'approved_unpaid');
+  assert.equal(payout.payoutError, 'Chave inválida');
+});
+
+test('não permite vincular uma segunda transferência à mesma reserva', () => {
+  const s = state();
+  const payout = reserveWithdrawal(s, { participantId: 'p1', amountCents: 300, withdrawalId: 'w8', now: 'now' });
+  attachTransfer(payout, { id: 'tr_800' }, 'first');
+  assert.throws(() => attachTransfer(payout, { id: 'tr_801' }, 'second'), /outra transferência/);
+});
