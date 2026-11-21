@@ -2,27 +2,30 @@
 
 Central pessoal para organizar oportunidades de avaliação, pesquisa e treinamento de dados.
 
-## O que esta versão faz
-- Apresenta links para os portais oficiais OneForma, Welo Data, RWS TrainAI, Prolific, CrowdGen by Appen, TELUS Digital AI Community e Outlier.
-- Permite registrar tarefas encontradas nesses portais.
-- Organiza tarefas salvas, em andamento, enviadas para revisão e concluídas.
-- Guarda o acompanhamento localmente no navegador/dispositivo, sem enviar senhas ou documentos a um intermediário.
-- Mantém o módulo separado do painel comercial WYNCORE Ads.
+## Recursos desta versão
+- Conta pessoal com cadastro por nome, e-mail e senha, login e logout.
+- Senhas armazenadas como hash com scrypt; sessões assinadas e cookie HttpOnly.
+- Dados de conta, tarefas e registros financeiros isolados por usuário.
+- Sete portais oficiais: OneForma, Welo Data, RWS TrainAI, Prolific, CrowdGen by Appen, TELUS Digital AI Community e Outlier.
+- Acompanhamento de tarefas salvas, em andamento, enviadas e concluídas.
+- Histórico manual de pagamentos informados pelo próprio usuário, com separação entre valor informado e marcado como recebido.
+- Persistência pelo armazenamento privado do projeto quando o token de Blob está configurado.
 
-## O que ainda não faz
+## Limites importantes
 - Não importa automaticamente vagas ou tarefas das contas externas.
-- Não autentica contas de terceiros.
-- Não envia avaliações em nome do trabalhador.
-- Não confirma remuneração nem recebe, guarda ou transfere pagamentos.
+- Não autentica contas de terceiros nem envia avaliações em nome do trabalhador.
+- Não confirma pagamentos com bancos ou carteiras, não recebe, guarda ou transfere dinheiro.
+- O status "recebido" no histórico é uma anotação manual do usuário, não uma conciliação bancária.
 - Não promete disponibilidade, aprovação ou renda.
 
-Cada plataforma controla sua seleção, elegibilidade, volume de tarefas, critérios de qualidade e pagamentos. Só devem ser adicionadas integrações depois de existir uma API oficial que autorize expressamente o acesso às oportunidades de participantes. APIs destinadas a anunciantes, pesquisadores ou fornecedores empresariais não equivalem a uma API de tarefas para trabalhadores individuais.
+Cada plataforma controla seleção, elegibilidade, volume de tarefas, critérios de qualidade e pagamentos. Só devem ser adicionadas integrações depois de existir uma API oficial que autorize expressamente o acesso às oportunidades de participantes. APIs destinadas a anunciantes, pesquisadores ou fornecedores empresariais não equivalem a uma API de tarefas para trabalhadores individuais.
 
 ## Segurança e privacidade
-- O painel não pede senhas, documentos, códigos de verificação nem dados bancários.
+- O painel não pede senhas de plataformas externas, documentos, códigos de verificação nem dados bancários.
+- Use uma senha exclusiva para a conta WYNCORE Work.
 - Os links abrem os domínios oficiais em nova aba.
-- Os registros ficam no armazenamento local do navegador. Limpar os dados do navegador pode apagá-los.
-- O usuário deve revisar as regras e os requisitos de cada plataforma antes de se candidatar.
+- Os dados do painel são privados por conta; sessões expiram após oito horas.
+- Revise as regras e os requisitos de cada plataforma antes de se candidatar.
 
 ## Testes
-`node --check wyncore/work.js` valida a sintaxe do módulo. O workflow WYNCORE checks também verifica os três arquivos do painel. Os testes existentes do backend continuam cobrindo módulos separados e podem apontar falhas preexistentes que não pertencem a este painel.
+O workflow WYNCORE checks valida a sintaxe do servidor e dos arquivos do painel e executa os testes de integração de cadastro, login, tarefas e histórico.
