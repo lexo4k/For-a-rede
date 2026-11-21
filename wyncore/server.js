@@ -27,8 +27,19 @@ async function body(req){const raw=await rawBody(req);try{return raw?JSON.parse(
 async function load(){
  const stored=Storage.readState();
  if(stored.active){
-  const d=stored.state||{opportunities:[],tasks:[],events:[],users:[],workAccounts:[],workTasks:[],workLedger:[],adCampaigns:[],adReviews:[],adEarnings:[],advertiserInquiries:[],asaasWebhookEvents:[],adscendOfferSnapshots:[],adscendConversions:[]};
-  return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],workAccounts:d.workAccounts||[],workTasks:d.workTasks||[],workLedger:d.workLedger||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[],adEarnings:d.adEarnings||[],advertiserInquiries:d.advertiserInquiries||[],asaasWebhookEvents:d.asaasWebhookEvents||[],adscendOfferSnapshots:d.adscendOfferSnapshots||[],adscendConversions:d.adscendConversions||[]});
+  let d=stored.state;
+  if(!d&&process.env.BLOB_READ_WRITE_TOKEN){
+   const {get}=require('@vercel/blob');
+   const found=await get('wyncore/data.json',{access:'private',useCache:false});
+   if(found)d=JSON.parse(await new Response(found.stream).text());
+  }
+  if(!d){
+   try{d=JSON.parse(await fs.readFile(DATA_FILE,'utf8'))}catch(e){if(e.code!=='ENOENT')throw e;}
+  }
+  d||={opportunities:[],tasks:[],events:[],users:[],workAccounts:[],workTasks:[],workLedger:[],adCampaigns:[],adReviews:[],adEarnings:[],advertiserInquiries:[],asaasWebhookEvents:[],adscendOfferSnapshots:[],adscendConversions:[]};
+  d=D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],workAccounts:d.workAccounts||[],workTasks:d.workTasks||[],workLedger:d.workLedger||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[],adEarnings:d.adEarnings||[],advertiserInquiries:d.advertiserInquiries||[],asaasWebhookEvents:d.asaasWebhookEvents||[],adscendOfferSnapshots:d.adscendOfferSnapshots||[],adscendConversions:d.adscendConversions||[]});
+  if(!stored.state)await Storage.writeState(d);
+  return d;
  }
  if(process.env.BLOB_READ_WRITE_TOKEN){
   const {get}=require('@vercel/blob');
