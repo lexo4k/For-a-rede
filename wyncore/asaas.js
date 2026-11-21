@@ -6,7 +6,7 @@ const WEBHOOK_TOKEN = process.env.ASAAS_WEBHOOK_TOKEN || '';
 const BASE_URL = process.env.ASAAS_BASE_URL || (process.env.ASAAS_ENV === 'production' ? 'https://api.asaas.com/v3' : 'https://api-sandbox.asaas.com/v3');
 
 function configured() { return API_KEY.length > 20; }
-function webhookConfigured() { return WEBHOOK_TOKEN.length >= 32 && WEBHOOK_TOKEN.length <= 255 && !/\\s/.test(WEBHOOK_TOKEN); }
+function webhookConfigured() { return WEBHOOK_TOKEN.length >= 32 && WEBHOOK_TOKEN.length <= 255 && !/\s/.test(WEBHOOK_TOKEN); }
 function safeEqual(a, b) {
   const x = Buffer.from(String(a || ''));
   const y = Buffer.from(String(b || ''));
