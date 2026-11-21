@@ -68,6 +68,7 @@ async function handler(req,res){try{
   const d=await load();d.workAccounts||=[];d.workTasks||=[];d.workLedger||=[];
   let b={},action=String(url.searchParams.get('action')||'');
   if(['POST','PATCH','DELETE'].includes(req.method)){b=await body(req);action=String(b.action||action)}
+  if(req.method==='GET'&&action==='health')return send(res,200,{ok:true,service:'WYNCORE Work',accountRegistration:true,privatePerAccountStorage:true,externalPlatformsPayWorkersDirectly:true});
   if(req.method==='POST'&&action==='register'){
    const name=String(b.name||'').trim().slice(0,90),email=String(b.email||'').trim().toLowerCase(),pass=String(b.password||'');
    if(limited(req,'work-register',email,5,3600000))return send(res,429,{error:'Muitas tentativas de cadastro. Aguarde uma hora.'});
