@@ -522,6 +522,11 @@ if(req.method==='GET'&&p==='/api/ad-workspace'){
  if(req.method==='GET'&&p==='/api/report.csv'){if(me.role==='participant')err('Relatório restrito à equipe.',403);const rows=[['Participante','Atividade','Estado','Valor registrado','Referência','Data'],...(d.tasks||[]).map(t=>['',t.title,t.status,t.value,'',t.updatedAt||t.createdAt]),...(d.assignments||[]).map(a=>[(d.participants||[]).find(x=>x.id===a.participantId)?.email||'',(d.programs||[]).find(x=>x.id===a.programId)?.title||'',a.state,a.reward,a.paymentReference||'',a.paidAt||a.createdAt])];res.writeHead(200,{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="wyncore-relatorio.csv"','Cache-Control':'no-store'});return res.end('\ufeff'+rows.map(r=>r.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(';')).join('\r\n'))}
  return send(res,404,{error:'Rota não encontrada.'});
  }catch(e){if(!e.status||e.status>=500)console.error('WYNCORE request error:',e);return send(res,e.status||500,{error:e.status?e.message:'Erro interno. Consulte os logs do servidor.'})}}
-function createServer(){return http.createServer(handler)}
+function createServer(){return http.createServer((req,res)=>{
+ const pathname=new URL(req.url,'http://localhost').pathname;
+ const publicAsset=pathname==='/'||PUBLIC_FILES.has(pathname)||pathname==='/health';
+ const apiRequest=!publicAsset&&(pathname.startsWith('/api/')||(!pathname.includes('.')&&pathname!='/health'));
+ return apiRequest?withLock('state',()=>handler(req,res)):handler(req,res);
+})}
 if(require.main===module){try{assertConfig();createServer().listen(PORT,'0.0.0.0',()=>process.stdout.write('WYNCORE listening on '+PORT+'\n'))}catch(e){process.stderr.write(e.message+'\n');process.exit(1)}}
 module.exports={createServer,handler,load,save,hashPassword,verifyPassword,validateOpportunity,limited,STATUSES};
