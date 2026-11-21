@@ -7,7 +7,20 @@ const path=require('node:path');
 process.env.DATA_DIR=path.join(os.tmpdir(),'wyncore-ads-'+process.pid);
 process.env.WYNCORE_OWNER_PASSWORD='ads-test-owner-password-123';
 process.env.WYNCORE_SESSION_SECRET='ads-test-session-secret-with-at-least-32-characters';
+process.env.ASAAS_WEBHOOK_TOKEN='ads-test-webhook-token-with-more-than-32-characters';
 const {createServer}=require('./server');
+
+test('Asaas webhook is authenticated and idempotent',async t=>{
+ const server=createServer();await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ const base='http://127.0.0.1:'+server.address().port;
+ t.after(async()=>{await new Promise(resolve=>server.close(resolve));await fs.rm(process.env.DATA_DIR,{recursive:true,force:true})});
+ const bad=await fetch(base+'/api/webhooks/asaas',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:'evt-bad',event:'PAYMENT_RECEIVED'})});assert.equal(bad.status,401);
+ const headers={'content-type':'application/json','asaas-access-token':process.env.ASAAS_WEBHOOK_TOKEN};
+ const payload=JSON.stringify({id:'evt-test-001',event:'PAYMENT_RECEIVED',payment:{id:'pay-unknown',externalReference:'wyncore-campaign:unknown',value:10}});
+ const first=await fetch(base+'/api/webhooks/asaas',{method:'POST',headers,body:payload});assert.equal(first.status,200);
+ const duplicate=await fetch(base+'/api/webhooks/asaas',{method:'POST',headers,body:payload});assert.equal(duplicate.status,200);assert.equal((await duplicate.json()).duplicate,true);
+});
+
 test('WYNCORE Ads complete campaign and evaluation flow',async t=>{
  const server=createServer();await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const base='http://127.0.0.1:'+server.address().port;
@@ -15,9 +28,18 @@ test('WYNCORE Ads complete campaign and evaluation flow',async t=>{
  for(const file of ['/ads.html','/ads.css','/ads.js'])assert.equal((await fetch(base+file)).status,200);
  const login=await fetch(base+'/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({identifier:'ADMIN',password:process.env.WYNCORE_OWNER_PASSWORD})});
  assert.equal(login.status,200);const admin=login.headers.get('set-cookie').split(';')[0];
- const created=await fetch(base+'/api/ad-campaigns',{method:'POST',headers:{cookie:admin,'content-type':'application/json'},body:JSON.stringify({title:'Teste de percepção de campanha',client:'Empresa de Teste',channel:'video',objective:'Medir clareza e confiança da peça',brief:'Avalie a mensagem, clareza, credibilidade e relevância deste material para o público pretendido.',contractValue:500})});
- assert.equal(created.status,201);const campaign=await created.json();assert.equal(campaign.status,'draft');
+ const created=await fetch(base+'/api/ad-campaigns',{method:'POST',headers:{cookie:admin,'content-type':'application/json'},body:JSON.stringify({title:'Teste de percepção de campanha',client:'Empresa de Teste',channel:'video',objective:'Medir clareza e confiança da peça',brief:'Avalie a mensagem, clareza, credibilidade e relevância deste material para o público pretendido.',mediaUrl:'https://www.youtube.com/watch?v=abcdefghijk',contractValue:500,rewardPerReview:2.53,maxParticipants:100,requiredWatchSeconds:30})});
+ assert.equal(created.status,201);const campaign=await created.json();assert.equal(campaign.status,'draft');assert.equal(campaign.requiredWatchSeconds,30,'campaign must preserve its longer required watch time');
+ const invalidWatchTime=await fetch(base+'/api/ad-campaigns',{method:'POST',headers:{cookie:admin,'content-type':'application/json'},body:JSON.stringify({title:'Tempo inválido',client:'Empresa de Teste',channel:'video',objective:'Teste',brief:'Avalie a mensagem, clareza, credibilidade e relevância deste material para o público pretendido.',contractValue:500,rewardPerReview:2,maxParticipants:10,requiredWatchSeconds:7})});assert.equal(invalidWatchTime.status,400,'watch time below the eight-second minimum must be rejected');
+ const unsupportedMedia=await fetch(base+'/api/ad-campaigns',{method:'POST',headers:{cookie:admin,'content-type':'application/json'},body:JSON.stringify({title:'Link sem vídeo',client:'Empresa de Teste',channel:'video',objective:'Teste',brief:'Avalie a mensagem, clareza, credibilidade e relevância deste material para o público pretendido.',mediaUrl:'https://example.com/pagina-sem-video',contractValue:500,rewardPerReview:2,maxParticipants:10,requiredWatchSeconds:8})});assert.equal(unsupportedMedia.status,400,'unsupported URLs must not become video campaigns');
+ const blocked=await fetch(base+'/api/ad-campaigns/'+campaign.id+'/open',{method:'POST',headers:{cookie:admin,'content-type':'application/json'},body:'{}'});assert.equal(blocked.status,409,'unfunded campaigns must not become available to evaluators');
+ const received=await fetch(base+'/api/ad-campaigns/'+campaign.id+'/contract-payment',{method:'POST',headers:{cookie:admin,'content-type':'application/json'},body:JSON.stringify({reference:'RECIBO-REAL-001'})});assert.equal(received.status,200);
  const opened=await fetch(base+'/api/ad-campaigns/'+campaign.id+'/open',{method:'POST',headers:{cookie:admin,'content-type':'application/json'},body:'{}'});assert.equal(opened.status,200);
+ const insecureInquiry=await fetch(base+'/api/advertiser-inquiries',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({company:'Empresa Insegura',contact:'Responsável',email:'teste@empresa.com',phone:'11912345678',budget:100,channel:'video',mediaUrl:'http://example.com/trailer.mp4',objective:'Avaliar a clareza e a percepção do público sobre o trailer enviado.'})});assert.equal(insecureInquiry.status,400,'media links must use HTTPS');
+ const inquiry=await fetch(base+'/api/advertiser-inquiries',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({company:'Estúdio Trailer Teste',contact:'Pessoa Responsável',email:'contato@estudioteste.com',phone:'11912345678',cpfCnpj:'12345678901',budget:1500,channel:'video',mediaUrl:'https://www.youtube.com/watch?v=abcdefghijk',objective:'Medir a clareza e a percepção do público sobre o trailer de lançamento enviado.'})});assert.equal(inquiry.status,201);
+ const leads=await (await fetch(base+'/api/ad-workspace',{headers:{cookie:admin}})).json();const lead=leads.advertiserInquiries.find(x=>x.company==='Estúdio Trailer Teste');assert.ok(lead);assert.equal(lead.mediaUrl,'https://www.youtube.com/watch?v=abcdefghijk');
+ const converted=await fetch(base+'/api/advertiser-inquiries/'+lead.id+'/create-campaign',{method:'POST',headers:{cookie:admin,'content-type':'application/json'},body:JSON.stringify({title:'Avaliação de trailer',brief:lead.objective})});assert.equal(converted.status,200);
+ const convertedData=await (await fetch(base+'/api/ad-workspace',{headers:{cookie:admin}})).json();const trailerCampaign=convertedData.campaigns.find(x=>x.title==='Avaliação de trailer');assert.equal(trailerCampaign.mediaUrl,lead.mediaUrl);assert.equal(trailerCampaign.channel,'video');
  const signup=await fetch(base+'/api/access-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'Avaliador de Teste',phone:'11987654321',password:'senha-segura-123'})});assert.equal(signup.status,201);
  const dashboard=await (await fetch(base+'/api/dashboard',{headers:{cookie:admin}})).json();const person=dashboard.participants.find(x=>x.phone==='11987654321');assert.ok(person);
  const approved=await fetch(base+'/api/participants/approve',{method:'POST',headers:{cookie:admin,'content-type':'application/json'},body:JSON.stringify({participantId:person.id})});assert.equal(approved.status,200);
@@ -27,6 +49,8 @@ test('WYNCORE Ads complete campaign and evaluation flow',async t=>{
  const review=await fetch(base+'/api/ad-reviews',{method:'POST',headers:{cookie:participant,'content-type':'application/json'},body:JSON.stringify({campaignId:campaign.id,clarity:5,trust:4,relevance:5,comment:'A mensagem é clara e relevante, mas poderia explicar melhor a oferta.'})});assert.equal(review.status,201);const submitted=await review.json();
  const duplicate=await fetch(base+'/api/ad-reviews',{method:'POST',headers:{cookie:participant,'content-type':'application/json'},body:JSON.stringify({campaignId:campaign.id,clarity:5,trust:4,relevance:5,comment:'Outra avaliação para a mesma campanha.'})});assert.equal(duplicate.status,409);
  const reviewed=await fetch(base+'/api/ad-reviews/'+submitted.id+'/accept',{method:'POST',headers:{cookie:admin,'content-type':'application/json'},body:JSON.stringify({note:'Avaliação consistente.'})});assert.equal(reviewed.status,200);assert.equal((await reviewed.json()).status,'accepted');
- const received=await fetch(base+'/api/ad-campaigns/'+campaign.id+'/contract-payment',{method:'POST',headers:{cookie:admin,'content-type':'application/json'},body:JSON.stringify({reference:'RECIBO-REAL-001'})});assert.equal(received.status,200);
+ const participantWallet=await (await fetch(base+'/api/ad-workspace',{headers:{cookie:participant}})).json();assert.equal(participantWallet.earningSummary.approvedUnpaid,2.53,'accepted review must create the published reward as approved but unpaid');assert.equal(participantWallet.earnings.length,1);
+ const paid=await fetch(base+'/api/ad-earnings/'+participantWallet.earnings[0].id+'/mark-paid',{method:'POST',headers:{cookie:admin,'content-type':'application/json'},body:JSON.stringify({reference:'PIX-REAL-001'})});assert.equal(paid.status,200);assert.equal((await paid.json()).status,'paid');
+ const paidWallet=await (await fetch(base+'/api/ad-workspace',{headers:{cookie:participant}})).json();assert.equal(paidWallet.earningSummary.paid,2.53);
  const workspace=await (await fetch(base+'/api/ad-workspace',{headers:{cookie:admin}})).json();assert.equal(workspace.summary.pending,0);assert.equal(workspace.summary.accepted,1);assert.equal(workspace.summary.received,500);
 });

@@ -1,10 +1,10 @@
 name: WYNCORE checks
 on:
   push:
-    branches: [wyncore-core, wyncore-platform-rebuild]
+    branches: [wyncore-core, wyncore-platform-rebuild, wyncore-personal-work-hub]
     paths: ["wyncore/**", ".github/workflows/wyncore-check.yml"]
   pull_request:
-    branches: [forcarede-init]
+    branches: [forcarede-init, wyncore-platform-rebuild]
     paths: ["wyncore/**", ".github/workflows/wyncore-check.yml"]
 jobs:
   validate:
@@ -22,6 +22,15 @@ jobs:
         run: node --check wyncore/app.js
       - name: Check service worker syntax
         run: node --check wyncore/sw.js
+      - name: Check personal work hub syntax
+        run: node --check wyncore/work.js
+      - name: Check server integration test syntax
+        run: node --check wyncore/server.test.js
+      - name: Verify personal work hub assets
+        run: |
+          test -s wyncore/work.html
+          test -s wyncore/work.css
+          test -s wyncore/work.js
       - name: WYNCORE Ads backend tests
         working-directory: wyncore
         run: node --test ads.test.js

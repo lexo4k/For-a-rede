@@ -8,9 +8,11 @@
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "build": "env -u WYNCORE_SUPABASE_URL -u WYNCORE_SUPABASE_ANON_KEY -u WYNCORE_SUPABASE_RPC_SECRET -u DATABASE_URL -u BLOB_READ_WRITE_TOKEN npm test"
   },
   "dependencies": {
-    "@vercel/blob": "^2.0.0"
+    "@vercel/blob": "^2.0.0",
+    "pg": "^8.16.3"
   }
 }

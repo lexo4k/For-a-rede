@@ -1,15 +1,22 @@
 'use strict';
 const http=require('node:http'),fs=require('node:fs/promises'),path=require('node:path'),crypto=require('node:crypto');
-const D=require('./domain');
+const D=require('./domain'),Asaas=require('./asaas'),Adscend=require('./adscend'),Paypal=require('./paypal'),Payouts=require('./payouts'),Storage=require('./storage');
 const ROOT=__dirname,DATA_DIR=process.env.DATA_DIR||path.join(ROOT,'data'),DATA_FILE=path.join(DATA_DIR,'wyncore.json');
 const PORT=Number(process.env.PORT||3000),PASSWORD=process.env.WYNCORE_OWNER_PASSWORD||'',SECRET=process.env.WYNCORE_SESSION_SECRET||'',PARTNER_SECRET=process.env.WYNCORE_PARTNER_WEBHOOK_SECRET||'',GOOGLE_CLIENT_ID=process.env.WYNCORE_GOOGLE_CLIENT_ID||'',PROD=process.env.NODE_ENV==='production';
 const COOKIE='wyncore_session',SESSION_MS=8*60*60*1000;
-const PUBLIC_FILES=new Set(['/','/index.html','/styles.css','/app.js','/manifest.webmanifest','/icon.svg','/sw.js','/sobre.html','/privacidade.html','/termos.html','/robots.txt','/sitemap.xml','/guia-aprendizagem.html','/guia-estagio.html','/seguranca-oportunidades.html','/organizar-candidatura.html','/ads.html','/ads.css','/ads.js']);
+const PUBLIC_FILES=new Set(['/','/index.html','/anunciantes.html','/styles.css','/app.js','/manifest.webmanifest','/icon.svg','/sw.js','/sobre.html','/privacidade.html','/termos.html','/robots.txt','/sitemap.xml','/guia-aprendizagem.html','/guia-estagio.html','/seguranca-oportunidades.html','/organizar-candidatura.html','/ads.html','/ads.css','/ads.js','/work.html','/work.css','/work.js']);
 const MIME={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml','.webmanifest':'application/manifest+json','.xml':'application/xml; charset=utf-8','.txt':'text/plain; charset=utf-8'};
 const rate=new Map();
+const operationLocks=new Map();
+async function withLock(key,work){const previous=operationLocks.get(key)||Promise.resolve();let release;const current=new Promise(resolve=>{release=resolve});operationLocks.set(key,current);await previous;try{return await work()}finally{release();if(operationLocks.get(key)===current)operationLocks.delete(key)}}
+function payoutStorageSafe(){return Storage.payoutStorageSafe(process.env,path.join(ROOT,'data'))}
 function normalizePhone(value){let digits=String(value||'').replace(/\D/g,'');if(digits.startsWith('55')&&(digits.length===12||digits.length===13))digits=digits.slice(2);return digits;}
+function isPlayableAdMedia(value){try{const u=new URL(String(value||''));if(u.protocol!=='https:'||u.username||u.password)return false;const host=u.hostname.toLowerCase();if(host==='youtu.be'||host==='youtube.com'||host.endsWith('.youtube.com')){const id=host==='youtu.be'?u.pathname.split('/').filter(Boolean)[0]:(u.pathname.startsWith('/embed/')?u.pathname.split('/')[2]:u.searchParams.get('v'));return /^[A-Za-z0-9_-]{11}$/.test(id||'')}if(host==='vimeo.com'||host.endsWith('.vimeo.com'))return /^\d+$/.test(u.pathname.split('/').filter(Boolean).pop()||'');return ['mp4','webm','ogg'].includes(u.pathname.toLowerCase().split('.').pop())}catch{return false}}
 function assertConfig(){if(PASSWORD.length<12)throw Error('Configure WYNCORE_OWNER_PASSWORD com pelo menos 12 caracteres.');if(SECRET.length<32)throw Error('Configure WYNCORE_SESSION_SECRET com pelo menos 32 caracteres.')}
 function safeEqual(a,b){const x=Buffer.from(String(a)),y=Buffer.from(String(b));return x.length===y.length&&crypto.timingSafeEqual(x,y)}
+function secretKey(){return crypto.createHash('sha256').update(SECRET).digest()}
+function encryptSecret(value){const iv=crypto.randomBytes(12),cipher=crypto.createCipheriv('aes-256-gcm',secretKey(),iv),encrypted=Buffer.concat([cipher.update(String(value),'utf8'),cipher.final()]);return [iv.toString('base64url'),cipher.getAuthTag().toString('base64url'),encrypted.toString('base64url')].join('.')}
+function decryptSecret(value){const [iv,tag,data]=String(value||'').split('.');if(!iv||!tag||!data)throw Error('Chave Pix criptografada inválida.');const decipher=crypto.createDecipheriv('aes-256-gcm',secretKey(),Buffer.from(iv,'base64url'));decipher.setAuthTag(Buffer.from(tag,'base64url'));return Buffer.concat([decipher.update(Buffer.from(data,'base64url')),decipher.final()]).toString('utf8')}
 function sign(v){return crypto.createHmac('sha256',SECRET).update(v).digest('base64url')}
 function makeSession(user){const p=JSON.stringify({exp:Date.now()+SESSION_MS,...user}),v=Buffer.from(p).toString('base64url');return v+'.'+sign(v)}
 function readSession(req){const t=(req.headers.cookie||'').split(';').map(x=>x.trim()).find(x=>x.startsWith(COOKIE+'='))?.slice(COOKIE.length+1);if(!t)return null;const [v,s,...rest]=t.split('.');if(!v||!s||rest.length||!safeEqual(s,sign(v)))return null;try{const u=JSON.parse(Buffer.from(v,'base64url').toString());return u.exp>Date.now()?u:null}catch{return null}}
@@ -18,17 +25,56 @@ function send(res,status,data,headers={}){res.writeHead(status,{'Content-Type':'
 async function rawBody(req){let raw='';for await(const c of req){raw+=c;if(raw.length>65536)throw Object.assign(Error('Corpo muito grande'),{status:413})}return raw}
 async function body(req){const raw=await rawBody(req);try{return raw?JSON.parse(raw):{}}catch{throw Object.assign(Error('JSON inválido'),{status:400})}}
 async function load(){
+ const stored=Storage.readState();
+ if(stored.active){
+  let d=stored.state;
+  if(!d&&process.env.BLOB_READ_WRITE_TOKEN){
+   const {get}=require('@vercel/blob');
+   const found=await get('wyncore/data.json',{access:'private',useCache:false});
+   if(found)d=JSON.parse(await new Response(found.stream).text());
+  }
+  if(!d){
+   try{d=JSON.parse(await fs.readFile(DATA_FILE,'utf8'))}catch(e){if(e.code!=='ENOENT')throw e;}
+  }
+  d||={opportunities:[],tasks:[],events:[],users:[],workAccounts:[],workTasks:[],workLedger:[],adCampaigns:[],adReviews:[],adEarnings:[],advertiserInquiries:[],asaasWebhookEvents:[],adscendOfferSnapshots:[],adscendConversions:[]};
+  d=D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],workAccounts:d.workAccounts||[],workTasks:d.workTasks||[],workLedger:d.workLedger||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[],adEarnings:d.adEarnings||[],advertiserInquiries:d.advertiserInquiries||[],asaasWebhookEvents:d.asaasWebhookEvents||[],adscendOfferSnapshots:d.adscendOfferSnapshots||[],adscendConversions:d.adscendConversions||[]});
+  if(!stored.state)await Storage.writeState(d);
+  return d;
+ }
  if(process.env.BLOB_READ_WRITE_TOKEN){
   const {get}=require('@vercel/blob');
   const found=await get('wyncore/data.json',{access:'private',useCache:false});
-  if(!found)return D.ensureState({opportunities:[],tasks:[],events:[],users:[],adCampaigns:[],adReviews:[],advertiserInquiries:[]});
+  if(!found)return D.ensureState({opportunities:[],tasks:[],events:[],users:[],workAccounts:[],workTasks:[],workLedger:[],adCampaigns:[],adReviews:[],adEarnings:[],advertiserInquiries:[],asaasWebhookEvents:[]});
   const raw=await new Response(found.stream).text();
   const d=JSON.parse(raw);
-  return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[],advertiserInquiries:d.advertiserInquiries||[]});
+  return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],workAccounts:d.workAccounts||[],workTasks:d.workTasks||[],workLedger:d.workLedger||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[],adEarnings:d.adEarnings||[],advertiserInquiries:d.advertiserInquiries||[],asaasWebhookEvents:d.asaasWebhookEvents||[]});
  }
- try{const d=JSON.parse(await fs.readFile(DATA_FILE,'utf8'));return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[],advertiserInquiries:d.advertiserInquiries||[]})}catch(e){if(e.code!=='ENOENT')throw e;return D.ensureState({opportunities:[],tasks:[],events:[],users:[]})}
+ try{const d=JSON.parse(await fs.readFile(DATA_FILE,'utf8'));return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],workAccounts:d.workAccounts||[],workTasks:d.workTasks||[],workLedger:d.workLedger||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[],advertiserInquiries:d.advertiserInquiries||[]})}catch(e){if(e.code!=='ENOENT')throw e;return D.ensureState({opportunities:[],tasks:[],events:[],users:[],workAccounts:[],workTasks:[],workLedger:[],adCampaigns:[],adReviews:[],adEarnings:[],advertiserInquiries:[],asaasWebhookEvents:[]})}
+}
+async function notifyAdvertiserLead(lead){
+ const apiKey=process.env.RESEND_API_KEY||'',from=process.env.WYNCORE_LEADS_FROM||'',to=process.env.WYNCORE_LEADS_TO||'';
+ if(!apiKey||!from||!to)return {status:'not_configured'};
+ const textBody=[
+  'Nova solicitação comercial WYNCORE',
+  'Empresa: '+lead.company,
+  'Responsável: '+lead.contact,
+  'E-mail: '+lead.email,
+  'Telefone: '+lead.phone,
+  'CPF/CNPJ: '+(lead.cpfCnpj||'não informado'),
+  'Orçamento estimado: R$ '+Number(lead.budget||0).toFixed(2),
+  'Formato: '+lead.channel,
+  'Material: '+(lead.mediaUrl||'não informado'),
+  'Objetivo: '+lead.objective,
+  'Lead ID: '+lead.id
+ ].join('\n');
+ try{
+  const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+apiKey,'Content-Type':'application/json'},body:JSON.stringify({from,to:[to],subject:'Novo lead WYNCORE: '+lead.company,text:textBody}),signal:AbortSignal.timeout(8000)});
+  if(!response.ok)return {status:'failed'};
+  return {status:'sent'};
+ }catch{return {status:'failed'}}
 }
 async function save(d){
+ if(await Storage.writeState(d))return;
  if(process.env.BLOB_READ_WRITE_TOKEN){
   const {put}=require('@vercel/blob');
   await put('wyncore/data.json',JSON.stringify(d),{access:'private',addRandomSuffix:false,allowOverwrite:true,contentType:'application/json'});
@@ -44,9 +90,76 @@ function limited(req,scope,identity,limit=10,windowMs=900000){const forwarded=St
 function hashPassword(p,salt=crypto.randomBytes(16).toString('hex')){return new Promise((resolve,reject)=>crypto.scrypt(String(p),salt,64,(e,k)=>e?reject(e):resolve(salt+':'+k.toString('hex'))))}
 async function verifyPassword(p,stored){if(!stored||!stored.includes(':'))return false;const [salt,key]=stored.split(':');const got=await hashPassword(p,salt);return safeEqual(got.split(':')[1],key)}
 function actor(session,d){if(!session)return null;if(session.role==='admin'&&session.id==='owner')return{id:'owner',role:'admin',email:'owner'};return d.participants.find(p=>p.id===session.id&&p.status==='active'&&p.role===session.role)||null}
-async function handler(req,res){try{
+
+async function handlePixWithdrawal(req,res){
+ if(req.method!=='POST')return send(res,405,{error:'Método não permitido.'});
+ if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
+ if(SECRET.length<32)return send(res,503,{error:'Autenticação ainda não configurada.'});
+ const session=readSession(req);
+ if(!session)return send(res,401,{error:'Sessão expirada.'});
+ const me=await Storage.withTransaction(()=>withLock('state',async()=>{const state=await load();return actor(session,state)}));
+ if(!me)return send(res,403,{error:'Conta inativa ou sem permissão.'});
+ if(me.role!=='participant')return send(res,403,{error:'Somente participantes podem solicitar saque.'});
+ if(limited(req,'pix-withdrawal',me.id,3,60000))return send(res,429,{error:'Aguarde um minuto antes de solicitar outro Pix.'});
+ const b=await body(req),raw=String(b.amount??'').trim().replace(',','.'),amount=Number(raw);
+ if(!/^\\d+(?:\\.\\d{1,2})?$/.test(raw)||!Number.isFinite(amount)||amount<1)err('Informe um valor a partir de R$ 1,00, com até duas casas decimais.');
+ if(!Asaas.configured()||!Asaas.webhookConfigured())err('O Pix ainda não está liberado. A administração precisa configurar Asaas e o webhook.');
+ if(!payoutStorageSafe())err('Saque temporariamente bloqueado: configure PostgreSQL ou disco persistente de instância única. O armazenamento atual não garante reserva transacional contra saques simultâneos.',503);
+ const reservationData=await Storage.withTransaction(()=>withLock('state',async()=>{
+  const state=await load(),participant=state.participants.find(x=>x.id===me.id&&x.status==='active');
+  if(!participant?.pixKeyEncrypted||!participant?.pixKeyType)err('Cadastre sua chave Pix antes de solicitar o saque.');
+  const pixAddressKey=decryptSecret(participant.pixKeyEncrypted);
+  const amountCents=Math.round(amount*100),withdrawalId=crypto.randomUUID(),now=new Date().toISOString();
+  Payouts.reserveWithdrawal(state,{participantId:me.id,amountCents,withdrawalId,now});
+  await save(state);
+  return {pixAddressKey,pixAddressKeyType:participant.pixKeyType,amountCents,withdrawalId};
+ }));
+ let transfer;
+ try{
+  // Reservation is committed before contacting Asaas; no database transaction spans a network call.
+  transfer=await Asaas.transferPix({value:reservationData.amountCents/100,pixAddressKey:reservationData.pixAddressKey,pixAddressKeyType:reservationData.pixAddressKeyType,description:'WYNCORE saque',externalReference:'wyncore-earning:'+reservationData.withdrawalId});
+ }catch(error){
+  let finalStatus='payout_review_required';
+  try{
+   finalStatus=await Storage.withTransaction(()=>withLock('state',async()=>{
+    const state=await load(),reservation=(state.adEarnings||[]).find(x=>x.id===reservationData.withdrawalId&&x.selfServiceWithdrawal);
+    if(!reservation)return 'missing';
+    if(reservation.status==='payout_requested'){
+     reservation.status='payout_review_required';
+     reservation.payoutError=String(error.message||'Falha ou resposta inconclusiva do Asaas.').slice(0,300);
+     reservation.updatedAt=new Date().toISOString();
+     await save(state);
+    }
+    return reservation.status;
+   }));
+  }catch(updateError){console.error('WYNCORE Pix review status could not be saved:',updateError)}
+  return send(res,503,{ok:false,status:finalStatus,amount:reservationData.amountCents/100,withdrawalId:reservationData.withdrawalId,message:'O saldo permanece reservado. A resposta do Asaas precisa ser reconciliada antes de liberar ou reenviar este valor.'});
+ }
+ try{
+  const finalStatus=await Storage.withTransaction(()=>withLock('state',async()=>{
+   const state=await load(),reservation=(state.adEarnings||[]).find(x=>x.id===reservationData.withdrawalId&&x.selfServiceWithdrawal);
+   if(!reservation)throw new Error('Reserva não encontrada após a resposta do Asaas.');
+   Payouts.attachTransfer(reservation,transfer,new Date().toISOString());
+   await save(state);
+   return reservation.status;
+  }));
+  return send(res,202,{ok:true,status:finalStatus,amount:reservationData.amountCents/100,transferId:transfer.id,withdrawalId:reservationData.withdrawalId,message:finalStatus==='paid'?'Pix confirmado pelo Asaas.':'Solicitação de Pix enviada. O saldo foi reservado e será atualizado quando o Asaas confirmar a transferência.'});
+ }catch(error){
+  console.error('WYNCORE Pix transfer accepted but final reconciliation failed:',error);
+  return send(res,503,{ok:false,status:'payout_review_required',amount:reservationData.amountCents/100,withdrawalId:reservationData.withdrawalId,transferId:transfer.id,message:'O Asaas aceitou a transferência, mas a gravação final precisa ser reconciliada. O saldo continua reservado. Não repita o saque.'});
+ }
+}
+async function handler(req,res){
+ if(!req.__wyncoreStateLock){
+  let requestPath='/';
+  try{requestPath=new URL(req.url,'http://localhost').pathname}catch{}
+  const apiRequest=requestPath.startsWith('/api/')||(!PUBLIC_FILES.has(requestPath)&&requestPath!=='/'&&requestPath!=='/health'&&!/\.[a-z0-9]+$/i.test(requestPath));
+  if(apiRequest&&requestPath==='/api/my-pix-withdrawal'){req.__wyncoreStateLock=true;return handlePixWithdrawal(req,res).catch(error=>{console.error('WYNCORE Pix withdrawal error:',error);if(!res.headersSent)send(res,error.status||503,{error:error.status?error.message:'Não foi possível concluir a solicitação com segurança. Confira a carteira antes de tentar novamente.'})})}
+  if(apiRequest){req.__wyncoreStateLock=true;return Storage.withTransaction(()=>withLock('state',()=>handler(req,res))).catch(error=>{console.error('WYNCORE storage transaction error:',error);if(!res.headersSent)send(res,503,{error:'Armazenamento temporariamente indisponível. Nenhuma alteração foi confirmada.'})})}
+ }
+ try{
  const url=new URL(req.url,'http://localhost');let p=url.pathname;if(p!=='/'&&!p.startsWith('/api/')&&!PUBLIC_FILES.has(p)&&p!=='/health'&&!/\.[a-z0-9]+$/i.test(p))p='/api'+p;
- if(req.method==='GET'&&(p==='/health'||p==='/api/health'))return send(res,200,{ok:true,service:'WYNCORE',storage:process.env.BLOB_READ_WRITE_TOKEN?'vercel-blob-private':'persistent-json',authConfigured:Boolean(PASSWORD&&SECRET.length>=32),ownerLoginConfigured:Boolean(PASSWORD),participantLoginConfigured:SECRET.length>=32,phoneLoginEnabled:SECRET.length>=32,googleEnabled:Boolean(GOOGLE_CLIENT_ID),googleClientId:GOOGLE_CLIENT_ID||null,signupAvailable:true,publicAccess:true});
+ if(req.method==='GET'&&(p==='/health'||p==='/api/health'))return send(res,200,{ok:true,service:'WYNCORE',storage:process.env.DATABASE_URL?'postgres-transactional':Storage.rpcConfigured()?'supabase-rest-cas':process.env.BLOB_READ_WRITE_TOKEN?'vercel-blob-private':'single-writer-json',supabaseConfigured:Storage.rpcConfigured(),authConfigured:Boolean(PASSWORD&&SECRET.length>=32),ownerLoginConfigured:Boolean(PASSWORD),participantLoginConfigured:SECRET.length>=32,phoneLoginEnabled:SECRET.length>=32,googleEnabled:Boolean(GOOGLE_CLIENT_ID),googleClientId:GOOGLE_CLIENT_ID||null,integrations:{adscend:{configured:Adscend.configured(),postbackConfigured:Adscend.postbackConfigured()},asaas:{configured:Asaas.configured(),webhookConfigured:Asaas.webhookConfigured()},paypal:{configured:Paypal.configured()},payoutStorageSafe:payoutStorageSafe()},signupAvailable:true,publicAccess:true});
  if(req.method==='POST'&&p==='/api/access-request'){
   if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
   const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),phone=normalizePhone(b.phone),pass=String(b.password||'');if(limited(req,'signup',email||phone,5,3600000))return send(res,429,{error:'Muitas tentativas de cadastro para este contato. Aguarde um pouco.'});
@@ -54,16 +167,148 @@ async function handler(req,res){try{
   const d=await load();if(d.users.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone))||d.participants.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone)))err('Este e-mail ou telefone já está cadastrado.',409);
   const person=D.requestAccess(d,{name,email,phone});d.users.push({id:person.id,email,phone,passwordHash:await hashPassword(pass)});await save(d);return send(res,201,{ok:true,message:'Cadastro recebido. Aguarde a liberação da equipe.'});
  }
+
+ if(req.method==='POST'&&p==='/api/webhooks/asaas'){
+  const token=req.headers['asaas-access-token'];
+  if(!Asaas.verifyWebhook(token))return send(res,401,{error:'Webhook Asaas não autenticado.'});
+  const event=await body(req),eventId=String(event.id||''),type=String(event.event||'');
+  if(!eventId)return send(res,400,{error:'Evento sem identificador.'});
+  return await withLock('wallet',async()=>{
+   const d=await load();
+   d.asaasWebhookEvents||=[];
+   if(d.asaasWebhookEvents.includes(eventId))return send(res,200,{ok:true,duplicate:true});
+   const payment=event.payment||{},transfer=event.transfer||{};
+   if(type==='PAYMENT_RECEIVED'&&String(payment.externalReference||'').startsWith('wyncore-campaign:')){
+    const campaignId=String(payment.externalReference).slice('wyncore-campaign:'.length);
+    const campaign=(d.adCampaigns||[]).find(x=>x.id===campaignId);
+    if(campaign&&String(payment.id)===String(campaign.asaasPaymentId)&&Number(payment.value)>=Number(campaign.contractValue)){
+     campaign.contractStatus='received';campaign.contractReference=payment.id;campaign.receivedAt=new Date().toISOString();campaign.updatedAt=campaign.receivedAt;
+    }
+   }
+   if(['TRANSFER_DONE','TRANSFER_FAILED','TRANSFER_CANCELLED'].includes(type)&&String(transfer.externalReference||'').startsWith('wyncore-earning:')){
+    const updated=Payouts.applyTransferEvent(d,transfer,type,new Date().toISOString());
+    if(!updated){
+     const earningId=String(transfer.externalReference).slice('wyncore-earning:'.length);
+     const legacy=(d.adEarnings||[]).find(x=>x.id===earningId&&String(x.asaasTransferId)===String(transfer.id));
+     if(legacy){
+      if(type==='TRANSFER_DONE'){legacy.status='paid';legacy.paidAt=new Date().toISOString();legacy.paymentReference=transfer.id;}
+      else{legacy.status='approved_unpaid';legacy.payoutError=String(transfer.failReason||type).slice(0,300);}
+      legacy.updatedAt=new Date().toISOString();
+     }
+    }
+   }
+   d.asaasWebhookEvents.push(eventId);
+   if(d.asaasWebhookEvents.length>5000)d.asaasWebhookEvents=d.asaasWebhookEvents.slice(-4000);
+   await save(d);
+   return send(res,200,{ok:true});
+  });
+ }
+
  if(!p.startsWith('/api/')){const file=p==='/'?'/index.html':p;if(!PUBLIC_FILES.has(file))return send(res,404,{error:'Não encontrado'});const full=path.resolve(ROOT,'.'+file);try{const data=await fs.readFile(full);const extension=path.extname(full);const cachePolicy=['.html','.js','.css','.webmanifest'].includes(extension)?'no-cache':'public, max-age=3600';res.writeHead(200,{'Content-Type':MIME[extension]||'application/octet-stream','Cache-Control':cachePolicy});return res.end(data)}catch{return send(res,404,{error:'Arquivo não encontrado'})}}
  if(req.method==='POST'&&p==='/api/advertiser-inquiries'){
   if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
-  if(limited(req,'advertiser-inquiry',String(req.headers['x-forwarded-for']||req.socket.remoteAddress||'unknown'),5,3600000))return send(res,429,{error:'Limite de solicitações atingido. Tente novamente mais tarde.'});
-  const b=await body(req),company=String(b.company||'').trim().slice(0,140),contact=String(b.contact||'').trim().slice(0,100),email=String(b.email||'').trim().toLowerCase().slice(0,160),phone=normalizePhone(b.phone),objective=String(b.objective||'').trim().slice(0,1800),budget=Number(b.budget||0);
-  if(company.length<2||contact.length<2||!/^\S+@\S+\.\S+$/.test(email)||phone.length<10||objective.length<30||!Number.isFinite(budget)||budget<0||budget>100000000)err('Informe empresa, responsável, e-mail válido, telefone, objetivo detalhado e orçamento válido.');
-  const d=await load();const lead={id:crypto.randomUUID(),company,contact,email,phone,objective,budget,status:'new',createdAt:new Date().toISOString()};d.advertiserInquiries.unshift(lead);await save(d);return send(res,201,{ok:true,message:'Solicitação recebida. A equipe comercial fará a análise e entrará em contato.'});
+  if(limited(req,'advertiser-inquiry',String(req.headers?.['x-forwarded-for']||req.socket?.remoteAddress||req.ip||'unknown'),5,3600000))return send(res,429,{error:'Limite de solicitações atingido. Tente novamente mais tarde.'});
+  const b=await body(req),company=String(b.company||'').trim().slice(0,140),contact=String(b.contact||'').trim().slice(0,100),email=String(b.email||'').trim().toLowerCase().slice(0,160),phone=normalizePhone(b.phone),cpfCnpj=String(b.cpfCnpj||'').replace(/\\D/g,'').slice(0,14),objective=String(b.objective||'').trim().slice(0,1800),budget=Number(b.budget||0),channel=String(b.channel||'video'),mediaUrl=String(b.mediaUrl||'').trim().slice(0,2000);
+  if(company.length<2||contact.length<2||!/^\S+@\S+\.\S+$/.test(email)||phone.length<10||objective.length<30||!Number.isFinite(budget)||budget<0||budget>100000000||!['digital','video','social','display','other'].includes(channel))err('Informe empresa, responsável, e-mail válido, telefone, objetivo detalhado, formato e orçamento válido.');
+  if(mediaUrl){let u;try{u=new URL(mediaUrl)}catch{}if(!u||u.protocol!=='https:'||u.username||u.password)err('O link do material precisa ser HTTPS válido.');}
+  const d=await load();const lead={id:crypto.randomUUID(),company,contact,email,phone,cpfCnpj,objective,budget,channel,mediaUrl,status:'new',createdAt:new Date().toISOString()};d.advertiserInquiries.unshift(lead);await save(d);lead.notificationStatus=await notifyAdvertiserLead(lead);await save(d);return send(res,201,{ok:true,message:'Solicitação recebida. A equipe comercial fará a análise e entrará em contato.'});
  }
- if(SECRET.length<32)return send(res,503,{error:'A autenticação de sessão ainda não está configurada no servidor. O pedido de cadastro pode ser recebido, mas a entrada ficará indisponível até a configuração.'});
- if(req.method==='POST'&&p==='/api/google-login'){
+ if((req.method==='GET'||req.method==='POST')&&p==='/api/webhooks/adscend'){
+   const expected=String(process.env.ADSCEND_POSTBACK_SECRET||''),provided=String(url.searchParams.get('token')||req.headers['x-adscend-token']||'');
+   if(expected.length<32||!safeEqual(provided,expected))return send(res,401,{error:'Postback Adscend não autenticado.'});
+   const params=req.method==='POST'?await body(req):Object.fromEntries(url.searchParams.entries());
+   const participantId=String(params.user||params.userid||params.sub1||'').trim(),offerId=String(params.offer||params.offer_id||params.sub2||'').trim(),watchTime=String(params.time||params.uts||'').trim(),ip=String(params.ip||'').trim();
+   if(!participantId||!offerId||!watchTime||watchTime.length>80)return send(res,400,{error:'Postback sem participante, oferta ou horário de conclusão.'});
+   return await withLock('wallet',async()=>{
+    const state=await load();state.adscendConversions||=[];state.adscendOfferSnapshots||=[];
+    const participant=(state.participants||[]).find(x=>x.id===participantId&&x.status==='active'&&x.role==='participant');
+    if(!participant)return send(res,404,{error:'Participante associado ao postback não encontrado.'});
+    const snapshot=state.adscendOfferSnapshots.find(x=>x.participantId===participantId&&x.offerId===offerId);
+    if(!snapshot)return send(res,409,{error:'Oferta não encontrada no histórico deste participante. Evento mantido sem crédito.'});
+    const suppliedId=String(params.transaction_id||params.transactionId||params.txid||'').trim();
+    const transactionId=suppliedId?suppliedId.slice(0,180):crypto.createHash('sha256').update([participantId,offerId,watchTime,ip].join(':')).digest('hex');
+    if(state.adscendConversions.some(x=>x.transactionId===transactionId))return send(res,200,{ok:true,duplicate:true});
+    const reportedPayout=Number(params.pay||params.payout);
+    const currency=String(params.cur||'').trim().toUpperCase();
+    const conversion={id:crypto.randomUUID(),provider:'adscend',participantId,offerId,transactionId,watchTime,ipHash:ip?crypto.createHash('sha256').update(ip).digest('hex'):null,publisherPayoutUsd:snapshot.publisherPayoutUsd??null,participantEstimateUsd:snapshot.participantEstimateUsd??null,reportedPayout:Number.isFinite(reportedPayout)&&reportedPayout>0?reportedPayout:null,currency,status:'video_completed_pending_partner_reconciliation',receivedAt:new Date().toISOString(),creditIssued:false};
+    // PAY is the commission reported by Adscend. Only an explicit BRL amount can
+    // enter the Pix wallet; USD/points remain pending rather than being misread as BRL.
+    if(Number.isFinite(reportedPayout)&&reportedPayout>0&&currency==='BRL'){
+     const share=Math.min(0.9,Math.max(0.1,Number(process.env.ADSCEND_USER_SHARE||70)))/100;
+     const amount=Math.round(reportedPayout*share*100)/100;
+     if(amount>0){
+      const earning={id:crypto.randomUUID(),participantId,campaignId:null,provider:'adscend',providerTransactionId:transactionId,providerConfirmed:true,publisherPayout:reportedPayout,currency:'BRL',amount,status:'approved_unpaid',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+      state.adEarnings||=[];state.adEarnings.unshift(earning);
+      conversion.status='credited';conversion.creditIssued=true;conversion.earningId=earning.id;conversion.participantRewardBrl=amount;
+     }
+    }
+    state.adscendConversions.unshift(conversion);if(state.adscendConversions.length>10000)state.adscendConversions=state.adscendConversions.slice(0,10000);
+    await save(state);return send(res,200,{ok:true,received:true,status:conversion.status,credited:conversion.creditIssued,amount:conversion.participantRewardBrl||null,currency:conversion.creditIssued?'BRL':currency||null});
+   });
+  }
+
+  if(SECRET.length<32)return send(res,503,{error:'A autenticação de sessão ainda não está configurada no servidor. O pedido de cadastro pode ser recebido, mas a entrada ficará indisponível até a configuração.'});
+ if(p==='/api/work'){
+  if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
+  const d=await load();d.workAccounts||=[];d.workTasks||=[];d.workLedger||=[];
+  let b={},action=String(url.searchParams.get('action')||'');
+  if(['POST','PATCH','DELETE'].includes(req.method)){b=await body(req);action=String(b.action||action)}
+  if(req.method==='GET'&&action==='health')return send(res,200,{ok:true,service:'WYNCORE Work',accountRegistration:true,privatePerAccountStorage:true,externalPlatformsPayWorkersDirectly:true});
+  if(req.method==='POST'&&action==='register'){
+   const name=String(b.name||'').trim().slice(0,90),email=String(b.email||'').trim().toLowerCase(),pass=String(b.password||'');
+   if(limited(req,'work-register',email,5,3600000))return send(res,429,{error:'Muitas tentativas de cadastro. Aguarde uma hora.'});
+   if(name.length<2||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||pass.length<10)err('Informe nome, e-mail válido e senha com pelo menos 10 caracteres.');
+   if(d.workAccounts.some(x=>x.email===email))err('Este e-mail já possui uma conta WYNCORE Work.',409);
+   const account={id:crypto.randomUUID(),name,email,passwordHash:await hashPassword(pass),createdAt:new Date().toISOString()};
+   d.workAccounts.push(account);await save(d);
+   const user={id:account.id,role:'work',email:account.email,name:account.name};
+   return send(res,201,{ok:true,user},{'Set-Cookie':cookie(makeSession(user),SESSION_MS/1000)});
+  }
+  if(req.method==='POST'&&action==='login'){
+   const email=String(b.email||'').trim().toLowerCase(),pass=String(b.password||'');
+   if(limited(req,'work-login',email,10,900000))return send(res,429,{error:'Muitas tentativas. Aguarde 15 minutos.'});
+   const account=d.workAccounts.find(x=>x.email===email);
+   if(!account||!await verifyPassword(pass,account.passwordHash))return send(res,401,{error:'E-mail ou senha incorretos.'});
+   const user={id:account.id,role:'work',email:account.email,name:account.name};
+   return send(res,200,{ok:true,user},{'Set-Cookie':cookie(makeSession(user),SESSION_MS/1000)});
+  }
+  if(req.method==='POST'&&action==='logout')return send(res,200,{ok:true},{'Set-Cookie':cookie('',0)});
+  const session=readSession(req);
+  if(!session||session.role!=='work')return send(res,401,{error:'Entre na sua conta WYNCORE Work.'});
+  const account=d.workAccounts.find(x=>x.id===session.id);
+  if(!account)return send(res,401,{error:'Conta não encontrada. Entre novamente.'});
+  if(req.method==='GET'&&action==='me')return send(res,200,{id:account.id,name:account.name,email:account.email});
+  if(req.method==='GET'&&action==='tasks')return send(res,200,{tasks:d.workTasks.filter(x=>x.accountId===account.id)});
+  if(req.method==='POST'&&action==='create-task'){
+   const title=String(b.title||'').trim().slice(0,120),platform=String(b.platform||'').trim().slice(0,50),note=String(b.note||'').trim().slice(0,500),urlValue=String(b.url||'').trim(),status=String(b.status||'saved');
+   if(title.length<2||!platform||!['saved','started','submitted','done'].includes(status))err('Confira título, plataforma e status.');
+   let taskUrl='';if(urlValue){let u;try{u=new URL(urlValue)}catch{}if(!u||u.protocol!=='https:')err('O link precisa ser HTTPS válido.');taskUrl=u.href}
+   const task={id:crypto.randomUUID(),accountId:account.id,title,platform,note,url:taskUrl,status,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+   d.workTasks.unshift(task);await save(d);return send(res,201,{task});
+  }
+  if(['PATCH','DELETE'].includes(req.method)&&['update-task','delete-task'].includes(action)){
+   const task=d.workTasks.find(x=>x.id===String(b.taskId||'')&&x.accountId===account.id);
+   if(!task)return send(res,404,{error:'Tarefa não encontrada.'});
+   if(req.method==='PATCH'&&action==='update-task'){
+    if(b.status!==undefined){if(!['saved','started','submitted','done'].includes(b.status))err('Status inválido.');task.status=b.status}
+    if(b.note!==undefined)task.note=String(b.note||'').trim().slice(0,500);
+    task.updatedAt=new Date().toISOString();await save(d);return send(res,200,{task});
+   }
+   if(req.method==='DELETE'&&action==='delete-task'){d.workTasks=d.workTasks.filter(x=>x.id!==task.id);await save(d);return send(res,200,{ok:true})}
+  }
+  if(req.method==='GET'&&action==='earnings'){
+   const items=d.workLedger.filter(x=>x.accountId===account.id);
+   return send(res,200,{items,summary:{reported:items.reduce((n,x)=>n+Number(x.amount||0),0),received:items.filter(x=>x.status==='received').reduce((n,x)=>n+Number(x.amount||0),0)}});
+  }
+  if(req.method==='POST'&&action==='create-earning'){
+   const platform=String(b.platform||'').trim().slice(0,50),description=String(b.description||'').trim().slice(0,120),amount=Number(b.amount),status=String(b.status||'reported'),reference=String(b.reference||'').trim().slice(0,120);
+   if(!platform||description.length<2||!Number.isFinite(amount)||amount<=0||amount>1000000||!['reported','received'].includes(status))err('Informe plataforma, descrição e valor válido.');
+   if(status==='received'&&reference.length<4)err('Para marcar como recebido, informe uma referência pessoal do comprovante.');
+   const item={id:crypto.randomUUID(),accountId:account.id,platform,description,amount:Math.round(amount*100)/100,status,reference,createdAt:new Date().toISOString(),manual:true};
+   d.workLedger.unshift(item);await save(d);return send(res,201,{item});
+  }
+  return send(res,404,{error:'Ação Work não encontrada.'});
+ } if(req.method==='POST'&&p==='/api/google-login'){
   if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
   if(!GOOGLE_CLIENT_ID)return send(res,503,{error:'O acesso Google ainda aguarda a configuração do Client ID OAuth no servidor.'});
   const b=await body(req),credential=String(b.credential||'');if(!credential||credential.length>12000)return send(res,400,{error:'Credencial Google inválida.'});
@@ -109,26 +354,96 @@ async function handler(req,res){try{
  const session=readSession(req);if(!session)return send(res,401,{error:'Sessão expirada.'});
  const d=await load(),me=actor(session,d);if(!me)return send(res,403,{error:'Conta inativa ou sem permissão.'});
  if(req.method==='GET'&&p==='/api/me')return send(res,200,{id:me.id,role:me.role,email:me.email,name:me.name||'Administrador'});
- if(req.method==='GET'&&p==='/api/integrations/status'){if(me.role!=='admin')err('Somente administrador.',403);return send(res,200,{advertisingNetwork:{configured:false,conversionValidation:false,reason:'Nenhuma rede de anunciantes está conectada.'},partnerCampaignWebhook:{configured:Boolean(PARTNER_SECRET),conversionValidation:Boolean(process.env.WYNCORE_CONVERSION_SECRET),reason:process.env.WYNCORE_CONVERSION_SECRET?'Webhook assinado de conversões configurado; falta homologação com parceiro e conciliação de liquidação.':'Webhook de campanhas pode importar campanhas; webhook de conversões ainda não configurado.'},pix:{providerConfigured:false,payoutsEnabled:false,bankVerification:false,reason:'Provedor Pix e credenciais de integração não configurados.'},automaticPaymentTransfers:false});}
+ if(req.method==='GET'&&p==='/api/integrations/status'){if(me.role!=='admin')err('Somente administrador.',403);return send(res,200,{adscend:{configured:Adscend.configured(),provider:'Adscend Media',product:'Rewarded Video',countryAware:true,postbackConfigured:Adscend.postbackConfigured(),reason:Adscend.configured()?'API conectável; inventário e liberação de Rewarded Video dependem da aprovação e ativação pela Adscend.':'Configure ADSCEND_PUBLISHER_ID e ADSCEND_API_KEY após aprovação do publisher.'},advertisingNetwork:{configured:Adscend.configured(),conversionValidation:Boolean(process.env.ADSCEND_POSTBACK_SECRET),reason:'Inventário regional depende do país, da conta aprovada e das categorias liberadas.'},partnerCampaignWebhook:{configured:Boolean(PARTNER_SECRET),conversionValidation:Boolean(process.env.WYNCORE_CONVERSION_SECRET),reason:'A importação de campanhas depende de contrato e credenciais emitidas pelo parceiro.'},pix:{provider:'Asaas',providerConfigured:Asaas.configured(),webhookConfigured:Asaas.webhookConfigured(),payoutsEnabled:Asaas.configured()&&Asaas.webhookConfigured()&&payoutStorageSafe(),bankVerification:Asaas.configured()&&Asaas.webhookConfigured(),reason:!Asaas.configured()?'Configure ASAAS_API_KEY no ambiente do servidor.':!Asaas.webhookConfigured()?'Configure ASAAS_WEBHOOK_TOKEN.':!payoutStorageSafe()?'Saque bloqueado até usar armazenamento persistente de instância única (WYNCORE_PAYOUT_STORAGE_MODE=single_writer); Vercel Blob/serverless não oferece reserva transacional.':'Asaas e armazenamento de instância única configurados; faça testes no Sandbox antes de liberar produção.'},paypal:{provider:'PayPal Payouts',configured:Paypal.configured(),mode:Paypal.mode,reason:Paypal.configured()?'Credenciais presentes; teste sandbox e elegibilidade do país ainda são necessários.':'Configure PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET e PAYPAL_MODE no servidor.'},automaticPaymentTransfers:Asaas.configured()&&Asaas.webhookConfigured()});}
  if(req.method==='POST'&&p==='/api/campaign-feedback'){if(me.role!=='participant')err('Somente participantes podem avaliar campanhas.',403);if(limited(req,'campaign-feedback',me.id,30,3600000))return send(res,429,{error:'Limite de avaliações atingido. Tente novamente mais tarde.'});const b=await body(req),programId=String(b.programId||''),rating=Number(b.rating),comment=String(b.comment||'').trim().slice(0,300),program=d.programs.find(x=>x.id===programId&&x.status==='active'&&x.videoUrl);if(!program)err('Campanha de vídeo indisponível.',404);if(!Number.isInteger(rating)||rating<1||rating>5)err('Escolha uma avaliação entre 1 e 5.');let feedback=d.campaignFeedback.find(x=>x.programId===programId&&x.participantId===me.id);const now=new Date().toISOString();if(feedback){feedback.rating=rating;feedback.comment=comment;feedback.updatedAt=now;await save(d);return send(res,200,{ok:true,feedback,updated:true})}feedback={id:crypto.randomUUID(),programId,participantId:me.id,rating,comment,createdAt:now,updatedAt:now};d.campaignFeedback.unshift(feedback);await save(d);return send(res,201,{ok:true,feedback,updated:false});}
  if(req.method==='POST'&&p==='/api/participants'){if(me.role!=='admin')err('Somente administrador.',403);const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),phone=normalizePhone(b.phone),pass=String(b.password||'');if(name.length<2||!/^\S+@\S+\.\S+$/.test(email)||!phone||phone.length<10||phone.length>13||pass.length<10)err('Para cadastrar um participante, informe nome, e-mail válido, celular com DDD e senha com pelo menos 10 caracteres.');if(d.users.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone))||d.participants.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone)))err('Este e-mail ou telefone já está cadastrado.',409);const person=D.createParticipant(d,me,{name,email,phone});d.users.push({id:person.id,email,phone,passwordHash:await hashPassword(pass)});await save(d);return send(res,201,{ok:true,participant:{id:person.id,name:person.name,email:person.email,phone:person.phone,status:person.status},message:'Participante cadastrado. Aprove o acesso para liberar o login.'});}
 
 
 
 
+
+  if(req.method==='POST'&&p==='/api/payout-profile'){
+  if(me.role!=='participant')err('Somente participantes podem configurar recebimento.',403);
+  const b=await body(req),country=String(b.country||'').trim().toUpperCase(),email=String(b.paypalEmail||'').trim().toLowerCase();
+  if(!/^[A-Z]{2}$/.test(country))err('Informe o país usando o código ISO de duas letras.');
+  if(email&&!/^\\S+@\\S+\\.\\S+$/.test(email))err('E-mail PayPal inválido.');
+  if(country!=='BR'&&!email)err('Para recebimento internacional, informe seu e-mail PayPal.');
+  const person=d.participants.find(x=>x.id===me.id);person.payoutCountry=country;person.paypalEmailEncrypted=email?encryptSecret(email):null;person.payoutProfileUpdatedAt=new Date().toISOString();await save(d);
+  return send(res,200,{ok:true,message:'Preferência de recebimento salva com segurança.'});
+ }
+if(req.method==='POST'&&p==='/api/pix-key'){
+  if(me.role!=='participant')err('Somente participantes podem cadastrar a chave Pix.',403);
+  const b=await body(req),key=String(b.key||'').trim(),type=String(b.type||'').toUpperCase();
+  if(!['CPF','CNPJ','EMAIL','PHONE','EVP'].includes(type)||key.length<5||key.length>180)err('Informe uma chave Pix válida e seu tipo.');
+  if(type==='EMAIL'&&!/^\S+@\S+\.\S+$/.test(key))err('E-mail Pix inválido.');
+  if(type==='CPF'&&key.replace(/\\D/g,'').length!==11)err('CPF Pix precisa ter 11 dígitos.');
+  if(type==='CNPJ'&&key.replace(/\\D/g,'').length!==14)err('CNPJ Pix precisa ter 14 dígitos.');
+  if(type==='PHONE'&&key.replace(/\\D/g,'').length!==11)err('Celular Pix precisa conter DDD e 11 dígitos.');
+  const person=d.participants.find(x=>x.id===me.id);person.pixKeyEncrypted=encryptSecret(key);person.pixKeyType=type;person.pixKeyUpdatedAt=new Date().toISOString();await save(d);return send(res,200,{ok:true,message:'Chave Pix cadastrada para os repasses WYNCORE.'});
+ }
+
  if(req.method==='GET'&&p==='/api/ad-workspace'){
   const campaigns=d.adCampaigns||[],reviews=d.adReviews||[];
-  if(me.role==='admin')return send(res,200,{campaigns,reviews,advertiserInquiries:d.advertiserInquiries||[],participants:d.participants.map(x=>({id:x.id,name:x.name,email:x.email,phone:x.phone,role:x.role,status:x.status,createdAt:x.createdAt})),summary:{campaigns:campaigns.length,open:campaigns.filter(x=>x.status==='open').length,reviews:reviews.length,pending:reviews.filter(x=>x.status==='pending').length,accepted:reviews.filter(x=>x.status==='accepted').length,contracted:campaigns.reduce((n,x)=>n+(Number(x.contractValue)||0),0),received:campaigns.filter(x=>x.contractStatus==='received').reduce((n,x)=>n+(Number(x.contractValue)||0),0)}});
+  if(me.role==='admin')return send(res,200,{campaigns,reviews,earnings:d.adEarnings||[],adscendConversions:d.adscendConversions||[],adscendIntegration:{configured:Adscend.configured(),postbackConfigured:Adscend.postbackConfigured(),postbackUrl:Adscend.postbackConfigured()&&process.env.WYNCORE_PUBLIC_URL?String(process.env.WYNCORE_PUBLIC_URL).replace(/\/$/,'')+'/api/webhooks/adscend?token='+encodeURIComponent(process.env.ADSCEND_POSTBACK_SECRET)+'&user=[SB1]&time=[UTS]&ip=[IP]&offer=[SB2]&pay=[PAY]&cur=[CUR]':null},payoutIntegration:{configured:Asaas.configured(),webhookConfigured:Asaas.webhookConfigured(),storageSafe:payoutStorageSafe(),ready:Asaas.configured()&&Asaas.webhookConfigured()&&payoutStorageSafe(),storage:Storage.databaseConfigured()?'PostgreSQL transacional':process.env.BLOB_READ_WRITE_TOKEN?'Vercel Blob (saques bloqueados)':'JSON em disco',reason:!Asaas.configured()?'Configure ASAAS_API_KEY.':!Asaas.webhookConfigured()?'Configure ASAAS_WEBHOOK_TOKEN com 32 a 255 caracteres.':!payoutStorageSafe()?'Configure DATABASE_URL ou disco persistente de instância única com DATA_DIR e WYNCORE_PAYOUT_STORAGE_MODE=single_writer.':'Armazenamento e Asaas configurados. Homologue no Sandbox antes de produção.'},paypalIntegration:{configured:Paypal.configured(),mode:Paypal.mode},advertiserInquiries:d.advertiserInquiries||[],participants:d.participants.map(x=>({id:x.id,name:x.name,email:x.email,phone:x.phone,role:x.role,status:x.status,createdAt:x.createdAt,pixKeyType:x.pixKeyType,pixKeyConfigured:Boolean(x.pixKeyEncrypted),payoutCountry:x.payoutCountry||'BR',paypalEmailConfigured:Boolean(x.paypalEmailEncrypted)})),summary:{campaigns:campaigns.length,open:campaigns.filter(x=>x.status==='open').length,reviews:reviews.length,pending:reviews.filter(x=>x.status==='pending').length,accepted:reviews.filter(x=>x.status==='accepted').length,contracted:campaigns.reduce((n,x)=>n+(Number(x.contractValue)||0),0),received:campaigns.filter(x=>x.contractStatus==='received').reduce((n,x)=>n+(Number(x.contractValue)||0),0)}});
   if(me.role!=='participant')err('Acesso não permitido.',403);
-  const mine=reviews.filter(x=>x.participantId===me.id);return send(res,200,{campaigns:campaigns.filter(x=>x.status==='open'),reviews:mine,campaignHistory:Object.fromEntries(mine.map(r=>{const c=campaigns.find(x=>x.id===r.campaignId);return [r.campaignId,c?c.title:'Campanha encerrada']}))});
+  const mine=reviews.filter(x=>x.participantId===me.id);const earnings=(d.adEarnings||[]).filter(x=>x.participantId===me.id);const withdrawable=earnings.filter(x=>x.status==='approved_unpaid'&&(x.provider==='adscend'&&x.providerConfirmed===true||(d.adCampaigns||[]).some(c=>c.id===x.campaignId&&c.contractStatus==='received')));const availableForPix=Math.round(withdrawable.reduce((n,x)=>n+Number(x.amount||0),0)*100)/100;return send(res,200,{campaigns:campaigns.filter(x=>x.status==='open'),reviews:mine,earnings,earningSummary:{approvedUnpaid:earnings.filter(x=>x.status==='approved_unpaid').reduce((n,x)=>n+x.amount,0),availableForPix,paid:earnings.filter(x=>x.status==='paid').reduce((n,x)=>n+x.amount,0)},adscendConversions:(d.adscendConversions||[]).filter(x=>x.participantId===me.id),payoutProfile:{country:me.payoutCountry||'BR',pixKeyConfigured:Boolean(me.pixKeyEncrypted),paypalEmailConfigured:Boolean(me.paypalEmailEncrypted)},campaignHistory:Object.fromEntries(mine.map(r=>{const c=campaigns.find(x=>x.id===r.campaignId);return [r.campaignId,c?c.title:'Campanha encerrada']}))});
+ }
+ if(req.method==='GET'&&p==='/api/adscend/offers'){
+  if(me.role!=='participant')err('Somente participantes podem consultar campanhas.',403);
+  const forwarded=String(req.headers['x-forwarded-for']||'').split(',')[0].trim();
+  const country=Adscend.countryCode(req.headers['x-vercel-ip-country']||req.headers['cf-ipcountry']||req.headers['cloudfront-viewer-country']||process.env.ADSCEND_DEFAULT_COUNTRY||'BR');
+  if(!country)return send(res,422,{error:'País não identificado pela conexão. A consulta foi bloqueada para evitar ofertas de outra região.'});
+  try{
+   const result=await Adscend.getRewardedVideos({country,userId:me.id});
+   d.adscendOfferSnapshots||=[];for(const offer of result.offers){d.adscendOfferSnapshots=d.adscendOfferSnapshots.filter(x=>!(x.participantId===me.id&&x.offerId===offer.id));d.adscendOfferSnapshots.unshift({participantId:me.id,offerId:offer.id,country,publisherPayoutUsd:offer.publisherPayoutUsd,participantEstimateUsd:offer.participantEstimateUsd,fetchedAt:new Date().toISOString()})}if(d.adscendOfferSnapshots.length>5000)d.adscendOfferSnapshots=d.adscendOfferSnapshots.slice(0,5000);await save(d);
+   return send(res,200,{ok:true,...result,source:'Adscend Media',currency:'USD',rewardIsEstimate:true});
+  }catch(e){return send(res,e.status||502,{error:e.status?e.message:'Não foi possível consultar a Adscend agora.'})}
+ }
+ if(req.method==='POST'&&p==='/api/integrations/asaas/webhook'){
+  if(me.role!=='admin')err('Somente administração.',403);
+  const publicUrl=String(process.env.WYNCORE_PUBLIC_URL||'').replace(/\/$/,'');
+  const notifyEmail=String(process.env.WYNCORE_LEADS_TO||'').trim();
+  if(!publicUrl||!/^https:\/\//i.test(publicUrl))err('Configure WYNCORE_PUBLIC_URL com o endereço HTTPS público da aplicação.',503);
+  if(!/^\S+@\S+\.\S+$/.test(notifyEmail))err('Configure WYNCORE_LEADS_TO com o e-mail que receberá alertas.',503);
+  if(!Asaas.webhookConfigured())err('Configure ASAAS_WEBHOOK_TOKEN com 32 a 255 caracteres, sem espaços.',503);
+  const d=await load();
+  if(d.asaasWebhookId)return send(res,200,{ok:true,alreadyConfigured:true,id:d.asaasWebhookId,url:d.asaasWebhookUrl});
+  const created=await Asaas.createWebhook({url:publicUrl+'/api/webhooks/asaas',email:notifyEmail});
+  d.asaasWebhookId=created.id;d.asaasWebhookUrl=publicUrl+'/api/webhooks/asaas';d.asaasWebhookCreatedAt=new Date().toISOString();await save(d);
+  return send(res,201,{ok:true,id:created.id,url:d.asaasWebhookUrl,message:'Webhook Asaas criado. Faça uma cobrança de teste no Sandbox e confirme o evento recebido.'});
  }
  if(req.method==='POST'&&p==='/api/ad-campaigns'){
   if(me.role!=='admin')err('Somente administração pode criar campanhas.',403);
-  const b=await body(req),title=String(b.title||'').trim().slice(0,120),client=String(b.client||'').trim().slice(0,120),brief=String(b.brief||'').trim().slice(0,3000),channel=String(b.channel||'digital'),objective=String(b.objective||'').trim().slice(0,500),mediaUrl=String(b.mediaUrl||'').trim().slice(0,2000),value=Number(b.contractValue||0);
-  if(title.length<3||client.length<2||brief.length<30||!['digital','video','social','display','other'].includes(channel)||!Number.isFinite(value)||value<0||value>100000000)err('Informe título, empresa, briefing com pelo menos 30 caracteres e valor de contrato válido.');if(mediaUrl){let u;try{u=new URL(mediaUrl)}catch{}if(!u||u.protocol!=='https:'||u.username||u.password)err('O link do anúncio precisa ser HTTPS válido.');}
-  const c={id:crypto.randomUUID(),title,client,brief,channel,objective,mediaUrl,contractValue:value,contractStatus:'not_recorded',status:'draft',createdBy:me.id,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+  const b=await body(req),title=String(b.title||'').trim().slice(0,120),client=String(b.client||'').trim().slice(0,120),brief=String(b.brief||'').trim().slice(0,3000),channel=String(b.channel||'digital'),objective=String(b.objective||'').trim().slice(0,500),mediaUrl=String(b.mediaUrl||'').trim().slice(0,2000),value=Number(b.contractValue||0),reward=Number(b.rewardPerReview||0),maxParticipants=Number(b.maxParticipants||0),requiredWatchSeconds=Number(b.requiredWatchSeconds||8),advertiserDocument=String(b.advertiserDocument||'').replace(/\\D/g,'').slice(0,14),advertiserEmail=String(b.advertiserEmail||'').trim().toLowerCase(),advertiserPhone=normalizePhone(b.advertiserPhone);
+  if(title.length<3||client.length<2||brief.length<30||!['digital','video','social','display','other'].includes(channel)||!Number.isFinite(value)||value<0||value>100000000||!Number.isFinite(reward)||reward<0||reward>100000||!Number.isInteger(maxParticipants)||maxParticipants<0||maxParticipants>100000||!Number.isInteger(requiredWatchSeconds)||requiredWatchSeconds<8||requiredWatchSeconds>3600)err('Confira título, empresa, briefing, contrato, recompensa, vagas e tempo mínimo de vídeo (8 a 3600 segundos).');
+  if(reward>0&&maxParticipants>0&&reward*maxParticipants>value)err('O orçamento do contrato não cobre a soma das recompensas previstas.');
+  if(mediaUrl){let u;try{u=new URL(mediaUrl)}catch{}if(!u||u.protocol!=='https:'||u.username||u.password)err('O link do anúncio precisa ser HTTPS válido.');}
+  if(channel==='video'&&!mediaUrl)err('Campanhas de vídeo precisam ter um link HTTPS do anúncio ou trailer.');
+  if(channel==='video'&&mediaUrl&&!isPlayableAdMedia(mediaUrl))err('Este link não é um vídeo compatível. Use um vídeo MP4/WebM/OGG, YouTube ou Vimeo válido.');
+  const c={id:crypto.randomUUID(),title,client,brief,channel,objective,mediaUrl,advertiserDocument,advertiserEmail,advertiserPhone,contractValue:value,rewardPerReview:reward,maxParticipants,requiredWatchSeconds,contractStatus:'not_recorded',status:'draft',createdBy:me.id,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
   d.adCampaigns.unshift(c);d.audit.unshift({id:crypto.randomUUID(),actorId:me.id,type:'ad_campaign_created',entityId:c.id,details:{client},at:new Date().toISOString()});await save(d);return send(res,201,c);
  }
+
+ let adMatch=p.match(/^\/api\/ad-campaigns\/([\w-]+)\/pix$/);
+ if(req.method==='GET'&&adMatch){
+  if(me.role!=='admin')err('Somente administração.',403);
+  const c=(d.adCampaigns||[]).find(x=>x.id===adMatch[1]);if(!c?.asaasPaymentId)err('Ainda não existe cobrança Pix para esta campanha.',404);
+  const qr=await Asaas.getPixQrCode(c.asaasPaymentId);return send(res,200,{ok:true,paymentId:c.asaasPaymentId,payload:qr.payload,encodedImage:qr.encodedImage,expirationDate:qr.expirationDate});
+ }
+ if(req.method==='POST'&&adMatch){
+  if(me.role!=='admin')err('Somente administração.',403);
+  const c=(d.adCampaigns||[]).find(x=>x.id===adMatch[1]);if(!c)return send(res,404,{error:'Campanha não encontrada.'});
+  if(c.contractStatus==='received')err('Esta campanha já está paga.',409);
+  if(!Number(c.contractValue)||!c.advertiserDocument||!c.advertiserEmail)err('Cadastre CPF/CNPJ e e-mail do contratante antes de gerar o Pix.');
+  if(c.asaasPaymentId)err('Esta campanha já possui uma cobrança Pix. Consulte a cobrança existente antes de gerar outra.',409);
+  const customer=c.asaasCustomerId?{id:c.asaasCustomerId}:await Asaas.createCustomer({name:c.client,cpfCnpj:c.advertiserDocument,email:c.advertiserEmail,mobilePhone:c.advertiserPhone,externalReference:'wyncore-client:'+c.id});
+  c.asaasCustomerId=customer.id;await save(d);
+  const payment=await Asaas.createPixCharge({customer:customer.id,value:c.contractValue,description:'WYNCORE - '+c.title,externalReference:'wyncore-campaign:'+c.id});
+  c.asaasPaymentId=payment.id;c.contractStatus='awaiting_pix';c.pixCreatedAt=new Date().toISOString();await save(d);
+  const qr=await Asaas.getPixQrCode(payment.id);
+  return send(res,201,{ok:true,paymentId:payment.id,invoiceUrl:payment.invoiceUrl||null,payload:qr.payload,encodedImage:qr.encodedImage,expirationDate:qr.expirationDate});
+ }
+
  let leadMatch=p.match(/^\/api\/advertiser-inquiries\/([\w-]+)\/(contacted|decline|create-campaign)$/);
  if(req.method==='POST'&&leadMatch){
   if(me.role!=='admin')err('Somente administração.',403);
@@ -139,15 +454,16 @@ async function handler(req,res){try{
    if(lead.status==='converted')err('Solicitação já convertida.',409);
    const b=await body(req),title=String(b.title||('Pesquisa para '+lead.company)).trim().slice(0,120),brief=String(b.brief||lead.objective).trim().slice(0,3000);
    if(title.length<3||brief.length<30)err('Título ou briefing inválido.');
-   const c={id:crypto.randomUUID(),title,client:lead.company,brief,channel:'digital',objective:lead.objective,contractValue:0,contractStatus:'not_recorded',status:'draft',createdBy:me.id,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),leadId:lead.id};
+   const c={id:crypto.randomUUID(),title,client:lead.company,brief,channel:lead.channel||'video',objective:lead.objective,mediaUrl:lead.mediaUrl||'',contractValue:0,advertiserDocument:lead.cpfCnpj||'',advertiserEmail:lead.email||'',advertiserPhone:lead.phone||'',contractStatus:'not_recorded',status:'draft',createdBy:me.id,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),leadId:lead.id};
    d.adCampaigns.unshift(c);lead.status='converted';lead.campaignId=c.id;lead.updatedAt=new Date().toISOString();
   }
   await save(d);return send(res,200,{ok:true,lead});
  }
- let adMatch=p.match(/^\/api\/ad-campaigns\/([\w-]+)\/(open|pause|complete)$/);
+ adMatch=p.match(/^\/api\/ad-campaigns\/([\w-]+)\/(open|pause|complete)$/);
  if(req.method==='POST'&&adMatch){
   if(me.role!=='admin')err('Somente administração.',403);
   const c=(d.adCampaigns||[]).find(x=>x.id===adMatch[1]);if(!c)return send(res,404,{error:'Campanha não encontrada.'});
+  if(adMatch[2]==='open'&&(Number(c.contractValue)<=0||c.contractStatus!=='received'))err('Campanha não pode ser publicada: confirme primeiro o recebimento real do orçamento do contratante.',409);if(adMatch[2]==='open'&&(!Number(c.rewardPerReview)||!Number(c.maxParticipants)||!isPlayableAdMedia(c.mediaUrl)))err('Para publicar, informe recompensa por avaliação, limite de participantes e um vídeo compatível e acessível.',409);if(adMatch[2]==='open'&&Number(c.rewardPerReview)*Number(c.maxParticipants)>Number(c.contractValue))err('O orçamento não cobre as recompensas previstas.',409);
   c.status=({open:'open',pause:'paused',complete:'completed'})[adMatch[2]];c.updatedAt=new Date().toISOString();await save(d);return send(res,200,c);
  }
  adMatch=p.match(/^\/api\/ad-campaigns\/([\w-]+)\/contract-payment$/);
@@ -162,20 +478,74 @@ async function handler(req,res){try{
   if(limited(req,'ad-review',me.id,20,3600000))return send(res,429,{error:'Limite de avaliações por hora atingido.'});
   const b=await body(req),campaignId=String(b.campaignId||''),clarity=Number(b.clarity),trust=Number(b.trust),relevance=Number(b.relevance),comment=String(b.comment||'').trim().slice(0,1200);
   const c=(d.adCampaigns||[]).find(x=>x.id===campaignId&&x.status==='open');if(!c)err('Campanha não está aberta para avaliações.',404);
+  if(!isPlayableAdMedia(c.mediaUrl))err('Este vídeo está indisponível para avaliação. Nenhuma avaliação foi registrada.',409);
   if(![clarity,trust,relevance].every(x=>Number.isInteger(x)&&x>=1&&x<=5)||comment.length<20)err('Avalie os três critérios de 1 a 5 e escreva um comentário de pelo menos 20 caracteres.');
   if((d.adReviews||[]).some(x=>x.campaignId===campaignId&&x.participantId===me.id))err('Você já enviou uma avaliação para esta campanha.',409);
   const review={id:crypto.randomUUID(),campaignId,participantId:me.id,clarity,trust,relevance,comment,status:'pending',createdAt:new Date().toISOString()};
   d.adReviews.unshift(review);d.audit.unshift({id:crypto.randomUUID(),actorId:me.id,type:'ad_review_submitted',entityId:review.id,details:{campaignId},at:new Date().toISOString()});await save(d);return send(res,201,review);
  }
+
+ async function tryAutomaticPix(earning,d){
+  const participant=(d.participants||[]).find(x=>x.id===earning.participantId),campaign=(d.adCampaigns||[]).find(x=>x.id===earning.campaignId);
+  if(!Asaas.configured()||!Asaas.webhookConfigured()||!participant?.pixKeyEncrypted||!participant?.pixKeyType||campaign?.contractStatus!=='received')return false;
+  try{
+   const transfer=await Asaas.transferPix({value:earning.amount,pixAddressKey:decryptSecret(participant.pixKeyEncrypted),pixAddressKeyType:participant.pixKeyType,description:'WYNCORE recompensa',externalReference:'wyncore-earning:'+earning.id});
+   earning.asaasTransferId=transfer.id;earning.status='payout_pending';earning.payoutRequestedAt=new Date().toISOString();earning.payoutError=null;return true;
+  }catch(e){earning.payoutError=String(e.message||'Falha ao iniciar Pix').slice(0,300);return false;}
+ }
+
  adMatch=p.match(/^\/api\/ad-reviews\/([\w-]+)\/(accept|reject)$/);
  if(req.method==='POST'&&adMatch){
   if(me.role!=='admin')err('Somente administração.',403);
   const review=(d.adReviews||[]).find(x=>x.id===adMatch[1]);if(!review)return send(res,404,{error:'Avaliação não encontrada.'});
   const b=await body(req),note=String(b.note||'').trim().slice(0,500);if(review.status!=='pending')err('Esta avaliação já foi revisada.',409);
-  review.status=adMatch[2]==='accept'?'accepted':'rejected';review.reviewNote=note;review.reviewedBy=me.id;review.reviewedAt=new Date().toISOString();await save(d);return send(res,200,review);
+  review.status=adMatch[2]==='accept'?'accepted':'rejected';review.reviewNote=note;review.reviewedBy=me.id;review.reviewedAt=new Date().toISOString();if(review.status==='accepted'){const campaign=(d.adCampaigns||[]).find(x=>x.id===review.campaignId);if(campaign&&Number(campaign.rewardPerReview)>0){const already=(d.adEarnings||[]).some(x=>x.reviewId===review.id);if(!already){d.adEarnings||=[];const count=d.adEarnings.filter(x=>x.campaignId===campaign.id).length;if(count>=Number(campaign.maxParticipants))err('Limite remunerado desta campanha já foi atingido.',409);d.adEarnings.unshift({id:crypto.randomUUID(),reviewId:review.id,campaignId:campaign.id,participantId:review.participantId,amount:Number(campaign.rewardPerReview),status:'approved_unpaid',createdAt:new Date().toISOString()});}}}await save(d);return send(res,200,review);
  }
 
 
+
+ adMatch=p.match(/^\/api\/ad-earnings\/([\w-]+)\/pay-pix$/);
+ if(req.method==='POST'&&adMatch){
+  if(me.role!=='admin')err('Somente administração.',403);
+  const earning=(d.adEarnings||[]).find(x=>x.id===adMatch[1]);if(!earning)return send(res,404,{error:'Recompensa não encontrada.'});
+  if(earning.status!=='approved_unpaid')err('A recompensa não está aguardando Pix.',409);
+  const campaign=(d.adCampaigns||[]).find(x=>x.id===earning.campaignId);if(campaign?.contractStatus!=='received')err('O orçamento da campanha ainda não foi recebido.',409);
+  if(!Asaas.configured()||!Asaas.webhookConfigured())err('Configure Asaas e o webhook antes de realizar Pix automático.',503);
+  const ok=await tryAutomaticPix(earning,d);await save(d);if(!ok)err(earning.payoutError||'Cadastre uma chave Pix válida para o participante.',400);
+  return send(res,202,{ok:true,status:earning.status,transferId:earning.asaasTransferId,message:'Pix solicitado. A confirmação final chegará pelo webhook Asaas.'});
+ }
+
+ adMatch=p.match(/^\/api\/ad-earnings\/([\w-]+)\/mark-paid$/);
+ if(req.method==='POST'&&adMatch){
+  if(me.role!=='admin')err('Somente administração.',403);
+  const earning=(d.adEarnings||[]).find(x=>x.id===adMatch[1]);if(!earning)return send(res,404,{error:'Lançamento não encontrado.'});
+  if(earning.status!=='approved_unpaid')err('Este lançamento não está aguardando pagamento.',409);
+  const b=await body(req),reference=String(b.reference||'').trim().slice(0,160);if(reference.length<4)err('Informe a referência de um pagamento realmente realizado.');
+  earning.status='paid';earning.paymentReference=reference;earning.paidAt=new Date().toISOString();earning.paidBy=me.id;await save(d);return send(res,200,earning);
+ }
+ adMatch=p.match(/^\/api\/ad-earnings\/([\w-]+)\/pay-paypal$/);
+ if(req.method==='POST'&&adMatch){
+  if(me.role!=='admin')err('Somente administração.',403);
+  const earning=(d.adEarnings||[]).find(x=>x.id===adMatch[1]);if(!earning)return send(res,404,{error:'Recompensa não encontrada.'});
+  if(earning.status!=='approved_unpaid')err('A recompensa não está aguardando pagamento.',409);
+  if(!Paypal.configured())err('Configure PAYPAL_CLIENT_ID e PAYPAL_CLIENT_SECRET no servidor.',503);
+  const participant=(d.participants||[]).find(x=>x.id===earning.participantId);
+  if(!participant?.paypalEmailEncrypted||!participant.payoutCountry||participant.payoutCountry==='BR')err('Este participante não possui perfil internacional PayPal válido.',400);
+  if(earning.paypalBatchId)err('Já existe um lote PayPal para esta recompensa. Consulte o estado antes de tentar novamente.',409);
+  const payout=await Paypal.createPayout({email:decryptSecret(participant.paypalEmailEncrypted),amount:earning.amount,currency:earning.currency||'BRL',earningId:earning.id});
+  const header=payout.batch_header||{};earning.paypalBatchId=header.payout_batch_id||null;earning.paypalBatchStatus=header.batch_status||'PENDING';earning.paypalMode=Paypal.mode;earning.status='payout_pending';earning.payoutProvider='paypal';earning.payoutRequestedAt=new Date().toISOString();await save(d);
+  return send(res,202,{ok:true,status:earning.status,batchId:earning.paypalBatchId,batchStatus:earning.paypalBatchStatus,message:'Lote enviado ao PayPal. Confirme o estado final antes de considerar o pagamento concluído.'});
+ }
+ adMatch=p.match(/^\/api\/ad-earnings\/([\w-]+)\/paypal-status$/);
+ if(req.method==='POST'&&adMatch){
+  if(me.role!=='admin')err('Somente administração.',403);
+  const earning=(d.adEarnings||[]).find(x=>x.id===adMatch[1]);if(!earning||earning.payoutProvider!=='paypal'||!earning.paypalBatchId)err('Lote PayPal não encontrado.',404);
+  const result=await Paypal.getBatch(earning.paypalBatchId),header=result.batch_header||{};earning.paypalBatchStatus=header.batch_status||earning.paypalBatchStatus;earning.paypalCheckedAt=new Date().toISOString();
+  const item=(result.items||[])[0],itemStatus=String(item?.transaction_status||'').toUpperCase();
+  if(['SUCCESS','SUCCESS_WITH_WARNING'].includes(earning.paypalBatchStatus)&&itemStatus==='SUCCESS'){earning.status='paid';earning.paidAt=earning.paypalCheckedAt;earning.paymentReference=item.payout_item_id||earning.paypalBatchId}
+  else if(['DENIED','CANCELED','RETURNED'].includes(earning.paypalBatchStatus)||['FAILED','BLOCKED','RETURNED','REFUNDED','ONHOLD','UNCLAIMED'].includes(itemStatus)){earning.status='approved_unpaid';earning.payoutError='PayPal: '+(itemStatus||earning.paypalBatchStatus);earning.payoutProvider=null;earning.paypalBatchId=null}
+  await save(d);return send(res,200,{ok:true,status:earning.status,batchStatus:earning.paypalBatchStatus});
+ }
  if(req.method==='GET'&&p==='/api/ad-report.csv'){
   if(me.role!=='admin')err('Relatório restrito à administração.',403);
   const campaigns=d.adCampaigns||[],reviews=d.adReviews||[];

@@ -1,0 +1,27 @@
+name: WYNCORE tests
+
+on:
+  push:
+    branches:
+      - wyncore-personal-work-hub
+  pull_request:
+    branches:
+      - wyncore-platform-rebuild
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: wyncore
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run tests
+        run: npm test

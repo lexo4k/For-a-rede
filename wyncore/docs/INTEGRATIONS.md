@@ -40,29 +40,31 @@ Exemplo de evento:
 
 Estados aceitos: `approved` (em análise, sem saldo disponível), `settled` (receita liquidada ao publisher, credita a participação) e `reversed` (estorna uma conversão anteriormente liquidada). Eventos repetidos são idempotentes por `eventId`; a mesma transação não pode mudar de participante ou campanha. O percentual de repasse usa `WYNCORE_REWARD_SHARE_PERCENT` (padrão 60%, limitado de 1% a 90%). O percentual precisa ser definido no contrato e nos termos publicados antes de operar. Este endpoint genérico ainda exige homologação e mapeamento específico do parceiro; não significa que uma rede esteja conectada.
 
-## 2. Provedor Pix / pagamentos
+## 2. Provedor Pix Asaas
 
-O código atual não contém um adaptador de provedor Pix conectado. A rota de pagamento permanece bloqueada para impedir registros falsos.
+O adaptador Asaas está implementado em `asaas.js`. Ele utiliza os endpoints oficiais para cadastrar pagador, criar cobrança Pix, obter QR Code e transferir para chave Pix.
 
-Para implementar um adaptador real, o provedor empresarial precisa oferecer e documentar:
-- API oficial para transferência Pix de saída para destinatário autorizado;
-- autenticação server-to-server e ambiente de homologação;
-- consulta de status da transferência;
-- identificador de idempotência para impedir pagamento duplicado;
-- webhook assinado para confirmação, falha, devolução e atualização de status;
-- limites, tarifas, políticas de prevenção a fraude e suporte a conta empresarial;
-- documentação dos campos do destinatário e regras de validação da chave Pix.
+Variáveis secretas do servidor:
+- `ASAAS_ENV=sandbox` durante homologação;
+- `ASAAS_API_KEY` da mesma conta/ambiente;
+- `ASAAS_WEBHOOK_TOKEN` próprio, aleatório, com pelo menos 32 caracteres;
+- `ASAAS_BASE_URL` é opcional. Por padrão, Sandbox usa `https://api-sandbox.asaas.com/v3` e Produção usa `https://api.asaas.com/v3`.
 
-O adaptador deve seguir este ciclo:
-1. Confirmar receita disponível e liquidada.
-2. Calcular valor devido segundo regras publicadas.
-3. Criar solicitação única e idempotente.
-4. Enviar a ordem ao provedor sem expor credenciais ao navegador.
-5. Aguardar confirmação verificável do provedor.
-6. Atualizar livro-caixa somente após confirmação.
-7. Tratar falhas, devoluções, reprocessamento e conciliação sem duplicar transferências.
+Configure o webhook `POST https://SEU-DOMINIO/api/webhooks/asaas`, com header `asaas-access-token` igual a `ASAAS_WEBHOOK_TOKEN`. Eventos mínimos: `PAYMENT_RECEIVED`, `TRANSFER_DONE`, `TRANSFER_FAILED`, `TRANSFER_CANCELLED`.
 
-Não se deve inventar URL, endpoint, formato de autenticação ou payload. Cada um depende da documentação oficial do provedor escolhido.
+Fluxo de recebimento:
+1. O sistema cadastra o pagador no Asaas com nome, CPF/CNPJ, e-mail e telefone.
+2. Cria cobrança `PIX` com referência externa `wyncore-campaign:<id>`.
+3. Exibe QR Code dinâmico e Pix copia-e-cola.
+4. Só libera a campanha quando recebe `PAYMENT_RECEIVED`, autentica o webhook, confere o ID da cobrança e confirma que o valor recebido cobre o contrato.
+
+Fluxo de repasse:
+1. A chave Pix do participante é armazenada criptografada com AES-256-GCM.
+2. Ao aprovar avaliação de campanha financiada, WYNCORE solicita transferência Pix com referência `wyncore-earning:<id>`.
+3. O lançamento fica em `payout_pending` enquanto o Asaas processa.
+4. Somente `TRANSFER_DONE` altera o estado para `paid`. Falha/cancelamento retorna a recompensa para `approved_unpaid`.
+
+O mesmo evento de webhook não é processado duas vezes. A chave da API nunca é enviada ao navegador. A conta Asaas precisa estar aprovada e ter saldo disponível; o envio de uma transferência não equivale a confirmação de pagamento.
 
 ## 3. Segredos e operação
 

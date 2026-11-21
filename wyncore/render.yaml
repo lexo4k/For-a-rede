@@ -19,3 +19,9 @@ services:
         sync: false
       - key: WYNCORE_SESSION_SECRET
         generateValue: true
+      - key: ASAAS_ENV
+        value: sandbox
+      - key: ASAAS_API_KEY
+        sync: false
+      - key: ASAAS_WEBHOOK_TOKEN
+        sync: false
