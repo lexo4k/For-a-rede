@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#07111f"><title>Carteira | WYNCORE</title>
+<link rel="stylesheet" href="/wallet.css">
+</head>
+<body>
+<div class="wallet-shell">
+<header class="wallet-top">
+  <a class="brand" href="/"><span class="brand-mark">W</span><span>WYNCORE<small>CARTEIRA DIGITAL</small></span></a>
+  <a class="back-link" href="/">Voltar ao painel</a>
+</header>
+<main>
+  <section class="wallet-heading"><div><p class="eyebrow">CENTRAL FINANCEIRA</p><h1>Sua carteira.</h1><p>Depósitos, saldo confirmado e movimentações em um único lugar.</p></div><div class="secure-label"><span></span> Conexão protegida</div></section>
+  <section class="balance-card">
+    <div class="balance-head"><span>Saldo confirmado</span><span class="balance-currency">BRL · REAL</span></div>
+    <strong id="balance">R$ 0,00</strong>
+    <div class="balance-foot"><span id="balance-note">Consultando registros financeiros...</span><span id="pix-pill" class="pill">PIX verificando</span></div>
+  </section>
+  <section class="action-grid">
+    <article class="action-card">
+      <div class="card-icon">↓</div><h2>Adicionar saldo</h2>
+      <p>Gere uma cobrança Pix. O saldo só será atualizado após confirmação do pagamento pelo provedor.</p>
+      <form id="deposit-form">
+        <label for="deposit-amount">Valor do depósito</label>
+        <div class="amount-field"><span>R$</span><input id="deposit-amount" type="number" min="5" max="5000" step="0.01" value="10.00" required></div>
+        <label id="payer-email-label" class="email-field hidden" for="payer-email">E-mail do pagador</label>
+        <input id="payer-email" class="email-field hidden" type="email" placeholder="voce@email.com">
+        <button id="deposit-button" class="primary" type="submit" disabled>Preparar depósito Pix</button>
+        <p id="deposit-message" class="message" role="status">Verificando disponibilidade do Pix...</p>
+      </form>
+    </article>
+    <article class="action-card secondary-card">
+      <div class="card-icon">↑</div><h2>Retirar saldo</h2>
+      <p>Os saques serão liberados quando o provedor de transferências Pix estiver conectado e validado.</p>
+      <button class="secondary" id="withdraw-button" type="button" disabled>Saques indisponíveis</button>
+      <p class="message">Nenhum valor será debitado enquanto os repasses não estiverem habilitados.</p>
+    </article>
+  </section>
+  <section id="pix-result" class="pix-result hidden">
+    <div><p class="eyebrow">COBRANÇA GERADA</p><h2>Conclua o pagamento no seu banco</h2><p id="pix-expiry">Aguardando pagamento.</p></div>
+    <div class="qr-wrap"><img id="pix-qr" alt="QR Code Pix" class="hidden"><div id="qr-fallback" class="qr-fallback">QR Code será exibido aqui</div></div>
+    <label for="pix-copy">Pix copia e cola</label><textarea id="pix-copy" readonly rows="4"></textarea>
+    <div class="button-row"><button id="copy-pix" class="secondary" type="button">Copiar código Pix</button><a id="ticket-link" class="text-link hidden" target="_blank" rel="noopener noreferrer">Abrir cobrança</a></div>
+    <p class="message">A confirmação é automática após o provedor informar o pagamento aprovado. Não envie comprovantes pelo aplicativo.</p>
+  </section>
+  <section class="history-section">
+    <div class="section-title"><div><p class="eyebrow">EXTRATO</p><h2>Movimentações</h2></div><button id="refresh-wallet" class="secondary small" type="button">Atualizar</button></div>
+    <div id="history" class="history-list"><p class="empty">Carregando extrato...</p></div>
+  </section>
+  <footer>WYNCORE · Valores confirmados por provedor são separados de depósitos pendentes e estimativas.</footer>
+</main>
+</div>
+<script src="/wallet.js" defer></script>
+</body></html>
