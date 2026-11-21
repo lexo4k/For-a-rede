@@ -76,21 +76,23 @@ async function withTransaction(work) {
       p_secret: process.env.WYNCORE_SUPABASE_RPC_SECRET
     });
     const initialState = result?.state ?? null;
-    const value = await context.run({
+    return context.run({
       mode: 'supabase-rpc',
       state: initialState,
       updatedAt: result?.updated_at ?? null,
       dirty: false
-    }, work);
-    const current = context.getStore();
-    if (current?.dirty) {
-      await supabaseRpc('wyncore_state_write', {
-        p_secret: process.env.WYNCORE_SUPABASE_RPC_SECRET,
-        p_expected_updated_at: current.updatedAt,
-        p_state: current.state
-      });
-    }
-    return value;
+    }, async () => {
+      const value = await work();
+      const current = context.getStore();
+      if (current?.dirty) {
+        await supabaseRpc('wyncore_state_write', {
+          p_secret: process.env.WYNCORE_SUPABASE_RPC_SECRET,
+          p_expected_updated_at: current.updatedAt,
+          p_state: current.state
+        });
+      }
+      return value;
+    });
   }
 
   if (!String(process.env.DATABASE_URL || '').trim()) return work();
