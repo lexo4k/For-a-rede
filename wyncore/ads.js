@@ -66,7 +66,7 @@ function mediaFrame(raw,campaignId){
    if(id){provider='youtube';playerId='yt-'+safeId;src='https://www.youtube-nocookie.com/embed/'+encodeURIComponent(id)+'?enablejsapi=1&origin='+encodeURIComponent(location.origin)+'&rel=0&playsinline=1'}
   }else if(host==='vimeo.com'||host.endsWith('.vimeo.com')){
    const id=u.pathname.split('/').filter(Boolean).pop();
-   if(id&&/^\\d+$/.test(id)){provider='vimeo';playerId='vm-'+safeId;src='https://player.vimeo.com/video/'+id+'?dnt=1&title=0&byline=0'}
+   if(id&&/^\d+$/.test(id)){provider='vimeo';playerId='vm-'+safeId;src='https://player.vimeo.com/video/'+id+'?dnt=1&title=0&byline=0'}
   }
   if(src)return '<div class="media-frame"><iframe id="'+playerId+'" data-provider="'+provider+'" title="Material de campanha" src="'+esc(src)+'" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>';
   const ext=u.pathname.toLowerCase().split('.').pop();
