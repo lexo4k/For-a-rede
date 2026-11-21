@@ -46,7 +46,7 @@ async function notifyAdvertiserLead(lead){
   'Material: '+(lead.mediaUrl||'não informado'),
   'Objetivo: '+lead.objective,
   'Lead ID: '+lead.id
- ].join('\\n');
+ ].join('\n');
  try{
   const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+apiKey,'Content-Type':'application/json'},body:JSON.stringify({from,to:[to],subject:'Novo lead WYNCORE: '+lead.company,text:textBody})});
   if(!response.ok)return {status:'failed'};
