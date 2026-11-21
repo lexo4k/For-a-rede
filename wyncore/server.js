@@ -58,9 +58,7 @@ async function handler(req,res){try{
  if(req.method==='POST'&&p==='/api/advertiser-inquiries'){
   if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
   if(limited(req,'advertiser-inquiry',String(req.headers['x-forwarded-for']||req.socket.remoteAddress||'unknown'),5,3600000))return send(res,429,{error:'Limite de solicitações atingido. Tente novamente mais tarde.'});
-  const b=await body(req),company=String(b.company||'').trim().slice(0,140),contact=String(b.contact||'').trim().slice(0,100),email=String(b.email||'').trim().toLowerCase().slice(0,160),phone=normalizePhone(b.phone),objective=String(b.objective||'').trim().slice(0,1800),budget=Number(b.budget||0);
-  if(company.length<2||contact.length<2||!/^\S+@\S+\.\S+$/.test(email)||phone.length<10||objective.length<30||!Number.isFinite(budget)||budget<0||budget>100000000)err('Informe empresa, responsável, e-mail válido, telefone, objetivo detalhado e orçamento válido.');
-  const d=await load();const lead={id:crypto.randomUUID(),company,contact,email,phone,objective,budget,status:'new',createdAt:new Date().toISOString()};d.advertiserInquiries.unshift(lead);await save(d);return send(res,201,{ok:true,message:'Solicitação recebida. A equipe comercial fará a análise e entrará em contato.'});
+  const b=await body(req),company=String(b.company||'').trim().slice(0,140),contact=String(b.contact||'').trim().slice(0,100),email=String(b.email||'').trim().toLowerCase().slice(0,160),phone=normalizePhone(b.phone),objective=String(b.objective||'').trim().slice(0,1800),budget=Number(b.budget||0),channel=String(b.channel||'video'),mediaUrl=String(b.mediaUrl||'').trim().slice(0,2000);\n  if(company.length<2||contact.length<2||!/^\\S+@\\S+\\.\\S+$/.test(email)||phone.length<10||objective.length<30||!Number.isFinite(budget)||budget<0||budget>100000000||!['digital','video','social','display','other'].includes(channel))err('Informe empresa, responsável, e-mail válido, telefone, objetivo detalhado, formato e orçamento válido.');\n  if(mediaUrl){let u;try{u=new URL(mediaUrl)}catch{}if(!u||u.protocol!=='https:'||u.username||u.password)err('O link do material precisa ser HTTPS válido.');}\n  const d=await load();const lead={id:crypto.randomUUID(),company,contact,email,phone,objective,budget,channel,mediaUrl,status:'new',createdAt:new Date().toISOString()};d.advertiserInquiries.unshift(lead);await save(d);return send(res,201,{ok:true,message:'Solicitação recebida. A equipe comercial fará a análise e entrará em contato.'});
  }
  if(SECRET.length<32)return send(res,503,{error:'A autenticação de sessão ainda não está configurada no servidor. O pedido de cadastro pode ser recebido, mas a entrada ficará indisponível até a configuração.'});
  if(p==='/api/work'){
@@ -199,7 +197,7 @@ async function handler(req,res){try{
    if(lead.status==='converted')err('Solicitação já convertida.',409);
    const b=await body(req),title=String(b.title||('Pesquisa para '+lead.company)).trim().slice(0,120),brief=String(b.brief||lead.objective).trim().slice(0,3000);
    if(title.length<3||brief.length<30)err('Título ou briefing inválido.');
-   const c={id:crypto.randomUUID(),title,client:lead.company,brief,channel:'digital',objective:lead.objective,contractValue:0,contractStatus:'not_recorded',status:'draft',createdBy:me.id,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),leadId:lead.id};
+   const c={id:crypto.randomUUID(),title,client:lead.company,brief,channel:lead.channel||'video',objective:lead.objective,mediaUrl:lead.mediaUrl||'',contractValue:0,contractStatus:'not_recorded',status:'draft',createdBy:me.id,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),leadId:lead.id};
    d.adCampaigns.unshift(c);lead.status='converted';lead.campaignId=c.id;lead.updatedAt=new Date().toISOString();
   }
   await save(d);return send(res,200,{ok:true,lead});
