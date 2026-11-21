@@ -86,10 +86,10 @@ async function handler(req,res){try{
  if(req.method==='POST'&&p==='/api/advertiser-inquiries'){
   if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
   if(limited(req,'advertiser-inquiry',String(req.headers['x-forwarded-for']||req.socket.remoteAddress||'unknown'),5,3600000))return send(res,429,{error:'Limite de solicitações atingido. Tente novamente mais tarde.'});
-  const b=await body(req),company=String(b.company||'').trim().slice(0,140),contact=String(b.contact||'').trim().slice(0,100),email=String(b.email||'').trim().toLowerCase().slice(0,160),phone=normalizePhone(b.phone),objective=String(b.objective||'').trim().slice(0,1800),budget=Number(b.budget||0),channel=String(b.channel||'video'),mediaUrl=String(b.mediaUrl||'').trim().slice(0,2000);
+  const b=await body(req),company=String(b.company||'').trim().slice(0,140),contact=String(b.contact||'').trim().slice(0,100),email=String(b.email||'').trim().toLowerCase().slice(0,160),phone=normalizePhone(b.phone),cpfCnpj=String(b.cpfCnpj||'').replace(/\\D/g,'').slice(0,14),objective=String(b.objective||'').trim().slice(0,1800),budget=Number(b.budget||0),channel=String(b.channel||'video'),mediaUrl=String(b.mediaUrl||'').trim().slice(0,2000);
   if(company.length<2||contact.length<2||!/^\S+@\S+\.\S+$/.test(email)||phone.length<10||objective.length<30||!Number.isFinite(budget)||budget<0||budget>100000000||!['digital','video','social','display','other'].includes(channel))err('Informe empresa, responsável, e-mail válido, telefone, objetivo detalhado, formato e orçamento válido.');
   if(mediaUrl){let u;try{u=new URL(mediaUrl)}catch{}if(!u||u.protocol!=='https:'||u.username||u.password)err('O link do material precisa ser HTTPS válido.');}
-  const d=await load();const lead={id:crypto.randomUUID(),company,contact,email,phone,objective,budget,channel,mediaUrl,status:'new',createdAt:new Date().toISOString()};d.advertiserInquiries.unshift(lead);await save(d);return send(res,201,{ok:true,message:'Solicitação recebida. A equipe comercial fará a análise e entrará em contato.'});
+  const d=await load();const lead={id:crypto.randomUUID(),company,contact,email,phone,cpfCnpj,objective,budget,channel,mediaUrl,status:'new',createdAt:new Date().toISOString()};d.advertiserInquiries.unshift(lead);await save(d);return send(res,201,{ok:true,message:'Solicitação recebida. A equipe comercial fará a análise e entrará em contato.'});
  }
  if(SECRET.length<32)return send(res,503,{error:'A autenticação de sessão ainda não está configurada no servidor. O pedido de cadastro pode ser recebido, mas a entrada ficará indisponível até a configuração.'});
  if(p==='/api/work'){
@@ -224,12 +224,12 @@ async function handler(req,res){try{
  }
  if(req.method==='POST'&&p==='/api/ad-campaigns'){
   if(me.role!=='admin')err('Somente administração pode criar campanhas.',403);
-  const b=await body(req),title=String(b.title||'').trim().slice(0,120),client=String(b.client||'').trim().slice(0,120),brief=String(b.brief||'').trim().slice(0,3000),channel=String(b.channel||'digital'),objective=String(b.objective||'').trim().slice(0,500),mediaUrl=String(b.mediaUrl||'').trim().slice(0,2000),value=Number(b.contractValue||0),reward=Number(b.rewardPerReview||0),maxParticipants=Number(b.maxParticipants||0);
+  const b=await body(req),title=String(b.title||'').trim().slice(0,120),client=String(b.client||'').trim().slice(0,120),brief=String(b.brief||'').trim().slice(0,3000),channel=String(b.channel||'digital'),objective=String(b.objective||'').trim().slice(0,500),mediaUrl=String(b.mediaUrl||'').trim().slice(0,2000),value=Number(b.contractValue||0),reward=Number(b.rewardPerReview||0),maxParticipants=Number(b.maxParticipants||0),advertiserDocument=String(b.advertiserDocument||'').replace(/\\D/g,'').slice(0,14),advertiserEmail=String(b.advertiserEmail||'').trim().toLowerCase(),advertiserPhone=normalizePhone(b.advertiserPhone);
   if(title.length<3||client.length<2||brief.length<30||!['digital','video','social','display','other'].includes(channel)||!Number.isFinite(value)||value<0||value>100000000||!Number.isFinite(reward)||reward<0||reward>100000||!Number.isInteger(maxParticipants)||maxParticipants<0||maxParticipants>100000)err('Confira título, empresa, briefing, contrato, recompensa por avaliação e limite de participantes.');
   if(reward>0&&maxParticipants>0&&reward*maxParticipants>value)err('O orçamento do contrato não cobre a soma das recompensas previstas.');
   if(mediaUrl){let u;try{u=new URL(mediaUrl)}catch{}if(!u||u.protocol!=='https:'||u.username||u.password)err('O link do anúncio precisa ser HTTPS válido.');}
   if(channel==='video'&&!mediaUrl)err('Campanhas de vídeo precisam ter um link HTTPS do anúncio ou trailer.');
-  const c={id:crypto.randomUUID(),title,client,brief,channel,objective,mediaUrl,contractValue:value,rewardPerReview:reward,maxParticipants,contractStatus:'not_recorded',status:'draft',createdBy:me.id,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+  const c={id:crypto.randomUUID(),title,client,brief,channel,objective,mediaUrl,advertiserDocument,advertiserEmail,advertiserPhone,contractValue:value,rewardPerReview:reward,maxParticipants,contractStatus:'not_recorded',status:'draft',createdBy:me.id,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
   d.adCampaigns.unshift(c);d.audit.unshift({id:crypto.randomUUID(),actorId:me.id,type:'ad_campaign_created',entityId:c.id,details:{client},at:new Date().toISOString()});await save(d);return send(res,201,c);
  }
 
@@ -256,7 +256,7 @@ async function handler(req,res){try{
    if(lead.status==='converted')err('Solicitação já convertida.',409);
    const b=await body(req),title=String(b.title||('Pesquisa para '+lead.company)).trim().slice(0,120),brief=String(b.brief||lead.objective).trim().slice(0,3000);
    if(title.length<3||brief.length<30)err('Título ou briefing inválido.');
-   const c={id:crypto.randomUUID(),title,client:lead.company,brief,channel:lead.channel||'video',objective:lead.objective,mediaUrl:lead.mediaUrl||'',contractValue:0,contractStatus:'not_recorded',status:'draft',createdBy:me.id,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),leadId:lead.id};
+   const c={id:crypto.randomUUID(),title,client:lead.company,brief,channel:lead.channel||'video',objective:lead.objective,mediaUrl:lead.mediaUrl||'',contractValue:0,advertiserDocument:lead.cpfCnpj||'',advertiserEmail:lead.email||'',advertiserPhone:lead.phone||'',contractStatus:'not_recorded',status:'draft',createdBy:me.id,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),leadId:lead.id};
    d.adCampaigns.unshift(c);lead.status='converted';lead.campaignId=c.id;lead.updatedAt=new Date().toISOString();
   }
   await save(d);return send(res,200,{ok:true,lead});
@@ -285,7 +285,16 @@ async function handler(req,res){try{
   const review={id:crypto.randomUUID(),campaignId,participantId:me.id,clarity,trust,relevance,comment,status:'pending',createdAt:new Date().toISOString()};
   d.adReviews.unshift(review);d.audit.unshift({id:crypto.randomUUID(),actorId:me.id,type:'ad_review_submitted',entityId:review.id,details:{campaignId},at:new Date().toISOString()});await save(d);return send(res,201,review);
  }
- adMatch=p.match(/^\/api\/ad-reviews\/([\w-]+)\/(accept|reject)$/);
+
+ async function tryAutomaticPix(earning,d){
+  const participant=(d.participants||[]).find(x=>x.id===earning.participantId),campaign=(d.adCampaigns||[]).find(x=>x.id===earning.campaignId);
+  if(!Asaas.configured()||!Asaas.webhookConfigured()||!participant?.pixKey||!participant?.pixKeyType||campaign?.contractStatus!=='received')return false;
+  try{
+   const transfer=await Asaas.transferPix({value:earning.amount,pixAddressKey:participant.pixKey,pixAddressKeyType:participant.pixKeyType,description:'WYNCORE recompensa',externalReference:'wyncore-earning:'+earning.id});
+   earning.asaasTransferId=transfer.id;earning.status='payout_pending';earning.payoutRequestedAt=new Date().toISOString();earning.payoutError=null;return true;
+  }catch(e){earning.payoutError=String(e.message||'Falha ao iniciar Pix').slice(0,300);return false;}
+ }
+\n adMatch=p.match(/^\/api\/ad-reviews\/([\w-]+)\/(accept|reject)$/);
  if(req.method==='POST'&&adMatch){
   if(me.role!=='admin')err('Somente administração.',403);
   const review=(d.adReviews||[]).find(x=>x.id===adMatch[1]);if(!review)return send(res,404,{error:'Avaliação não encontrada.'});
@@ -294,7 +303,18 @@ async function handler(req,res){try{
  }
 
 
- adMatch=p.match(/^\/api\/ad-earnings\/([\w-]+)\/mark-paid$/);
+
+ adMatch=p.match(/^\\/api\\/ad-earnings\\/([\\w-]+)\\/pay-pix$/);
+ if(req.method==='POST'&&adMatch){
+  if(me.role!=='admin')err('Somente administração.',403);
+  const earning=(d.adEarnings||[]).find(x=>x.id===adMatch[1]);if(!earning)return send(res,404,{error:'Recompensa não encontrada.'});
+  if(earning.status!=='approved_unpaid')err('A recompensa não está aguardando Pix.',409);
+  const campaign=(d.adCampaigns||[]).find(x=>x.id===earning.campaignId);if(campaign?.contractStatus!=='received')err('O orçamento da campanha ainda não foi recebido.',409);
+  if(!Asaas.configured()||!Asaas.webhookConfigured())err('Configure Asaas e o webhook antes de realizar Pix automático.',503);
+  const ok=await tryAutomaticPix(earning,d);await save(d);if(!ok)err(earning.payoutError||'Cadastre uma chave Pix válida para o participante.',400);
+  return send(res,202,{ok:true,status:earning.status,transferId:earning.asaasTransferId,message:'Pix solicitado. A confirmação final chegará pelo webhook Asaas.'});
+ }
+\n adMatch=p.match(/^\/api\/ad-earnings\/([\w-]+)\/mark-paid$/);
  if(req.method==='POST'&&adMatch){
   if(me.role!=='admin')err('Somente administração.',403);
   const earning=(d.adEarnings||[]).find(x=>x.id===adMatch[1]);if(!earning)return send(res,404,{error:'Lançamento não encontrado.'});
