@@ -41,39 +41,61 @@ $('advertiser-leads').onclick=async e=>{const b=e.target.closest('button[data-le
 $('advertiser-form').onsubmit=async e=>{e.preventDefault();const m=$('adv-message');try{const r=await fetch('/api/advertiser-inquiries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({company:$('adv-company').value,cpfCnpj:$('adv-document').value,contact:$('adv-contact').value,email:$('adv-email').value,phone:$('adv-phone').value,budget:$('adv-budget').value,channel:$('adv-channel').value,mediaUrl:$('adv-media-url').value,objective:$('adv-objective').value})});const d=await r.json();if(!r.ok)throw Error(d.error||'Não foi possível enviar.');e.target.reset();m.textContent=d.message;m.style.color='#8fe0c9'}catch(x){m.textContent=x.message;m.style.color='#ff9b9b'}};
 
 function isNativeVideo(raw){try{const u=new URL(raw);return u.protocol==='https:'&&['mp4','webm','ogg'].includes(u.pathname.toLowerCase().split('.').pop())}catch{return false}}
-function mediaFrame(raw){
+function mediaFrame(raw,campaignId){
  try{
-  const u=new URL(raw);
-  if(u.protocol!=='https:')return '';
-  const host=u.hostname.toLowerCase();
-  let src='';
-  if(host==='youtu.be')src='https://www.youtube-nocookie.com/embed/'+encodeURIComponent(u.pathname.slice(1));
-  else if(host==='youtube.com'||host.endsWith('.youtube.com')){
-   const id=u.searchParams.get('v');
-   if(u.pathname.startsWith('/embed/'))src='https://www.youtube-nocookie.com'+u.pathname;
-   else if(id)src='https://www.youtube-nocookie.com/embed/'+encodeURIComponent(id);
+  const u=new URL(raw);if(u.protocol!=='https:')return '';
+  const host=u.hostname.toLowerCase(),safeId=String(campaignId).replace(/[^a-zA-Z0-9_-]/g,'');
+  let src='',provider='',playerId='';
+  if(host==='youtu.be'||host==='youtube.com'||host.endsWith('.youtube.com')){
+   const id=host==='youtu.be'?u.pathname.slice(1):(u.pathname.startsWith('/embed/')?u.pathname.split('/')[2]:u.searchParams.get('v'));
+   if(id){provider='youtube';playerId='yt-'+safeId;src='https://www.youtube-nocookie.com/embed/'+encodeURIComponent(id)+'?enablejsapi=1&origin='+encodeURIComponent(location.origin)+'&rel=0&playsinline=1'}
   }else if(host==='vimeo.com'||host.endsWith('.vimeo.com')){
    const id=u.pathname.split('/').filter(Boolean).pop();
-   if(id&&id.split('').every(ch=>ch>='0'&&ch<='9'))src='https://player.vimeo.com/video/'+id;
+   if(id&&/^\\d+$/.test(id)){provider='vimeo';playerId='vm-'+safeId;src='https://player.vimeo.com/video/'+id+'?dnt=1&title=0&byline=0'}
   }
-  if(src)return '<div class="media-frame"><iframe src="'+esc(src)+'" title="Material de campanha" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>';
+  if(src)return '<div class="media-frame"><iframe id="'+playerId+'" data-provider="'+provider+'" title="Material de campanha" src="'+esc(src)+'" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>';
   const ext=u.pathname.toLowerCase().split('.').pop();
   if(['mp4','webm','ogg'].includes(ext))return '<video class="campaign-video" controls playsinline preload="metadata" src="'+esc(u.href)+'"></video>';
   return '<p><a href="'+esc(u.href)+'" target="_blank" rel="noopener noreferrer">Assistir ao material em nova aba ↗</a></p>';
  }catch(e){return ''}
 }
+function loadSdk(src,ready){
+ if(ready())return Promise.resolve();
+ return new Promise((resolve,reject)=>{let script=document.querySelector('script[data-player-sdk="'+src+'"]');if(!script){script=document.createElement('script');script.src=src;script.async=true;script.dataset.playerSdk=src;document.head.appendChild(script)}const started=Date.now();const check=()=>{if(ready())resolve();else if(Date.now()-started>15000)reject(Error('O player não carregou.'));else setTimeout(check,150)};script.addEventListener('error',()=>reject(Error('Falha ao carregar o SDK do player.')),{once:true});check()})
+}
+function attachWatchMonitor(card,campaignId){
+ const button=card.querySelector('[data-start-review="'+campaignId+'"]'),status=card.querySelector('.watch-status');
+ const state={duration:0,last:null,watched:new Set(),playing:false,invalid:false,ended:false};
+ const complete=()=>{if(!state.duration||state.watched.size<Math.ceil(state.duration*.9)){state.invalid=true;if(status)status.textContent='Não foi possível validar 90% da reprodução. Reveja o vídeo sem saltar trechos.';return}state.ended=true;if(button){button.disabled=false;button.textContent='Vídeo concluído. Continuar';}if(status)status.textContent='Reprodução monitorada. A avaliação está liberada.'};
+ const sample=(time,duration,playing)=>{if(Number.isFinite(duration)&&duration>0)state.duration=duration;if(!playing||!Number.isFinite(time)||state.invalid)return;if(state.last!==null){const delta=time-state.last;if(delta>0.25&&delta<=1.8){for(let t=Math.floor(state.last);t<Math.floor(time);t++)state.watched.add(t)}else if(delta>2.2){state.invalid=true;if(status)status.textContent='Salto de trecho detectado. Reinicie o vídeo e assista sem avançar.'}}state.last=time};
+ const native=card.querySelector('video.campaign-video');
+ if(native){
+  native.addEventListener('play',()=>state.playing=true);native.addEventListener('pause',()=>state.playing=false);
+  native.addEventListener('timeupdate',()=>sample(native.currentTime,native.duration,!native.paused&&!native.seeking));
+  native.addEventListener('seeking',()=>{if(state.last!==null&&Math.abs(native.currentTime-state.last)>2.2){state.invalid=true;if(status)status.textContent='Salto de trecho detectado. Reinicie o vídeo.'}});
+  native.addEventListener('ended',()=>{sample(native.duration,native.duration,true);complete()});return;
+ }
+ const yt=card.querySelector('iframe[data-provider="youtube"]'),vm=card.querySelector('iframe[data-provider="vimeo"]');
+ if(yt){
+  loadSdk('https://www.youtube.com/iframe_api',()=>Boolean(window.YT&&window.YT.Player)).then(()=>new window.YT.Player(yt.id,{events:{
+   onReady:e=>{state.duration=e.target.getDuration()},
+   onStateChange:e=>{state.playing=e.data===1;if(e.data===1){const poll=()=>{if(!card.isConnected||state.ended)return;try{sample(e.target.getCurrentTime(),e.target.getDuration(),e.target.getPlayerState()===1)}catch{}setTimeout(poll,1000)};poll()}if(e.data===0)complete()}
+  }})).catch(e=>{if(status)status.textContent=e.message+' A avaliação ficará bloqueada.'});
+ }else if(vm){
+  loadSdk('https://player.vimeo.com/api/player.js',()=>Boolean(window.Vimeo&&window.Vimeo.Player)).then(()=>{const player=new window.Vimeo.Player(vm);player.on('play',()=>state.playing=true);player.on('pause',()=>state.playing=false);player.on('timeupdate',d=>sample(d.seconds,d.duration,state.playing));player.on('seeked',d=>{if(state.last!==null&&Math.abs(d.seconds-state.last)>2.2){state.invalid=true;if(status)status.textContent='Salto de trecho detectado. Reinicie o vídeo.'}});player.on('ended',d=>{sample(d.seconds,d.duration,true);complete()})}).catch(e=>{if(status)status.textContent=e.message+' A avaliação ficará bloqueada.'});
+ }
+}
 function renderParticipant(){
  $('pix-key-form').onsubmit=async e=>{e.preventDefault();const m=$('pix-key-message');try{const r=await api('/pix-key',{method:'POST',body:JSON.stringify({type:$('pix-key-type').value,key:$('pix-key-value').value})});m.textContent=r.message;m.style.color='#8fe0c9'}catch(x){m.textContent=x.message;m.style.color='#ff9b9b'}};
  $('open-campaigns').innerHTML=data.campaigns.length?data.campaigns.map(c=>{
   const done=data.reviews.some(r=>r.campaignId===c.id);
-  const media=c.mediaUrl?mediaFrame(c.mediaUrl):'<div class="empty">O material desta campanha ainda não foi anexado.</div>';
+  const media=c.mediaUrl?mediaFrame(c.mediaUrl,c.id):'<div class="empty">O material desta campanha ainda não foi anexado.</div>';
   return '<article class="item campaign-watch"><div class="item-head"><div><p class="eyebrow">CAMPANHA FINANCIADA · VÍDEO</p><h3>'+esc(c.title)+'</h3><span class="muted">'+esc(c.client)+' · '+esc(c.channel)+'</span></div><span class="pill">Disponível</span></div><p><b>O que fazer:</b> assista ao anúncio ou trailer e depois responda à avaliação com sua opinião sincera.</p><p>'+esc(c.brief)+'</p>'+media+(done?'<p class="muted">Sua avaliação já foi enviada e está em análise.</p>':'<div class="watch-confirm">'+(isNativeVideo(c.mediaUrl)?'<span class="watch-status">Assista ao vídeo até o final para liberar a avaliação.</span>':'<label class="watch-check"><input type="checkbox" data-watched="'+c.id+'"> Terminei de assistir ao vídeo incorporado</label>')+'<button class="primary" type="button" data-start-review="'+c.id+'" '+(isNativeVideo(c.mediaUrl)?'disabled':'')+'>Continuar para avaliação</button></div><form class="review-form hidden" data-campaign="'+c.id+'"><p class="eyebrow">SUA OPINIÃO SOBRE A PEÇA</p><div class="rating-grid">'+[['clarity','Clareza'],['trust','Credibilidade'],['relevance','Relevância']].map(([n,l])=>'<label>'+l+'<select name="'+n+'"><option value="5">5 · Muito boa</option><option value="4">4 · Boa</option><option value="3">3 · Regular</option><option value="2">2 · Fraca</option><option value="1">1 · Muito fraca</option></select></label>').join('')+'</div><label>O que achou do anúncio ou trailer?<textarea name="comment" required minlength="20" rows="3" placeholder="Conte o que chamou sua atenção, se a mensagem ficou clara e o que poderia melhorar."></textarea></label><button class="primary">Enviar avaliação</button></form>')+'</article>'
  }).join(''):'<div class="empty"><h3>Nenhum anúncio ou trailer disponível agora</h3><p>Quando uma empresa financiar uma campanha e ela for liberada, o vídeo aparecerá aqui para você assistir e avaliar. Não há campanhas remuneradas abertas neste momento.</p></div>';
  $('earning-summary').innerHTML=[['Aprovado, aguardando pagamento',money(data.earningSummary?.approvedUnpaid||0)],['Pagamento registrado',money(data.earningSummary?.paid||0)]].map(([a,b])=>'<div class="metric"><span>'+a+'</span><strong>'+b+'</strong></div>').join('');
  $('my-earnings').innerHTML=(data.earnings||[]).length?data.earnings.map(x=>'<article class="item"><div class="item-head"><h3>'+esc(data.campaignHistory?.[x.campaignId]||(data.campaigns.find(c=>c.id===x.campaignId)||{}).title||'Campanha')+'</h3><span class="pill">'+(x.status==='paid'?'Pix concluído':x.status==='payout_pending'?'Pix em processamento':'Aprovado, aguardando pagamento')+'</span></div><p>Valor: '+money(x.amount)+'</p><small class="muted">'+date(x.paidAt||x.createdAt)+'</small></article>').join(''):'<div class="empty">Nenhuma recompensa aprovada ainda. O valor só aparece aqui depois que a avaliação for aceita pela equipe.</div>';
  $('my-reviews').innerHTML=data.reviews.length?data.reviews.map(r=>'<article class="item"><div class="item-head"><h3>'+esc(data.campaignHistory?.[r.campaignId]||(data.campaigns.find(c=>c.id===r.campaignId)||{}).title||'Avaliação')+'</h3><span class="pill">'+esc(r.status)+'</span></div><p>Clareza '+r.clarity+'/5 · Credibilidade '+r.trust+'/5 · Relevância '+r.relevance+'/5</p><p>'+esc(r.comment)+'</p><small class="muted">'+date(r.createdAt)+'</small></article>').join(''):'<div class="empty">Você ainda não enviou avaliações.</div>';
- $('open-campaigns').onchange=e=>{const check=e.target.closest('input[data-watched]');if(!check)return;const btn=$('open-campaigns').querySelector('[data-start-review="'+check.dataset.watched+'"]');if(btn)btn.disabled=!check.checked};
- $('open-campaigns').querySelectorAll('video.campaign-video').forEach(video=>{video.addEventListener('ended',()=>{const card=video.closest('.campaign-watch');const btn=card?.querySelector('[data-start-review]');if(btn){btn.disabled=false;const status=card.querySelector('.watch-status');if(status)status.textContent='Vídeo concluído. A avaliação está liberada.'}})});
+ $('open-campaigns').querySelectorAll('.campaign-watch').forEach(card=>{const btn=card.querySelector('[data-start-review]');if(btn)attachWatchMonitor(card,btn.dataset.startReview)});
  $('open-campaigns').onclick=e=>{const btn=e.target.closest('button[data-start-review]');if(!btn)return;const form=$('open-campaigns').querySelector('form[data-campaign="'+btn.dataset.startReview+'"]');if(form){form.classList.remove('hidden');btn.textContent='Avaliação liberada';btn.disabled=true;form.scrollIntoView({behavior:'smooth',block:'center'})}};
 }
 $('open-campaigns').onsubmit=async e=>{const f=e.target.closest('form[data-campaign]');if(!f)return;e.preventDefault();const v=Object.fromEntries(new FormData(f));try{await api('/ad-reviews',{method:'POST',body:JSON.stringify({campaignId:f.dataset.campaign,...v})});await load()}catch(x){alert(x.message)}}
