@@ -42,3 +42,12 @@ O SDK oficial do Vimeo expõe eventos de reprodução como `timeupdate`, `seeked
 ## Publicação
 
 A branch de trabalho é `wyncore-personal-work-hub`. O fluxo de publicação deve usar o mesmo diretório de aplicação (`wyncore`) e só promover para produção depois de CI verde, variáveis de ambiente configuradas e webhook testado. A integração Git do Vercel precisa estar ligada ao repositório e à branch de produção correta; o deploy de preview não atualiza o domínio de produção.
+
+## Notificação automática de novas propostas
+
+Opcionalmente, configure o Resend para receber um e-mail sempre que uma empresa enviar o formulário comercial:
+- `RESEND_API_KEY`: chave privada do Resend;
+- `WYNCORE_LEADS_FROM`: remetente em domínio verificado no Resend, por exemplo `WYNCORE <leads@seudominio.com>`;
+- `WYNCORE_LEADS_TO`: caixa de entrada comercial que receberá os pedidos.
+
+Sem essas três variáveis, o formulário continua recebendo e armazenando solicitações no painel administrativo, mas não envia e-mail. Configure as variáveis apenas no ambiente do servidor, nunca no navegador ou no repositório.
