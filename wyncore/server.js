@@ -4,9 +4,10 @@ const D=require('./domain');
 const ROOT=__dirname,DATA_DIR=process.env.DATA_DIR||path.join(ROOT,'data'),DATA_FILE=path.join(DATA_DIR,'wyncore.json');
 const PORT=Number(process.env.PORT||3000),PASSWORD=process.env.WYNCORE_OWNER_PASSWORD||'',SECRET=process.env.WYNCORE_SESSION_SECRET||'',PARTNER_SECRET=process.env.WYNCORE_PARTNER_WEBHOOK_SECRET||'',GOOGLE_CLIENT_ID=process.env.WYNCORE_GOOGLE_CLIENT_ID||'',PROD=process.env.NODE_ENV==='production';
 const COOKIE='wyncore_session',SESSION_MS=8*60*60*1000;
-const PUBLIC_FILES=new Set(['/','/index.html','/styles.css','/app.js','/manifest.webmanifest','/icon.svg','/sw.js','/sobre.html','/privacidade.html','/termos.html','/robots.txt','/sitemap.xml','/guia-aprendizagem.html','/guia-estagio.html','/seguranca-oportunidades.html','/organizar-candidatura.html']);
+const PUBLIC_FILES=new Set(['/','/index.html','/wallet.html','/wallet.css','/wallet.js','/styles.css','/app.js','/manifest.webmanifest','/icon.svg','/sw.js','/sobre.html','/privacidade.html','/termos.html','/robots.txt','/sitemap.xml','/guia-aprendizagem.html','/guia-estagio.html','/seguranca-oportunidades.html','/organizar-candidatura.html']);
 const MIME={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml','.webmanifest':'application/manifest+json','.xml':'application/xml; charset=utf-8','.txt':'text/plain; charset=utf-8'};
 const rate=new Map();
+function validCPF(value){const d=String(value||'').replace(/\D/g,'');if(d.length!==11||d.split('').every(ch=>ch===d[0]))return false;let sum=0;for(let i=0;i<9;i++)sum+=Number(d[i])*(10-i);let r=(sum*10)%11;if(r===10)r=0;if(r!==Number(d[9]))return false;sum=0;for(let i=0;i<10;i++)sum+=Number(d[i])*(11-i);r=(sum*10)%11;if(r===10)r=0;return r===Number(d[10])}
 function normalizePhone(value){let digits=String(value||'').replace(/\D/g,'');if(digits.startsWith('55')&&(digits.length===12||digits.length===13))digits=digits.slice(2);return digits;}
 function assertConfig(){if(PASSWORD.length<12)throw Error('Configure WYNCORE_OWNER_PASSWORD com pelo menos 12 caracteres.');if(SECRET.length<32)throw Error('Configure WYNCORE_SESSION_SECRET com pelo menos 32 caracteres.')}
 function safeEqual(a,b){const x=Buffer.from(String(a)),y=Buffer.from(String(b));return x.length===y.length&&crypto.timingSafeEqual(x,y)}
@@ -21,12 +22,12 @@ async function load(){
  if(process.env.BLOB_READ_WRITE_TOKEN){
   const {get}=require('@vercel/blob');
   const found=await get('wyncore/data.json',{access:'private',useCache:false});
-  if(!found)return D.ensureState({opportunities:[],tasks:[],events:[],users:[]});
+  if(!found)return D.ensureState({opportunities:[],tasks:[],events:[],users:[],deposits:[]});
   const raw=await new Response(found.stream).text();
   const d=JSON.parse(raw);
-  return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[]});
+  return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],deposits:d.deposits||[]});
  }
- try{const d=JSON.parse(await fs.readFile(DATA_FILE,'utf8'));return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[]})}catch(e){if(e.code!=='ENOENT')throw e;return D.ensureState({opportunities:[],tasks:[],events:[],users:[]})}
+ try{const d=JSON.parse(await fs.readFile(DATA_FILE,'utf8'));return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],deposits:d.deposits||[]})}catch(e){if(e.code!=='ENOENT')throw e;return D.ensureState({opportunities:[],tasks:[],events:[],users:[]})}
 }
 async function save(d){
  if(process.env.BLOB_READ_WRITE_TOKEN){
@@ -46,7 +47,7 @@ async function verifyPassword(p,stored){if(!stored||!stored.includes(':'))return
 function actor(session,d){if(!session)return null;if(session.role==='admin'&&session.id==='owner')return{id:'owner',role:'admin',email:'owner'};return d.participants.find(p=>p.id===session.id&&p.status==='active'&&p.role===session.role)||null}
 async function handler(req,res){try{
  const url=new URL(req.url,'http://localhost');let p=url.pathname;if(p!=='/'&&!p.startsWith('/api/')&&!PUBLIC_FILES.has(p)&&p!=='/health'&&!/\.[a-z0-9]+$/i.test(p))p='/api'+p;
- if(req.method==='GET'&&(p==='/health'||p==='/api/health'))return send(res,200,{ok:true,service:'WYNCORE',storage:process.env.BLOB_READ_WRITE_TOKEN?'vercel-blob-private':'persistent-json',authConfigured:Boolean(PASSWORD&&SECRET.length>=32),ownerLoginConfigured:Boolean(PASSWORD),participantLoginConfigured:SECRET.length>=32,phoneLoginEnabled:SECRET.length>=32,googleEnabled:Boolean(GOOGLE_CLIENT_ID),googleClientId:GOOGLE_CLIENT_ID||null,signupAvailable:true,publicAccess:true});
+ if(req.method==='GET'&&(p==='/health'||p==='/api/health')){const pixReady=false;return send(res,200,{ok:true,service:'WYNCORE',storage:process.env.BLOB_READ_WRITE_TOKEN?'vercel-blob-private':'persistent-json',authConfigured:Boolean(PASSWORD&&SECRET.length>=32),ownerLoginConfigured:Boolean(PASSWORD),participantLoginConfigured:SECRET.length>=32,phoneLoginEnabled:SECRET.length>=32,googleEnabled:Boolean(GOOGLE_CLIENT_ID),googleClientId:GOOGLE_CLIENT_ID||null,signupAvailable:true,publicAccess:true,pix:{provider:'Stripe',depositsEnabled:false,payoutsEnabled:false,reason:'A conta Stripe ainda aguarda habilitação de cobranças e repasses.'}})};
  if(req.method==='POST'&&p==='/api/access-request'){
   if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
   const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),phone=normalizePhone(b.phone),pass=String(b.password||'');if(limited(req,'signup',email||phone,5,3600000))return send(res,429,{error:'Muitas tentativas de cadastro para este contato. Aguarde um pouco.'});
@@ -102,7 +103,7 @@ async function handler(req,res){try{
  const session=readSession(req);if(!session)return send(res,401,{error:'Sessão expirada.'});
  const d=await load(),me=actor(session,d);if(!me)return send(res,403,{error:'Conta inativa ou sem permissão.'});
  if(req.method==='GET'&&p==='/api/me')return send(res,200,{id:me.id,role:me.role,email:me.email,name:me.name||'Administrador'});
- if(req.method==='GET'&&p==='/api/integrations/status'){if(me.role!=='admin')err('Somente administrador.',403);return send(res,200,{advertisingNetwork:{configured:false,conversionValidation:false,reason:'Nenhuma rede de anunciantes está conectada.'},partnerCampaignWebhook:{configured:Boolean(PARTNER_SECRET),conversionValidation:Boolean(process.env.WYNCORE_CONVERSION_SECRET),reason:process.env.WYNCORE_CONVERSION_SECRET?'Webhook assinado de conversões configurado; falta homologação com parceiro e conciliação de liquidação.':'Webhook de campanhas pode importar campanhas; webhook de conversões ainda não configurado.'},pix:{providerConfigured:false,payoutsEnabled:false,bankVerification:false,reason:'Provedor Pix e credenciais de integração não configurados.'},automaticPaymentTransfers:false});}
+ if(req.method==='GET'&&p==='/api/integrations/status'){if(me.role!=='admin')err('Somente administrador.',403);return send(res,200,{advertisingNetwork:{configured:false,conversionValidation:false,reason:'A rede de anúncios ainda precisa ser homologada com um parceiro real.'},partnerCampaignWebhook:{configured:Boolean(PARTNER_SECRET),conversionValidation:Boolean(process.env.WYNCORE_CONVERSION_SECRET),reason:'Campanhas externas só serão remuneradas após validação de conversão e liquidação.'},pix:{provider:'Stripe',providerConfigured:Boolean(process.env.STRIPE_SECRET_KEY&&process.env.STRIPE_WEBHOOK_SECRET),depositsEnabled:false,payoutsEnabled:false,reason:'A Stripe ainda não habilitou cobranças e repasses na conta conectada.'},automaticPaymentTransfers:false});}
  if(req.method==='POST'&&p==='/api/campaign-feedback'){if(me.role!=='participant')err('Somente participantes podem avaliar campanhas.',403);if(limited(req,'campaign-feedback',me.id,30,3600000))return send(res,429,{error:'Limite de avaliações atingido. Tente novamente mais tarde.'});const b=await body(req),programId=String(b.programId||''),rating=Number(b.rating),comment=String(b.comment||'').trim().slice(0,300),program=d.programs.find(x=>x.id===programId&&x.status==='active'&&x.videoUrl);if(!program)err('Campanha de vídeo indisponível.',404);if(!Number.isInteger(rating)||rating<1||rating>5)err('Escolha uma avaliação entre 1 e 5.');let feedback=d.campaignFeedback.find(x=>x.programId===programId&&x.participantId===me.id);const now=new Date().toISOString();if(feedback){feedback.rating=rating;feedback.comment=comment;feedback.updatedAt=now;await save(d);return send(res,200,{ok:true,feedback,updated:true})}feedback={id:crypto.randomUUID(),programId,participantId:me.id,rating,comment,createdAt:now,updatedAt:now};d.campaignFeedback.unshift(feedback);await save(d);return send(res,201,{ok:true,feedback,updated:false});}
  if(req.method==='POST'&&p==='/api/participants'){if(me.role!=='admin')err('Somente administrador.',403);const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),phone=normalizePhone(b.phone),pass=String(b.password||'');if(name.length<2||!/^\S+@\S+\.\S+$/.test(email)||!phone||phone.length<10||phone.length>13||pass.length<10)err('Para cadastrar um participante, informe nome, e-mail válido, celular com DDD e senha com pelo menos 10 caracteres.');if(d.users.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone))||d.participants.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone)))err('Este e-mail ou telefone já está cadastrado.',409);const person=D.createParticipant(d,me,{name,email,phone});d.users.push({id:person.id,email,phone,passwordHash:await hashPassword(pass)});await save(d);return send(res,201,{ok:true,participant:{id:person.id,name:person.name,email:person.email,phone:person.phone,status:person.status},message:'Participante cadastrado. Aprove o acesso para liberar o login.'});}
  if(req.method==='GET'&&p==='/api/dashboard'){
@@ -110,6 +111,18 @@ async function handler(req,res){try{
   return send(res,200,D.snapshot(d,me));
  }
  
+ if(req.method==='GET'&&p==='/api/wallet'){
+  const deposits=(d.deposits||[]).filter(x=>me.role==='admin'||x.participantId===me.id);
+  const ledger=(d.ledger||[]).filter(x=>me.role==='admin'||x.participantId===me.id);
+  const confirmed=ledger.reduce((n,x)=>n+Number(x.amount||0),0);
+  return send(res,200,{currency:'BRL',confirmed:Number(confirmed.toFixed(2)),deposits,ledger,pix:{provider:'Stripe',depositsEnabled:false,payoutsEnabled:false,reason:'A conta Stripe ainda não está habilitada para cobranças e repasses.'}});
+ }
+ if(req.method==='POST'&&p==='/api/wallet/deposits'){
+  return send(res,503,{error:'Depósitos Pix indisponíveis: a conta Stripe ainda não habilitou cobranças. Nenhum pagamento foi criado e nenhum saldo foi alterado.'});
+ }
+ if(req.method==='POST'&&p==='/api/wallet/withdrawals'){
+  return send(res,503,{error:'Saques Pix indisponíveis: a conta Stripe ainda não habilitou repasses. Nenhum saldo foi debitado.'});
+ }
  if(req.method==='GET'&&p==='/api/company'){if(me.role!=='admin')err('Somente administrador.',403);return send(res,200,{leads:d.companyLeads||[],costs:d.companyCosts||[]})}
  if(req.method==='POST'&&p==='/api/company/leads'){if(me.role!=='admin')err('Somente administrador.',403);const b=await body(req),company=String(b.company||'').trim().slice(0,100),contact=String(b.contact||'').trim().slice(0,120),channel=String(b.channel||'email'),notes=String(b.notes||'').trim().slice(0,500);if(company.length<2||!['email','site','phone'].includes(channel))err('Informe a empresa e um canal de contato válido.');const lead={id:crypto.randomUUID(),company,contact,channel,notes,status:'prospect',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};d.companyLeads.unshift(lead);await save(d);return send(res,201,lead)}
  if(req.method==='PATCH'&&p.startsWith('/api/company/leads/')&&p.split('/').length===5){if(me.role!=='admin')err('Somente administrador.',403);const lead=(d.companyLeads||[]).find(x=>x.id===p.split('/').pop());if(!lead)return send(res,404,{error:'Empresa não encontrada.'});const b=await body(req);if(!['prospect','contacted','proposal','contracted','inactive'].includes(b.status))err('Etapa inválida.');lead.status=b.status;lead.updatedAt=new Date().toISOString();await save(d);return send(res,200,lead)}
