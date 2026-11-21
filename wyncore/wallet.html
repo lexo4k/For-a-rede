@@ -8,7 +8,7 @@
 <body>
 <div class="wallet-shell">
 <header class="wallet-top">
-  <a class="brand" href="/"><span class="brand-mark">W</span><span>WYNCORE<small>CARTEIRA DIGITAL</small></span></a>
+  <a class="brand" href="/"><span class="brand-mark">W</span><span>WYNCORE<small>CARTEIRA STRIPE</small></span></a>
   <a class="back-link" href="/">Voltar ao painel</a>
 </header>
 <main>
@@ -21,7 +21,7 @@
   <section class="action-grid">
     <article class="action-card">
       <div class="card-icon">↓</div><h2>Adicionar saldo</h2>
-      <p>Gere uma cobrança Pix. O saldo só será atualizado após confirmação do pagamento pelo provedor.</p>
+      <p>Depósitos Pix serão liberados quando a Stripe habilitar cobranças na conta.</p>
       <form id="deposit-form">
         <label for="deposit-amount">Valor do depósito</label>
         <div class="amount-field"><span>R$</span><input id="deposit-amount" type="number" min="5" max="5000" step="0.01" value="10.00" required></div>
@@ -33,8 +33,8 @@
       </form>
     </article>
     <article class="action-card secondary-card">
-      <div class="card-icon">↑</div><h2>Retirar saldo</h2>
-      <p>Os saques serão liberados quando o provedor de transferências Pix estiver conectado e validado.</p>
+      <div class="card-icon">↑</div><h2>Saque Pix</h2>
+      <p>Os saques serão liberados quando a Stripe habilitar repasses na conta.</p>
       <button class="secondary" id="withdraw-button" type="button" disabled>Saques indisponíveis</button>
       <p class="message">Nenhum valor será debitado enquanto os repasses não estiverem habilitados.</p>
     </article>
@@ -42,7 +42,7 @@
   <section id="pix-result" class="pix-result hidden">
     <div><p class="eyebrow">COBRANÇA GERADA</p><h2>Conclua o pagamento no seu banco</h2><p id="pix-expiry">Aguardando pagamento.</p></div>
     <div class="qr-wrap"><img id="pix-qr" alt="QR Code Pix" class="hidden"><div id="qr-fallback" class="qr-fallback">QR Code será exibido aqui</div></div>
-    <label for="pix-copy">Pix copia e cola</label><textarea id="pix-copy" readonly rows="4"></textarea>
+    <label for="pix-copy">Pix via Stripe</label><textarea id="pix-copy" readonly rows="4"></textarea>
     <div class="button-row"><button id="copy-pix" class="secondary" type="button">Copiar código Pix</button><a id="ticket-link" class="text-link hidden" target="_blank" rel="noopener noreferrer">Abrir cobrança</a></div>
     <p class="message">A confirmação é automática após o provedor informar o pagamento aprovado. Não envie comprovantes pelo aplicativo.</p>
   </section>
