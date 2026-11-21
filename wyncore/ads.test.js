@@ -6,9 +6,20 @@ const os=require('node:os');
 const path=require('node:path');
 process.env.DATA_DIR=path.join(os.tmpdir(),'wyncore-ads-'+process.pid);
 process.env.WYNCORE_OWNER_PASSWORD='ads-test-owner-password-123';
-process.env.WYNCORE_SESSION_SECRET='ads-test-session-secret-with-at-least-32-characters';
+process.env.WYNCORE_SESSION_SECRET='ads-test-session-secret-with-at-least-32-characters';\nprocess.env.ASAAS_WEBHOOK_TOKEN='ads-test-webhook-token-with-more-than-32-characters';
 const {createServer}=require('./server');
-test('WYNCORE Ads complete campaign and evaluation flow',async t=>{
+
+test('Asaas webhook is authenticated and idempotent',async t=>{
+ const server=createServer();await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ const base='http://127.0.0.1:'+server.address().port;
+ t.after(async()=>{await new Promise(resolve=>server.close(resolve));await fs.rm(process.env.DATA_DIR,{recursive:true,force:true})});
+ const bad=await fetch(base+'/api/webhooks/asaas',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:'evt-bad',event:'PAYMENT_RECEIVED'})});assert.equal(bad.status,401);
+ const headers={'content-type':'application/json','asaas-access-token':process.env.ASAAS_WEBHOOK_TOKEN};
+ const payload=JSON.stringify({id:'evt-test-001',event:'PAYMENT_RECEIVED',payment:{id:'pay-unknown',externalReference:'wyncore-campaign:unknown',value:10}});
+ const first=await fetch(base+'/api/webhooks/asaas',{method:'POST',headers,body:payload});assert.equal(first.status,200);
+ const duplicate=await fetch(base+'/api/webhooks/asaas',{method:'POST',headers,body:payload});assert.equal(duplicate.status,200);assert.equal((await duplicate.json()).duplicate,true);
+});
+\ntest('WYNCORE Ads complete campaign and evaluation flow',async t=>{
  const server=createServer();await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const base='http://127.0.0.1:'+server.address().port;
  t.after(async()=>{await new Promise(resolve=>server.close(resolve));await fs.rm(process.env.DATA_DIR,{recursive:true,force:true})});
@@ -21,7 +32,7 @@ test('WYNCORE Ads complete campaign and evaluation flow',async t=>{
  const received=await fetch(base+'/api/ad-campaigns/'+campaign.id+'/contract-payment',{method:'POST',headers:{cookie:admin,'content-type':'application/json'},body:JSON.stringify({reference:'RECIBO-REAL-001'})});assert.equal(received.status,200);
  const opened=await fetch(base+'/api/ad-campaigns/'+campaign.id+'/open',{method:'POST',headers:{cookie:admin,'content-type':'application/json'},body:'{}'});assert.equal(opened.status,200);
  const insecureInquiry=await fetch(base+'/api/advertiser-inquiries',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({company:'Empresa Insegura',contact:'Responsável',email:'teste@empresa.com',phone:'11912345678',budget:100,channel:'video',mediaUrl:'http://example.com/trailer.mp4',objective:'Avaliar a clareza e a percepção do público sobre o trailer enviado.'})});assert.equal(insecureInquiry.status,400,'media links must use HTTPS');
- const inquiry=await fetch(base+'/api/advertiser-inquiries',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({company:'Estúdio Trailer Teste',contact:'Pessoa Responsável',email:'contato@estudioteste.com',phone:'11912345678',budget:1500,channel:'video',mediaUrl:'https://www.youtube.com/watch?v=abcdefghijk',objective:'Medir a clareza e a percepção do público sobre o trailer de lançamento enviado.'})});assert.equal(inquiry.status,201);
+ const inquiry=await fetch(base+'/api/advertiser-inquiries',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({company:'Estúdio Trailer Teste',contact:'Pessoa Responsável',email:'contato@estudioteste.com',phone:'11912345678',cpfCnpj:'12345678901',budget:1500,channel:'video',mediaUrl:'https://www.youtube.com/watch?v=abcdefghijk',objective:'Medir a clareza e a percepção do público sobre o trailer de lançamento enviado.'})});assert.equal(inquiry.status,201);
  const leads=await (await fetch(base+'/api/ad-workspace',{headers:{cookie:admin}})).json();const lead=leads.advertiserInquiries.find(x=>x.company==='Estúdio Trailer Teste');assert.ok(lead);assert.equal(lead.mediaUrl,'https://www.youtube.com/watch?v=abcdefghijk');
  const converted=await fetch(base+'/api/advertiser-inquiries/'+lead.id+'/create-campaign',{method:'POST',headers:{cookie:admin,'content-type':'application/json'},body:JSON.stringify({title:'Avaliação de trailer',brief:lead.objective})});assert.equal(converted.status,200);
  const convertedData=await (await fetch(base+'/api/ad-workspace',{headers:{cookie:admin}})).json();const trailerCampaign=convertedData.campaigns.find(x=>x.title==='Avaliação de trailer');assert.equal(trailerCampaign.mediaUrl,lead.mediaUrl);assert.equal(trailerCampaign.channel,'video');
