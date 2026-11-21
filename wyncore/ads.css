@@ -18,3 +18,49 @@
 
 .campaign-watch .reward-line{font-size:15px;font-weight:800;color:#a7f0d1}
 #earning-summary{margin:12px 0}
+
+
+/* WYNCORE participant-first visual refresh · Nov 2026 */
+:root{--bg:#07110f;--panel:#0d1d19;--panel2:#122720;--line:#24443a;--text:#f2f8f4;--muted:#a0b8ad;--gold:#e7c27b;--mint:#83e0b8;--red:#ff9b9b}
+body{background:radial-gradient(ellipse at 12% -8%,#1a4437 0,transparent 38%),radial-gradient(ellipse at 95% 18%,#172c2b 0,transparent 30%),#07110f}
+.top{background:#07110fe8;border-color:#24443a;box-shadow:0 8px 30px #0002}
+.mark{background:linear-gradient(145deg,#183c30,#0c211b);border-color:#72c9a2;color:#a7f0ca;box-shadow:0 0 24px #55c58a22}
+.brand b,.eyebrow{color:#a6e6c4}
+main{max-width:1280px;padding-top:34px}
+.panel,.auth-card{background:linear-gradient(145deg,#11251f,#0b1915);border-color:#29483d;box-shadow:0 18px 48px #0003}
+.panel{border-radius:20px}
+.panel h2{letter-spacing:-.025em}
+input,select,textarea{background:#081711;border-color:#315346}
+input:focus,select:focus,textarea:focus{border-color:#8cddb4;box-shadow:0 0 0 3px #8cddb41a}
+.primary{background:linear-gradient(115deg,#b8f0cf,#79d5a6);color:#082016;box-shadow:0 7px 20px #61c58b22}
+.primary:hover{filter:brightness(1.04);transform:translateY(-1px)}
+.secondary,.action{background:#17382c;border-color:#35634d}
+.secondary:hover,.action:hover{background:#20503c}
+.metric{background:linear-gradient(145deg,#132b22,#0c1b16);border-color:#2b4b3d}
+.metric strong{color:#a5e8c1}
+.item{background:linear-gradient(145deg,#10231c,#0a1813);border-color:#29483a}
+.pill{background:#1a3b2d;color:#a8ebc6;border:1px solid #315b45}
+.notice{background:#10251c;border-color:#315440;color:#c8e8d6}
+.empty{border-color:#355747;background:#0b1b14}
+.advertiser-panel{background:linear-gradient(135deg,#142b24,#0d1c17);border-color:#3b5e4b}
+.work-link{border-color:#376b52;color:#a8ebc6}
+.participant-hero{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;padding:clamp(22px,4vw,38px);margin:0 0 18px;border:1px solid #315b48;border-radius:24px;background:radial-gradient(ellipse at 85% 10%,#2a654833,transparent 42%),linear-gradient(120deg,#17372b,#0c1d16 72%);box-shadow:0 22px 60px #0003}
+.participant-hero h2{font-size:clamp(25px,4vw,39px);line-height:1.08;letter-spacing:-.04em;margin:0 0 12px;max-width:650px}
+.participant-hero p:not(.eyebrow){color:#b4cabe;line-height:1.7;margin:0;max-width:650px}
+.participant-shortcuts{display:flex;gap:9px;flex-wrap:wrap;justify-content:flex-end}
+.participant-shortcuts a{display:inline-flex;gap:12px;align-items:center;padding:11px 14px;border:1px solid #3b6a52;border-radius:12px;color:#d7f5e3;text-decoration:none;background:#10281d;font-size:12px;font-weight:800;white-space:nowrap}
+.participant-shortcuts a span{color:#9ce4ba}
+.participant-shortcuts a:hover{background:#1b3d2c;border-color:#78c99a}
+#participant-area>.panel{scroll-margin-top:92px}
+#open-campaigns{gap:16px}
+.campaign-watch{background:linear-gradient(145deg,#142c22,#0a1913);border-color:#3b644d}
+.campaign-watch h3{font-size:19px}
+.campaign-watch .media-frame,.campaign-watch .campaign-video{border-color:#345b47;background:#020805}
+.watch-confirm{background:#0b1b13;border-color:#31513e}
+.watch-status{color:#c5e7d1;font-size:13px;line-height:1.5}
+.review-form{border-color:#31513e}
+#earning-summary .metric{min-height:100px}
+#pix-key-form,#payout-profile-form{max-width:850px}
+footer{border-color:#203d32}
+@media(max-width:780px){.participant-hero{align-items:flex-start;flex-direction:column;padding:22px}.participant-shortcuts{justify-content:flex-start;width:100%}.participant-shortcuts a{flex:1;justify-content:space-between}.top-right{gap:7px}.work-link{margin-right:0;padding:7px}}
+@media(max-width:480px){.participant-shortcuts{display:grid;grid-template-columns:1fr}.participant-shortcuts a{width:100%}.top-right #session-label{max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
