@@ -31,6 +31,28 @@ async function load(){
  }
  try{const d=JSON.parse(await fs.readFile(DATA_FILE,'utf8'));return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],workAccounts:d.workAccounts||[],workTasks:d.workTasks||[],workLedger:d.workLedger||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[],advertiserInquiries:d.advertiserInquiries||[]})}catch(e){if(e.code!=='ENOENT')throw e;return D.ensureState({opportunities:[],tasks:[],events:[],users:[],workAccounts:[],workTasks:[],workLedger:[],adCampaigns:[],adReviews:[],adEarnings:[],advertiserInquiries:[],asaasWebhookEvents:[]})}
 }
+async function notifyAdvertiserLead(lead){
+ const apiKey=process.env.RESEND_API_KEY||'',from=process.env.WYNCORE_LEADS_FROM||'',to=process.env.WYNCORE_LEADS_TO||'';
+ if(!apiKey||!from||!to)return {status:'not_configured'};
+ const textBody=[
+  'Nova solicitação comercial WYNCORE',
+  'Empresa: '+lead.company,
+  'Responsável: '+lead.contact,
+  'E-mail: '+lead.email,
+  'Telefone: '+lead.phone,
+  'CPF/CNPJ: '+(lead.cpfCnpj||'não informado'),
+  'Orçamento estimado: R$ '+Number(lead.budget||0).toFixed(2),
+  'Formato: '+lead.channel,
+  'Material: '+(lead.mediaUrl||'não informado'),
+  'Objetivo: '+lead.objective,
+  'Lead ID: '+lead.id
+ ].join('\\n');
+ try{
+  const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{Authorization:'Bearer '+apiKey,'Content-Type':'application/json'},body:JSON.stringify({from,to:[to],subject:'Novo lead WYNCORE: '+lead.company,text:textBody})});
+  if(!response.ok)return {status:'failed'};
+  return {status:'sent'};
+ }catch{return {status:'failed'}}
+}
 async function save(d){
  if(process.env.BLOB_READ_WRITE_TOKEN){
   const {put}=require('@vercel/blob');
@@ -93,7 +115,7 @@ async function handler(req,res){try{
   const b=await body(req),company=String(b.company||'').trim().slice(0,140),contact=String(b.contact||'').trim().slice(0,100),email=String(b.email||'').trim().toLowerCase().slice(0,160),phone=normalizePhone(b.phone),cpfCnpj=String(b.cpfCnpj||'').replace(/\\D/g,'').slice(0,14),objective=String(b.objective||'').trim().slice(0,1800),budget=Number(b.budget||0),channel=String(b.channel||'video'),mediaUrl=String(b.mediaUrl||'').trim().slice(0,2000);
   if(company.length<2||contact.length<2||!/^\S+@\S+\.\S+$/.test(email)||phone.length<10||objective.length<30||!Number.isFinite(budget)||budget<0||budget>100000000||!['digital','video','social','display','other'].includes(channel))err('Informe empresa, responsável, e-mail válido, telefone, objetivo detalhado, formato e orçamento válido.');
   if(mediaUrl){let u;try{u=new URL(mediaUrl)}catch{}if(!u||u.protocol!=='https:'||u.username||u.password)err('O link do material precisa ser HTTPS válido.');}
-  const d=await load();const lead={id:crypto.randomUUID(),company,contact,email,phone,cpfCnpj,objective,budget,channel,mediaUrl,status:'new',createdAt:new Date().toISOString()};d.advertiserInquiries.unshift(lead);await save(d);return send(res,201,{ok:true,message:'Solicitação recebida. A equipe comercial fará a análise e entrará em contato.'});
+  const d=await load();const lead={id:crypto.randomUUID(),company,contact,email,phone,cpfCnpj,objective,budget,channel,mediaUrl,status:'new',createdAt:new Date().toISOString()};d.advertiserInquiries.unshift(lead);await save(d);lead.notificationStatus=await notifyAdvertiserLead(lead);await save(d);return send(res,201,{ok:true,message:'Solicitação recebida. A equipe comercial fará a análise e entrará em contato.'});
  }
  if(SECRET.length<32)return send(res,503,{error:'A autenticação de sessão ainda não está configurada no servidor. O pedido de cadastro pode ser recebido, mas a entrada ficará indisponível até a configuração.'});
  if(p==='/api/work'){
