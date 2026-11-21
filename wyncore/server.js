@@ -86,19 +86,21 @@ async function handler(req,res){try{
  if(req.method==='POST'&&p==='/api/webhooks/asaas'){
   const token=req.headers['asaas-access-token'];
   if(!Asaas.verifyWebhook(token))return send(res,401,{error:'Webhook Asaas não autenticado.'});
-  const event=await body(req),eventId=String(event.id||''),type=String(event.event||''),d=await load();
-  d.asaasWebhookEvents||=[];
+  const event=await body(req),eventId=String(event.id||''),type=String(event.event||'');
   if(!eventId)return send(res,400,{error:'Evento sem identificador.'});
-  if(d.asaasWebhookEvents.includes(eventId))return send(res,200,{ok:true,duplicate:true});
-  const payment=event.payment||{},transfer=event.transfer||{};
-  if(type==='PAYMENT_RECEIVED'&&String(payment.externalReference||'').startsWith('wyncore-campaign:')){
-   const campaignId=String(payment.externalReference).slice('wyncore-campaign:'.length);
-   const campaign=(d.adCampaigns||[]).find(x=>x.id===campaignId);
-   if(campaign&&String(payment.id)===String(campaign.asaasPaymentId)&&Number(payment.value)>=Number(campaign.contractValue)){
-    campaign.contractStatus='received';campaign.contractReference=payment.id;campaign.receivedAt=new Date().toISOString();campaign.updatedAt=campaign.receivedAt;
+  return await withLock('wallet',async()=>{
+   const d=await load();
+   d.asaasWebhookEvents||=[];
+   if(d.asaasWebhookEvents.includes(eventId))return send(res,200,{ok:true,duplicate:true});
+   const payment=event.payment||{},transfer=event.transfer||{};
+   if(type==='PAYMENT_RECEIVED'&&String(payment.externalReference||'').startsWith('wyncore-campaign:')){
+    const campaignId=String(payment.externalReference).slice('wyncore-campaign:'.length);
+    const campaign=(d.adCampaigns||[]).find(x=>x.id===campaignId);
+    if(campaign&&String(payment.id)===String(campaign.asaasPaymentId)&&Number(payment.value)>=Number(campaign.contractValue)){
+     campaign.contractStatus='received';campaign.contractReference=payment.id;campaign.receivedAt=new Date().toISOString();campaign.updatedAt=campaign.receivedAt;
+    }
    }
-  }
-  if(['TRANSFER_DONE','TRANSFER_FAILED','TRANSFER_CANCELLED'].includes(type)&&String(transfer.externalReference||'').startsWith('wyncore-earning:')){
+   if(['TRANSFER_DONE','TRANSFER_FAILED','TRANSFER_CANCELLED'].includes(type)&&String(transfer.externalReference||'').startsWith('wyncore-earning:')){
     const updated=Payouts.applyTransferEvent(d,transfer,type,new Date().toISOString());
     if(!updated){
      const earningId=String(transfer.externalReference).slice('wyncore-earning:'.length);
@@ -110,10 +112,11 @@ async function handler(req,res){try{
      }
     }
    }
-   
-
-d.asaasWebhookEvents.push(eventId);if(d.asaasWebhookEvents.length>5000)d.asaasWebhookEvents=d.asaasWebhookEvents.slice(-4000);
-  await save(d);return send(res,200,{ok:true});
+   d.asaasWebhookEvents.push(eventId);
+   if(d.asaasWebhookEvents.length>5000)d.asaasWebhookEvents=d.asaasWebhookEvents.slice(-4000);
+   await save(d);
+   return send(res,200,{ok:true});
+  });
  }
 
  if(!p.startsWith('/api/')){const file=p==='/'?'/index.html':p;if(!PUBLIC_FILES.has(file))return send(res,404,{error:'Não encontrado'});const full=path.resolve(ROOT,'.'+file);try{const data=await fs.readFile(full);const extension=path.extname(full);const cachePolicy=['.html','.js','.css','.webmanifest'].includes(extension)?'no-cache':'public, max-age=3600';res.writeHead(200,{'Content-Type':MIME[extension]||'application/octet-stream','Cache-Control':cachePolicy});return res.end(data)}catch{return send(res,404,{error:'Arquivo não encontrado'})}}
