@@ -32,7 +32,7 @@ function renderPayoutReadiness(){
 function renderAdscendConversions(){
  const el=$('adscend-conversions');if(!el)return;
  const rows=data.adscendConversions||[];
- el.innerHTML=rows.length?rows.map(x=>'<article class="item"><div class="item-head"><h3>Vídeo / oferta '+esc(x.offerId)+'</h3><span class="pill">Aguardando conciliação</span></div><p>Participante: '+esc((data.participants||[]).find(p=>p.id===x.participantId)?.name||x.participantId)+'</p><p>Estimativa de participação: '+(Number.isFinite(Number(x.participantEstimateUsd))?'US$ '+Number(x.participantEstimateUsd).toFixed(2):'a confirmar')+'</p><small class="muted">Evento '+esc(String(x.transactionId||'').slice(0,16))+' · '+date(x.receivedAt)+'</small></article>').join(''):'<div class="empty">Nenhuma conclusão de vídeo recebida pela Adscend ainda.</div>';
+ el.innerHTML=rows.length?rows.map(x=>{const credited=x.creditIssued===true;return '<article class="item"><div class="item-head"><h3>Vídeo / oferta '+esc(x.offerId)+'</h3><span class="pill">'+(credited?'Recompensa confirmada': 'Aguardando conciliação')+'</span></div><p>Participante: '+esc((data.participants||[]).find(p=>p.id===x.participantId)?.name||x.participantId)+'</p><p>'+(credited?'Crédito na carteira: '+money(x.participantRewardBrl||0):'Comissão reportada: '+(Number.isFinite(Number(x.reportedPayout))?Number(x.reportedPayout).toFixed(4)+' '+esc(x.currency||''):'a confirmar'))+'</p><small class="muted">Evento '+esc(String(x.transactionId||'').slice(0,16))+' · '+date(x.receivedAt)+'</small></article>'}).join(''):'<div class="empty">Nenhuma conclusão de vídeo recebida pela Adscend ainda.</div>';
 }
 async function loadAdscendOffers(){
  const host=$('open-campaigns');if(!host)return;
