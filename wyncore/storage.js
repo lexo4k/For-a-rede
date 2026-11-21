@@ -4,8 +4,14 @@ const context = new AsyncLocalStorage();
 let pool;
 let schemaReady;
 
+function rpcConfigured(env = process.env) {
+  return Boolean(String(env.WYNCORE_SUPABASE_URL || '').trim() &&
+    String(env.WYNCORE_SUPABASE_ANON_KEY || '').trim() &&
+    String(env.WYNCORE_SUPABASE_RPC_SECRET || '').trim());
+}
+
 function databaseConfigured(env = process.env) {
-  return Boolean(String(env.DATABASE_URL || '').trim());
+  return Boolean(String(env.DATABASE_URL || '').trim()) || rpcConfigured(env);
 }
 
 function getPool() {
@@ -36,8 +42,58 @@ async function ensureSchema() {
   return schemaReady;
 }
 
+async function supabaseRpc(name, payload) {
+  const base = String(process.env.WYNCORE_SUPABASE_URL).replace(/\\/$/, '');
+  const endpoint = base + '/rest/v1/rpc/' + name;
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      apikey: process.env.WYNCORE_SUPABASE_ANON_KEY,
+      Authorization: 'Bearer ' + process.env.WYNCORE_SUPABASE_ANON_KEY,
+      'Content-Type': 'application/json',
+      Accept: 'application/json'
+    },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(12000)
+  });
+  const raw = await response.text();
+  let data;
+  try { data = raw ? JSON.parse(raw) : null; } catch { data = null; }
+  if (!response.ok) {
+    const detail = data?.message || data?.hint || ('HTTP ' + response.status);
+    const error = new Error('Supabase RPC ' + name + ' falhou: ' + String(detail).slice(0, 240));
+    error.status = response.status;
+    throw error;
+  }
+  return data;
+}
+
 async function withTransaction(work) {
-  if (!databaseConfigured()) return work();
+  if (context.getStore()) return work();
+
+  if (rpcConfigured()) {
+    const result = await supabaseRpc('wyncore_state_read', {
+      p_secret: process.env.WYNCORE_SUPABASE_RPC_SECRET
+    });
+    const initialState = result?.state ?? null;
+    const value = await context.run({
+      mode: 'supabase-rpc',
+      state: initialState,
+      updatedAt: result?.updated_at ?? null,
+      dirty: false
+    }, work);
+    const current = context.getStore();
+    if (current?.dirty) {
+      await supabaseRpc('wyncore_state_write', {
+        p_secret: process.env.WYNCORE_SUPABASE_RPC_SECRET,
+        p_expected_updated_at: current.updatedAt,
+        p_state: current.state
+      });
+    }
+    return value;
+  }
+
+  if (!String(process.env.DATABASE_URL || '').trim()) return work();
   await ensureSchema();
   const client = await getPool().connect();
   try {
@@ -45,7 +101,7 @@ async function withTransaction(work) {
     await client.query('SELECT pg_advisory_xact_lock($1)', [781204219]);
     const result = await client.query('SELECT state FROM wyncore_state WHERE id = 1 FOR UPDATE');
     const initialState = result.rows[0]?.state ?? null;
-    const value = await context.run({ client, state: initialState }, work);
+    const value = await context.run({ mode: 'postgres', client, state: initialState }, work);
     await client.query('COMMIT');
     return value;
   } catch (error) {
@@ -66,6 +122,10 @@ async function writeState(state) {
   const current = context.getStore();
   if (!current) return false;
   current.state = structuredClone(state);
+  if (current.mode === 'supabase-rpc') {
+    current.dirty = true;
+    return true;
+  }
   await current.client.query(
     'INSERT INTO wyncore_state (id, state, updated_at) VALUES (1, $1::jsonb, NOW()) ON CONFLICT (id) DO UPDATE SET state = EXCLUDED.state, updated_at = NOW()',
     [JSON.stringify(state)]
@@ -85,4 +145,4 @@ function payoutStorageSafe(env = process.env, defaultDataDir = null) {
     (!defaultDir || require('node:path').resolve(configuredDir) !== require('node:path').resolve(defaultDir));
 }
 
-module.exports = { databaseConfigured, withTransaction, readState, writeState, payoutStorageSafe };
+module.exports = { databaseConfigured, rpcConfigured, withTransaction, readState, writeState, payoutStorageSafe };
