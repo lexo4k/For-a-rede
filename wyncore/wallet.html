@@ -27,6 +27,7 @@
         <div class="amount-field"><span>R$</span><input id="deposit-amount" type="number" min="5" max="5000" step="0.01" value="10.00" required></div>
         <label id="payer-email-label" class="email-field hidden" for="payer-email">E-mail do pagador</label>
         <input id="payer-email" class="email-field hidden" type="email" placeholder="voce@email.com">
+        <label for="payer-cpf">CPF do pagador</label><input id="payer-cpf" class="email-field" type="text" inputmode="numeric" maxlength="14" autocomplete="off" placeholder="000.000.000-00" required>
         <button id="deposit-button" class="primary" type="submit" disabled>Preparar depósito Pix</button>
         <p id="deposit-message" class="message" role="status">Verificando disponibilidade do Pix...</p>
       </form>
