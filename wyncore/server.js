@@ -8,6 +8,7 @@ const PUBLIC_FILES=new Set(['/','/index.html','/anunciantes.html','/styles.css',
 const MIME={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml','.webmanifest':'application/manifest+json','.xml':'application/xml; charset=utf-8','.txt':'text/plain; charset=utf-8'};
 const rate=new Map();
 function normalizePhone(value){let digits=String(value||'').replace(/\D/g,'');if(digits.startsWith('55')&&(digits.length===12||digits.length===13))digits=digits.slice(2);return digits;}
+function isPlayableAdMedia(value){try{const u=new URL(String(value||''));if(u.protocol!=='https:'||u.username||u.password)return false;const host=u.hostname.toLowerCase();if(host==='youtu.be'||host==='youtube.com'||host.endsWith('.youtube.com')){const id=host==='youtu.be'?u.pathname.split('/').filter(Boolean)[0]:(u.pathname.startsWith('/embed/')?u.pathname.split('/')[2]:u.searchParams.get('v'));return /^[A-Za-z0-9_-]{11}$/.test(id||'')}if(host==='vimeo.com'||host.endsWith('.vimeo.com'))return /^\d+$/.test(u.pathname.split('/').filter(Boolean).pop()||'');return ['mp4','webm','ogg'].includes(u.pathname.toLowerCase().split('.').pop())}catch{return false}}
 function assertConfig(){if(PASSWORD.length<12)throw Error('Configure WYNCORE_OWNER_PASSWORD com pelo menos 12 caracteres.');if(SECRET.length<32)throw Error('Configure WYNCORE_SESSION_SECRET com pelo menos 32 caracteres.')}
 function safeEqual(a,b){const x=Buffer.from(String(a)),y=Buffer.from(String(b));return x.length===y.length&&crypto.timingSafeEqual(x,y)}
 function secretKey(){return crypto.createHash('sha256').update(SECRET).digest()}
@@ -305,6 +306,7 @@ if(req.method==='POST'&&p==='/api/pix-key'){
   if(reward>0&&maxParticipants>0&&reward*maxParticipants>value)err('O orçamento do contrato não cobre a soma das recompensas previstas.');
   if(mediaUrl){let u;try{u=new URL(mediaUrl)}catch{}if(!u||u.protocol!=='https:'||u.username||u.password)err('O link do anúncio precisa ser HTTPS válido.');}
   if(channel==='video'&&!mediaUrl)err('Campanhas de vídeo precisam ter um link HTTPS do anúncio ou trailer.');
+  if(channel==='video'&&mediaUrl&&!isPlayableAdMedia(mediaUrl))err('Este link não é um vídeo compatível. Use um vídeo MP4/WebM/OGG, YouTube ou Vimeo válido.');
   const c={id:crypto.randomUUID(),title,client,brief,channel,objective,mediaUrl,advertiserDocument,advertiserEmail,advertiserPhone,contractValue:value,rewardPerReview:reward,maxParticipants,requiredWatchSeconds,contractStatus:'not_recorded',status:'draft',createdBy:me.id,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
   d.adCampaigns.unshift(c);d.audit.unshift({id:crypto.randomUUID(),actorId:me.id,type:'ad_campaign_created',entityId:c.id,details:{client},at:new Date().toISOString()});await save(d);return send(res,201,c);
  }
@@ -348,7 +350,7 @@ if(req.method==='POST'&&p==='/api/pix-key'){
  if(req.method==='POST'&&adMatch){
   if(me.role!=='admin')err('Somente administração.',403);
   const c=(d.adCampaigns||[]).find(x=>x.id===adMatch[1]);if(!c)return send(res,404,{error:'Campanha não encontrada.'});
-  if(adMatch[2]==='open'&&(Number(c.contractValue)<=0||c.contractStatus!=='received'))err('Campanha não pode ser publicada: confirme primeiro o recebimento real do orçamento do contratante.',409);if(adMatch[2]==='open'&&(!Number(c.rewardPerReview)||!Number(c.maxParticipants)||!c.mediaUrl))err('Para publicar, informe recompensa por avaliação, limite de participantes e vídeo da campanha.',409);if(adMatch[2]==='open'&&Number(c.rewardPerReview)*Number(c.maxParticipants)>Number(c.contractValue))err('O orçamento não cobre as recompensas previstas.',409);
+  if(adMatch[2]==='open'&&(Number(c.contractValue)<=0||c.contractStatus!=='received'))err('Campanha não pode ser publicada: confirme primeiro o recebimento real do orçamento do contratante.',409);if(adMatch[2]==='open'&&(!Number(c.rewardPerReview)||!Number(c.maxParticipants)||!isPlayableAdMedia(c.mediaUrl)))err('Para publicar, informe recompensa por avaliação, limite de participantes e um vídeo compatível e acessível.',409);if(adMatch[2]==='open'&&Number(c.rewardPerReview)*Number(c.maxParticipants)>Number(c.contractValue))err('O orçamento não cobre as recompensas previstas.',409);
   c.status=({open:'open',pause:'paused',complete:'completed'})[adMatch[2]];c.updatedAt=new Date().toISOString();await save(d);return send(res,200,c);
  }
  adMatch=p.match(/^\/api\/ad-campaigns\/([\w-]+)\/contract-payment$/);
@@ -363,6 +365,7 @@ if(req.method==='POST'&&p==='/api/pix-key'){
   if(limited(req,'ad-review',me.id,20,3600000))return send(res,429,{error:'Limite de avaliações por hora atingido.'});
   const b=await body(req),campaignId=String(b.campaignId||''),clarity=Number(b.clarity),trust=Number(b.trust),relevance=Number(b.relevance),comment=String(b.comment||'').trim().slice(0,1200);
   const c=(d.adCampaigns||[]).find(x=>x.id===campaignId&&x.status==='open');if(!c)err('Campanha não está aberta para avaliações.',404);
+  if(!isPlayableAdMedia(c.mediaUrl))err('Este vídeo está indisponível para avaliação. Nenhuma avaliação foi registrada.',409);
   if(![clarity,trust,relevance].every(x=>Number.isInteger(x)&&x>=1&&x<=5)||comment.length<20)err('Avalie os três critérios de 1 a 5 e escreva um comentário de pelo menos 20 caracteres.');
   if((d.adReviews||[]).some(x=>x.campaignId===campaignId&&x.participantId===me.id))err('Você já enviou uma avaliação para esta campanha.',409);
   const review={id:crypto.randomUUID(),campaignId,participantId:me.id,clarity,trust,relevance,comment,status:'pending',createdAt:new Date().toISOString()};
