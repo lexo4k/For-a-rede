@@ -42,7 +42,7 @@ test('WYNCORE authenticated API end-to-end',async t=>{
 
  assert.ok(!workPage.includes('income-target'),'the product must not substitute an income calculator for real opportunities');
  const manifest=await (await fetch(base+'/manifest.webmanifest')).json();
- assert.equal(manifest.start_url,'./work','installable mobile app should open WYNCORE Work');
+ assert.equal(manifest.start_url,'./','installable mobile app should open the main WYNCORE ads app');
  const serviceWorker=await (await fetch(base+'/sw.js')).text();
  assert.ok(serviceWorker.includes('wyncore-shell-v7'));
  assert.ok(serviceWorker.includes('./work.js'),'mobile shell should cache WYNCORE Work assets');
