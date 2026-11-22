@@ -95,7 +95,7 @@ async function resolveRequestActor(req){
  const session=readSession(req);if(!session)return null;
  return Storage.withTransaction(()=>withLock('state',async()=>{const state=await load();return actor(session,state)}));
 }
-function publicOrigin(){return String(process.env.WYNCORE_PUBLIC_URL||'https://wyncore.vercel.app').replace(/\/$/,'')}
+function publicOrigin(req){const host=String(req?.headers?.['x-forwarded-host']||req?.headers?.host||'').split(',')[0].trim();const proto=String(req?.headers?.['x-forwarded-proto']||'https').split(',')[0].trim();if(host&&proto==='https'&&(/\.vercel\.app$/i.test(host)||host==='wyncore.vercel.app'))return 'https://'+host;return String(process.env.WYNCORE_PUBLIC_URL||'https://wyncore.vercel.app').replace(/\/$/,'')}
 async function handleStripeConnect(req,res){
  if(req.method!=='POST')return send(res,405,{error:'Método não permitido.'});
  if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
@@ -111,7 +111,7 @@ async function handleStripeConnect(req,res){
   accountId=account.id;
   await Storage.withTransaction(()=>withLock('state',async()=>{const d=await load(),p=d.participants.find(x=>x.id===me.id);if(!p)throw Object.assign(new Error('Participante não encontrado.'),{status:404});p.stripeAccountId=accountId;p.stripeDetailsSubmitted=Boolean(account.details_submitted);p.stripePayoutsEnabled=Boolean(account.payouts_enabled);p.stripeAccountCreatedAt=new Date().toISOString();await save(d)}));
  }
- const origin=publicOrigin();
+ const origin=publicOrigin(req);
  const link=await Stripe.createAccountLink({accountId,refreshUrl:origin+'/ads.html?connect=refresh',returnUrl:origin+'/ads.html?connect=return'});
  return send(res,200,{ok:true,url:link.url,message:'Conclua a validação da sua conta no Stripe.'});
 }
@@ -200,6 +200,7 @@ async function handleStripeWebhook(req,res){
  const raw=await rawBody(req);if(!Stripe.verifyWebhook(raw,req.headers['stripe-signature']))return send(res,401,{error:'Assinatura do webhook Stripe inválida.'});
  let event;try{event=JSON.parse(raw)}catch{return send(res,400,{error:'Evento Stripe inválido.'})}
  if(!event.id)return send(res,400,{error:'Evento Stripe sem identificador.'});
+ const liveKey=String(process.env.STRIPE_SECRET_KEY||'').startsWith('sk_live_');if(typeof event.livemode==='boolean'&&event.livemode!==liveKey)return send(res,400,{error:'Modo live/test do webhook não corresponde à chave Stripe configurada.'});
  await Storage.withTransaction(()=>withLock('wallet',async()=>{
   const d=await load();d.stripeWebhookEvents||=[];if(d.stripeWebhookEvents.includes(event.id))return;
   const now=new Date().toISOString(),object=event.data?.object||{};
@@ -207,10 +208,10 @@ async function handleStripeWebhook(req,res){
    const meta=object.metadata||{};
    if(meta.kind==='ad_campaign'){
     const c=(d.adCampaigns||[]).find(x=>x.id===meta.campaignId&&x.stripeCheckoutSessionId===object.id);
-    if(c&&Number(object.amount_total)>=Math.round(Number(c.contractValue||0)*100)){c.contractStatus='received';c.contractReference=String(object.payment_intent||object.id);c.receivedAt=now;c.updatedAt=now}
+    if(c&&Number(object.amount_total)===Math.round(Number(c.contractValue||0)*100)){c.contractStatus='received';c.contractReference=String(object.payment_intent||object.id);c.receivedAt=now;c.updatedAt=now}
    }else if(meta.kind==='program_funding'){
     const p=(d.programs||[]).find(x=>x.id===meta.programId&&x.stripeCheckoutSessionId===object.id);
-    if(p&&Number(object.amount_total)>=Math.round(Number(p.budget||0)*100)){p.fundingStatus='paid';p.fundingReference=String(object.payment_intent||object.id);p.fundedAt=now;p.status='active';p.updatedAt=now}
+    if(p&&Number(object.amount_total)===Math.round(Number(p.budget||0)*100)){p.fundingStatus='paid';p.fundingReference=String(object.payment_intent||object.id);p.fundedAt=now;p.status='active';p.updatedAt=now}
    }
   }
   if(event.type==='account.updated'){
