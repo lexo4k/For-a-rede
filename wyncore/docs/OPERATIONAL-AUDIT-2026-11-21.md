@@ -1,49 +1,43 @@
-# WYNCORE — auditoria operacional de integrações
+# WYNCORE — auditoria operacional
 
-Data da auditoria: 2026-11-21
-Branch examinada: `wyncore-personal-work-hub`
+Data: 2026-11-22
+Branch: `wyncore-sl-complete`
 
-## Resultado objetivo
+## Código e testes
 
-Os adaptadores de Adscend Media, Asaas e PayPal existem no código. Isso comprova implementação de chamadas e regras locais, mas não comprova conta de publisher aprovada, credenciais válidas, campanhas elegíveis no Brasil, receita liquidada ou pagamentos efetuados.
+- Painel integrado com campanhas, vídeos, tarefas internas, TD Mais, níveis SL1–SL9, equipe, indicações, carteira e relatórios.
+- Agregador externo de vagas removido.
+- Adaptadores legados Asaas/PayPal removidos; endpoints antigos respondem HTTP 410.
+- Financiamento via Stripe Checkout e repasses via Stripe Connect, com webhook assinado e conciliação.
+- Confirmações manuais de recebimento e pagamento desativadas.
+- Cadastro da área de campanhas inclui e-mail para onboarding Stripe Connect.
+- Testes executados em sandbox com Node.js 24.22.3:
+  - `npm ci`: concluído.
+  - `node --check` em server.js, domain.js, app.js, ads.js e stripe.js: concluído.
+  - `npm run build`: 32 testes aprovados, 0 falhas.
+  - `npm audit --omit=dev`: 0 vulnerabilidades.
+- A dependência foi fixada em `package-lock.json`.
 
-## Inventário de configuração observado no Vercel
+## Persistência Supabase verificada
 
-A listagem de variáveis do projeto contém configurações de sessão/administração, armazenamento e Supabase. Não aparecem variáveis de ambiente para:
+Projeto WYNCORE `pdgmeiyoplrwrnrvoenf`, status `ACTIVE_HEALTHY`.
+- `public.wyncore_state`: 1 registro.
+- `private.wyncore_rpc_credentials`: 1 registro.
+- Funções `wyncore_state_read` e `wyncore_state_write` presentes.
+- Ambas validam o segredo RPC contra a tabela privada antes de ler/gravar.
+- Escrita usa advisory lock e comparação de `updated_at` para evitar sobrescrita concorrente.
+- RLS está habilitado nas tabelas; não há políticas diretas, e a operação é feita pelas funções RPC protegidas.
 
-- `ADSCEND_PUBLISHER_ID`
-- `ADSCEND_API_KEY`
-- `ADSCEND_POSTBACK_SECRET`
-- `ASAAS_API_KEY`
-- `ASAAS_WEBHOOK_TOKEN`
-- `PAYPAL_CLIENT_ID`
-- `PAYPAL_CLIENT_SECRET`
+O segredo RPC e as chaves do projeto não são reproduzidos neste relatório.
 
-Também foi observado que `WYNCORE_SUPABASE_ANON_KEY` está sem valor na configuração de Preview da branch. A documentação já informa que o RPC Supabase permanece desativado até a correção da configuração de segurança/RLS. Não declarar o armazenamento Supabase como operacional até o health check confirmar `supabaseConfigured: true` e os testes de leitura/escrita concorrente passarem.
+## Bloqueios externos
 
-## Regras de ativação
+- Não foram encontradas variáveis `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` ou `STRIPE_CONNECT_ENABLED` na configuração Vercel examinada. Portanto, não há cobrança ou repasse real habilitado.
+- Não foram encontradas credenciais Adscend de publisher; não há inventário de ofertas confirmado.
+- O limite Vercel gratuito de 100 deployments por dia foi atingido. A criação de um novo preview retornou HTTP 402 e retry de 24 horas.
+- O domínio de produção não foi alterado.
+- PR #7 permanece em rascunho, sem merge.
 
-1. Adscend: só importar ofertas para o Brasil quando a API autenticada retornar campanhas do produto de vídeo com tráfego incentivado/dinheiro explicitamente permitido. Oferta vazia ou país não elegível significa zero anúncios disponíveis, nunca inventar inventário.
-2. Postback: validar assinatura, identificador único, moeda, valor, estado e reversões. Só receita liquidada pelo parceiro pode virar saldo sacável.
-3. Asaas: manter sandbox durante homologação. Produção exige conta aprovada, API key de produção, token de webhook, webhook cadastrado e saldo empresarial suficiente. O evento `TRANSFER_DONE` é a confirmação do Pix.
-4. PayPal: manter sandbox até aprovação do produto Payouts e validação de destinatários/países. Não misturar sandbox com produção.
-5. Carteira: saldo estimado, pendente, aprovado não liquidado e disponível para saque devem permanecer separados. Nunca creditar estimativas como dinheiro disponível.
-6. Segurança: todos os segredos ficam exclusivamente em variáveis sensíveis do servidor. Não colocar chaves no Git, navegador, logs ou conversa.
+## Resultado
 
-## Bloqueios concretos identificados
-
-- As variáveis do provedor Adscend não estão cadastradas no projeto Vercel examinado.
-- As variáveis do Asaas não estão cadastradas no projeto Vercel examinado.
-- As variáveis do PayPal não estão cadastradas no projeto Vercel examinado.
-- O Supabase RPC não está operacional na configuração observada; a chave anon de Preview está vazia e a documentação registra bloqueio de segurança.
-- Não há evidência, nesta auditoria, de campanhas Rewarded Video elegíveis no Brasil, postback de conversão real ou pagamento liquidado.
-
-## Próxima sequência técnica
-
-1. Corrigir e verificar armazenamento transacional e autenticação em Preview.
-2. Inserir credenciais reais diretamente no gerenciador de segredos do Vercel, sem transmiti-las pelo chat.
-3. Executar health checks e testes de integração em sandbox.
-4. Homologar campanha de vídeo incentivado no Brasil e receber postback assinado de teste do próprio parceiro.
-5. Só então habilitar produção e realizar uma transação pequena, conciliada no painel do parceiro e no Asaas.
-
-**Estado final desta auditoria:** módulos de integração presentes; integrações externas não comprovadas como conectadas; receita e saques reais não comprovados.
+O código e os testes estão prontos para revisão. A ativação financeira e a publicação dependem da habilitação da Stripe Connect, credenciais Stripe, aprovação Adscend se desejada e liberação do limite de deploy da Vercel. Não declarar a plataforma como recebendo ou pagando dinheiro até homologação real.
