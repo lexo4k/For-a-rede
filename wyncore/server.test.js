@@ -99,7 +99,19 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  const invalidApp=await fetch(base+'/api/work/applications',{method:'POST',headers:{cookie:trackerCookie,'content-type':'application/json'},body:JSON.stringify({providerId:'fake-provider'})});
  assert.equal(invalidApp.status,400,'unknown providers must not be registered');
  const adminApp=await fetch(base+'/api/work/applications',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({providerId:'telus-qa-br'})});
+
  assert.equal(adminApp.status,403,'admin account cannot register participant applications');
+ const missingTaskSource=await fetch(base+'/api/work/tasks',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({title:'Tarefa sem autorização',source:'Parceiro',sourceTaskId:'task-001',instructions:'Siga as instruções oficiais da atividade.',mediaType:'video',amount:10})});
+ assert.equal(missingTaskSource.status,400,'task publication must require an official HTTPS source reference');
+ const taskCreate=await fetch(base+'/api/work/tasks',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({title:'Tarefa autorizada de teste',source:'Parceiro de teste',sourceTaskId:'task-002',instructions:'Siga as instruções oficiais da atividade.',mediaType:'video',amount:10,sourceUrl:'https://example.org/task-002'})});
+ assert.equal(taskCreate.status,201);
+ const createdWorkTask=await taskCreate.json();
+ const participantWork=await fetch(base+'/api/work',{headers:{cookie:trackerCookie}});
+ assert.equal(participantWork.status,200);
+ assert.ok((await participantWork.json()).tasks.some(x=>x.id===createdWorkTask.id));
+ const noConsent=await fetch(base+'/api/work/tasks/'+createdWorkTask.id+'/submit',{method:'POST',headers:{cookie:trackerCookie,'content-type':'application/json'},body:JSON.stringify({mediaBase64:'YQ==',mimeType:'video/webm',consent:false})});
+ assert.equal(noConsent.status,400,'recording submissions must require explicit consent');
+
 
  const pendingDash=await (await fetch(base+'/api/dashboard',{headers:{cookie}})).json();
  const participant=pendingDash.participants.find(p=>p.email==='participante@example.org');
