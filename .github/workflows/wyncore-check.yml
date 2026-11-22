@@ -1,7 +1,7 @@
 name: WYNCORE checks
 on:
   push:
-    branches: [wyncore-core]
+    branches: [wyncore-core, wyncore-minute-production]
     paths: ["wyncore/**", ".github/workflows/wyncore-check.yml"]
   pull_request:
     branches: [forcarede-init]
@@ -18,12 +18,16 @@ jobs:
         run: |
           node --check wyncore/server.js
           node --check wyncore/app.js
+          node --check wyncore/work.js
           node --check wyncore/sw.js
       - name: Backend tests
         working-directory: wyncore
         run: npm test
       - name: Required files
         run: |
+          test -s wyncore/work.html
+          test -s wyncore/work.css
+          test -s wyncore/work.js
           test -s wyncore/index.html
           test -s wyncore/styles.css
           test -s wyncore/app.js
