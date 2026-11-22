@@ -308,6 +308,7 @@ async function handler(req,res){
   }
 
   if(SECRET.length<32)return send(res,503,{error:'A autenticação de sessão ainda não está configurada no servidor. O pedido de cadastro pode ser recebido, mas a entrada ficará indisponível até a configuração.'});
+ if(p==='/api/work'||p.startsWith('/api/work/'))return send(res,410,{error:'O antigo módulo WYNCORE Work foi desativado. As atividades agora ficam no painel integrado.'});
  if(p==='/api/work'){
   if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
   const d=await load();d.workAccounts||=[];d.workTasks||=[];d.workLedger||=[];
@@ -496,15 +497,6 @@ async function handler(req,res){
   if((d.adReviews||[]).some(x=>x.campaignId===campaignId&&x.participantId===me.id))err('Você já enviou uma avaliação para esta campanha.',409);
   const review={id:crypto.randomUUID(),campaignId,participantId:me.id,clarity,trust,relevance,comment,status:'pending',createdAt:new Date().toISOString()};
   d.adReviews.unshift(review);d.audit.unshift({id:crypto.randomUUID(),actorId:me.id,type:'ad_review_submitted',entityId:review.id,details:{campaignId},at:new Date().toISOString()});await save(d);return send(res,201,review);
- }
-
- async function tryAutomaticPix(earning,d){
-  const participant=(d.participants||[]).find(x=>x.id===earning.participantId),campaign=(d.adCampaigns||[]).find(x=>x.id===earning.campaignId);
-  if(!Asaas.configured()||!Asaas.webhookConfigured()||!participant?.pixKeyEncrypted||!participant?.pixKeyType||campaign?.contractStatus!=='received')return false;
-  try{
-   const transfer=await Asaas.transferPix({value:earning.amount,pixAddressKey:decryptSecret(participant.pixKeyEncrypted),pixAddressKeyType:participant.pixKeyType,description:'WYNCORE recompensa',externalReference:'wyncore-earning:'+earning.id});
-   earning.asaasTransferId=transfer.id;earning.status='payout_pending';earning.payoutRequestedAt=new Date().toISOString();earning.payoutError=null;return true;
-  }catch(e){earning.payoutError=String(e.message||'Falha ao iniciar Pix').slice(0,300);return false;}
  }
 
  adMatch=p.match(/^\/api\/ad-reviews\/([\w-]+)\/(accept|reject)$/);
