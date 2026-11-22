@@ -94,7 +94,7 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.equal(approval.status,200,'admin should approve participant');
  const offerwallTrans='offerwall-video-001',offerwallReward='1.75';
  const offerwallSignature=crypto.createHash('md5').update(participant.id+offerwallTrans+offerwallReward+process.env.OFFERWALLME_SECRET).digest('hex');
- const offerwallPayload=new URLSearchParams({subId:participant.id,transId:offerwallTrans,reward:offerwallReward,reward_name:'BRL',offer_name:'Trailer patrocinado',offer_type:'video',status:'1',debug:'0',signature:offerwallSignature});
+ const offerwallPayload=new URLSearchParams({subId:participant.id,transId:offerwallTrans,reward:offerwallReward,reward_name:'BRL',offer_name:'Trailer patrocinado',offer_type:'ptc',payout:'0.350000',reward_value:'5',country:'BR',status:'1',debug:'0',signature:offerwallSignature});
  const credited=await fetch(base+'/api/ads/offerwallme/postback',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:offerwallPayload});
  assert.equal(credited.status,200,'signed Offerwall.me video postback should credit an active participant: '+await credited.clone().text());
  assert.equal(await credited.text(),'ok');
@@ -103,6 +103,8 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  const beforeChargeback=(await (await fetch(base+'/api/dashboard',{headers:{cookie}})).json()).ledger.filter(x=>x.reference===offerwallTrans);
  assert.equal(beforeChargeback.length,1,'a conversion must only be credited once');
  assert.equal(beforeChargeback[0].amount,1.75);
+ const offerwallAdminDash=await (await fetch(base+'/api/dashboard',{headers:{cookie}})).json();
+ assert.equal(offerwallAdminDash.offerwallTransactions[0].payoutUsd,0.35,'publisher payout must be recorded separately from user reward');
  const chargebackPayload=new URLSearchParams({subId:participant.id,transId:offerwallTrans,reward:offerwallReward,reward_name:'BRL',offer_name:'Trailer patrocinado',offer_type:'video',status:'2',debug:'0',signature:offerwallSignature});
  const reversed=await fetch(base+'/api/ads/offerwallme/postback',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:chargebackPayload});
  assert.equal(reversed.status,200,'signed chargeback should reverse a credited conversion');
