@@ -37,7 +37,57 @@ function render(){renderPrograms();renderTasks();const mine=me.role==='participa
 $('stage-estimated').textContent=money(est);$('stage-confirmed').textContent=money(conf);$('stage-paid').textContent=money(paid);$('stage-count').textContent=String(mine.filter(a=>a.state!=='rejected').length);const earned=mine.filter(a=>['approved','paid'].includes(a.state)).length,level=Math.min(9,1+Math.floor(earned/3));$('level-current').textContent='SL'+level;$('level-count').textContent=String(earned);$('level-next').textContent=level===9?'Máximo':'SL'+(level+1);$('level-progress').textContent=level===9?'100%':Math.round((earned%3)/3*100)+'%';
 }
 function renderReferrals(){const view=$('view-referrals');if(!view)return;let panel=view.querySelector('.referral-live');if(!panel){panel=node('div','panel referral-live');view.append(panel)}panel.replaceChildren(node('h4','','Histórico de indicações'));if(me.role==='participant'){const form=node('form','form-grid'),input=node('input');input.type='email';input.required=true;input.placeholder='E-mail da pessoa indicada';const submit=node('button','primary','Registrar indicação');submit.type='submit';form.append(input,submit);form.addEventListener('submit',async e=>{e.preventDefault();try{await api('/referrals',{method:'POST',body:JSON.stringify({email:input.value})});await load()}catch(x){alert(x.message)}});panel.append(form)}if(!state.referrals.length)panel.append(node('p','empty','Nenhuma indicação registrada.'));state.referrals.forEach(r=>{const row=node('div','list-row');row.append(node('strong','',r.email),node('small','',r.status+' · '+new Date(r.createdAt).toLocaleString('pt-BR')));panel.append(row)})}
-function renderVideos(){const box=$('video-list');if(!box)return;box.replaceChildren();const list=state.programs.filter(p=>(me.role!=='participant'||p.status==='active')&&(p.videoUrl||/vídeo|video|conteúdo|conteudo|campanha/i.test(p.title+' '+p.source)));if(!list.length){box.append(node('p','empty','Nenhuma campanha em vídeo disponível. As campanhas de parceiros aparecerão aqui quando forem cadastradas e liberadas.'));return}list.forEach(p=>{const card=node('article','video-card'),meta=node('div');meta.append(node('strong','',p.title),node('small','',(p.sponsor||p.source)+' · '+(p.status==='active'?'Conteúdo disponível':'Aguardando liberação')));card.append(meta);if(p.videoUrl){let u;try{u=new URL(p.videoUrl)}catch{}if(u&&u.protocol==='https:'){if(/\.(mp4|webm|ogg)(\?.*)?$/i.test(u.pathname+u.search)){const video=node('video','video-player');video.controls=true;video.preload='metadata';video.src=u.href;card.append(video)}else if(u.hostname==='youtu.be'||u.hostname.endsWith('youtube.com')){let id=u.hostname==='youtu.be'?u.pathname.slice(1):u.searchParams.get('v');if(u.pathname.startsWith('/embed/'))id=u.pathname.split('/')[2];if(id&&/^[A-Za-z0-9_-]{6,20}$/.test(id)){const frame=node('iframe','video-player');frame.src='https://www.youtube-nocookie.com/embed/'+id;frame.title=p.title;frame.allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';frame.allowFullscreen=true;card.append(frame)}}}}if(me.role==='participant'&&p.status==='active'){const existing=state.assignments.find(a=>a.programId===p.id&&a.participantId===me.id&&a.state!=='rejected');card.append(existing?node('span','tag',existing.state==='requested'?'Solicitação enviada':'Atividade em andamento'):button('Solicitar esta atividade',async()=>{try{await api('/programs/'+encodeURIComponent(p.id)+'/request',{method:'POST'});await load()}catch(x){alert(x.message)}},'primary'));const prior=(state.campaignFeedback||[]).find(x=>x.programId===p.id&&x.participantId===me.id);const rating=node('select');rating.setAttribute('aria-label','Sua avaliação da campanha');[['','Avalie este anúncio'],['5','5 estrelas'],['4','4 estrelas'],['3','3 estrelas'],['2','2 estrelas'],['1','1 estrela']].forEach(([v,label])=>{const o=node('option','',label);o.value=v;o.selected=String(prior?.rating||'')===v;rating.append(o)});const comment=node('input');comment.maxLength=300;comment.placeholder='Comentário opcional sobre o anúncio';if(prior?.comment)comment.value=prior.comment;const send=button(prior?'Atualizar avaliação':'Enviar avaliação',async()=>{if(!rating.value){alert('Escolha uma nota de 1 a 5.');return}send.disabled=true;try{await api('/campaign-feedback',{method:'POST',body:JSON.stringify({programId:p.id,rating:Number(rating.value),comment:comment.value})});await load()}catch(x){alert(x.message);send.disabled=false}},'secondary');const feedback=node('div','feedback-row');feedback.append(rating,comment,send);card.append(feedback);card.append(node('small','muted','Avaliações ajudam o anunciante a entender a campanha. Avaliar ou assistir não gera pagamento automaticamente.'))}box.append(card)})}
+function renderVideos(){
+ const box=$('video-list');if(!box)return;box.replaceChildren();
+ const list=state.programs.filter(p=>(me.role!=='participant'||p.status==='active')&&p.videoUrl);
+ if(!list.length){box.append(node('p','empty',me.role==='participant'?'Nenhum anúncio patrocinado disponível no momento. Campanhas aparecerão aqui quando um anunciante financiar e a equipe validar o orçamento.':'Nenhuma campanha com vídeo. Cadastre uma campanha patrocinada e confirme o financiamento antes de liberá-la.'));return}
+ list.forEach(p=>{
+  const card=node('article','video-card'),meta=node('div','video-card-meta');
+  meta.append(node('strong','',p.title),node('small','',(p.sponsor||p.source||'Anunciante')+' · recompensa por conclusão aprovada: '+money(p.reward)));
+  card.append(meta);
+  const assignment=state.assignments.find(a=>a.programId===p.id&&a.participantId===me.id&&a.state!=='rejected');
+  if(me.role==='participant'&&p.status==='active'){
+   if(!assignment){
+    card.append(node('p','muted','Campanha patrocinada. Solicite participação para liberar o vídeo. A recompensa anunciada depende da conclusão, revisão e orçamento efetivamente financiado.'));
+    card.append(button('Participar e assistir',async()=>{try{await api('/programs/'+encodeURIComponent(p.id)+'/request',{method:'POST'});await load()}catch(x){alert(x.message)}},'primary'));
+   }else if(assignment.state==='requested')card.append(node('span','tag','Solicitação enviada · aguardando liberação'));
+   else if(assignment.state==='assigned'){
+    let completed=false;
+    if(/\\.(mp4|webm|ogg)(\\?.*)?$/i.test(p.videoUrl)){
+     const video=node('video','video-player');video.controls=true;video.playsInline=true;video.preload='metadata';video.src=p.videoUrl;
+     video.addEventListener('ended',()=>{completed=true;const b=card.querySelector('[data-complete]');if(b)b.disabled=false});
+     card.append(video);
+    }else{
+     let u;try{u=new URL(p.videoUrl)}catch{}
+     if(u&&u.protocol==='https:'&&(u.hostname==='youtu.be'||u.hostname.endsWith('youtube.com'))){
+      let id=u.hostname==='youtu.be'?u.pathname.slice(1):u.searchParams.get('v');if(u.pathname.startsWith('/embed/'))id=u.pathname.split('/')[2];
+      if(id&&/^[A-Za-z0-9_-]{6,20}$/.test(id)){const frame=node('iframe','video-player');frame.src='https://www.youtube-nocookie.com/embed/'+id;frame.title=p.title;frame.allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';frame.allowFullscreen=true;card.append(frame)}
+     }else card.append(node('p','muted','Formato de vídeo não suportado para reprodução integrada.'));
+     card.append(node('p','muted','Depois de assistir ao vídeo completo, confirme manualmente a conclusão.'));
+     completed=true;
+    }
+    card.append(node('p','muted','Ao concluir, envie para revisão. O valor não entra no saldo antes da aprovação e da confirmação de pagamento.'));
+    const submit=button('Concluir vídeo e enviar para revisão',async()=>{submit.disabled=true;try{await api('/assignments/'+encodeURIComponent(assignment.id)+'/submit',{method:'POST',body:JSON.stringify({proof:'Conclusão declarada pelo participante para a campanha patrocinada '+p.id+'.'})});await load()}catch(x){alert(x.message);submit.disabled=false}},'primary');
+    submit.dataset.complete='1';submit.disabled=!completed;card.append(submit);
+   }else{
+    const labels={submitted:'Conclusão enviada · aguardando revisão',approved:'Conclusão aprovada · aguardando liquidação',paid:'Pagamento confirmado',rejected:'Conclusão recusada'};
+    card.append(node('span','tag',labels[assignment.state]||'Participação registrada'));
+   }
+  }else{
+   card.append(node('p','muted','Estado: '+p.status+' · orçamento: '+money(p.budget)+'. Só publique campanhas após receber e conferir o financiamento do anunciante.'));
+   if(me.role==='participant'&&p.status!=='active')card.append(node('span','tag','Campanha ainda não liberada'));
+  }
+  if(me.role==='participant'&&p.status==='active'){
+   const prior=(state.campaignFeedback||[]).find(x=>x.programId===p.id&&x.participantId===me.id);
+   const rating=node('select');rating.setAttribute('aria-label','Sua avaliação da campanha');
+   [['','Avalie este anúncio'],['5','5 estrelas'],['4','4 estrelas'],['3','3 estrelas'],['2','2 estrelas'],['1','1 estrela']].forEach(([v,label])=>{const o=node('option','',label);o.value=v;o.selected=String(prior?.rating||'')===v;rating.append(o)});
+   const comment=node('input');comment.maxLength=300;comment.placeholder='Comentário opcional';if(prior?.comment)comment.value=prior.comment;
+   const send=button(prior?'Atualizar avaliação':'Enviar avaliação',async()=>{if(!rating.value){alert('Escolha uma nota de 1 a 5.');return}send.disabled=true;try{await api('/campaign-feedback',{method:'POST',body:JSON.stringify({programId:p.id,rating:Number(rating.value),comment:comment.value})});await load()}catch(x){alert(x.message);send.disabled=false}},'secondary');
+   const feedback=node('div','feedback-row');feedback.append(rating,comment,send);card.append(feedback);
+  }
+  box.append(card);
+ });
+}
 
 $('company-lead-form')?.addEventListener('submit',async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{await api('/company/leads',{method:'POST',body:JSON.stringify({company:$('company-name').value,contact:$('company-contact').value,channel:$('company-channel').value,notes:$('company-notes').value})});e.target.reset();await load()}catch(x){alert(x.message)}finally{b.disabled=false}});
 $('company-cost-form')?.addEventListener('submit',async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{await api('/company/costs',{method:'POST',body:JSON.stringify({description:$('company-cost-description').value,category:$('company-cost-category').value,amount:Number($('company-cost-amount').value)})});e.target.reset();await load()}catch(x){alert(x.message)}finally{b.disabled=false}});
