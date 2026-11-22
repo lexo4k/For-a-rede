@@ -2,6 +2,7 @@ name: WYNCORE CI
 on:
   push:
     branches:
+      - wyncore-sl-complete
       - wyncore-personal-work-hub
       - main
     paths:
@@ -23,6 +24,18 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
-      - run: npm install
-      - run: npm test
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: wyncore/package-lock.json
+      - run: npm ci
+      - name: Syntax checks
+        run: |
+          node --check server.js
+          node --check domain.js
+          node --check app.js
+          node --check ads.js
+          node --check stripe.js
+      - name: Integration tests
+        run: npm test
+      - name: Production dependency audit
+        run: npm audit --omit=dev
