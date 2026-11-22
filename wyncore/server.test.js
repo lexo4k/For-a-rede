@@ -172,13 +172,22 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  const participantProfile=(await (await fetch(base+'/api/dashboard',{headers:{cookie:participantLogin.headers.get('set-cookie').split(';')[0]}})).json()).participants;
  assert.ok(participantProfile===undefined,'participant dashboard must not expose the full team list');
  const participantCookie=participantLogin.headers.get('set-cookie').split(';')[0];
- const originalOfferwallFetch=global.fetch;
- global.fetch=async(input,options)=>{const target=String(input);if(target.startsWith('https://offerwall.me/api.php?'))return new Response(JSON.stringify({status:200,data:[{id:'video-1',title:'Trailer patrocinado',description:'Assista ao vídeo',duration:'30',reward:'1.25',type:0,url:'https://offerwall.me/sw.php?1=video-1&type=0'},{id:'bad-1',title:'URL externa inválida',url:'https://evil.example/ad'}]}),{status:200,headers:{'content-type':'application/json'}});return originalOfferwallFetch(input,options)};
+ const originalOfferwallFetch=global.fetch;let offerwallRequestUrl='';
+ global.fetch=async(input,options)=>{const target=String(input);if(target.startsWith('https://offerwall.me/api.php?')){offerwallRequestUrl=target;return new Response(JSON.stringify({status:200,data:[{id:'video-1',title:'Trailer patrocinado',description:'Assista ao vídeo',duration:'30',reward:'1.25',type:0,url:'https://offerwall.me/sw.php?1=video-1&type=0'},{id:'bad-1',title:'URL externa inválida',url:'https://evil.example/ad'}]}),{status:200,headers:{'content-type':'application/json'}})}return originalOfferwallFetch(input,options)};
  const videoFeed=await fetch(base+'/api/ads/videos',{headers:{cookie:participantCookie}});
  assert.equal(videoFeed.status,200,'authenticated participant should receive sponsored video feed');
  const videoFeedData=await videoFeed.json();
  assert.equal(videoFeedData.ads.length,1,'only trusted OfferwallAPI hosted video URLs should be returned');
  assert.equal(videoFeedData.ads[0].reward,1.25);
+ const offerwallQuery=new URL(offerwallRequestUrl).searchParams;
+ assert.equal(offerwallQuery.get('id'),participant.id,'provider identity must use the authenticated participant ID');
+ assert.equal(offerwallQuery.get('country'),'BR','provider feed should request Brazil inventory');
+ const identityExpiry=Number(offerwallQuery.get('identityExpires'));
+ assert.ok(identityExpiry>Math.floor(Date.now()/1000)&&identityExpiry<=Math.floor(Date.now()/1000)+3600,'signed identity should expire within one hour');
+ const identityMessage='offerwall-user-v1\\n'+process.env.OFFERWALLME_API_KEY+'\\n'+participant.id+'\\n'+String(identityExpiry);
+ const expectedIdentity=crypto.createHmac('sha256',process.env.OFFERWALLME_SECRET).update(identityMessage).digest('hex');
+ assert.equal(offerwallQuery.get('identitySignature'),expectedIdentity,'provider identity must be HMAC-signed server-side');
+
  global.fetch=originalOfferwallFetch;
  const participantDash=await (await fetch(base+'/api/dashboard',{headers:{cookie:participantCookie}})).json();
  assert.equal(participantDash.participant.level,'SL2','participant should see the level assigned by admin');
