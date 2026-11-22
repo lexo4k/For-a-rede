@@ -172,6 +172,14 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  const participantProfile=(await (await fetch(base+'/api/dashboard',{headers:{cookie:participantLogin.headers.get('set-cookie').split(';')[0]}})).json()).participants;
  assert.ok(participantProfile===undefined,'participant dashboard must not expose the full team list');
  const participantCookie=participantLogin.headers.get('set-cookie').split(';')[0];
+ const originalOfferwallFetch=global.fetch;
+ global.fetch=async(input,options)=>{const target=String(input);if(target.startsWith('https://offerwallapi.com/video-api/'))return new Response(JSON.stringify({status:'200',data:[{id:'video-1',title:'Trailer patrocinado',description:'Assista ao vídeo',duration:'30',reward:'1.25',currency_name:'BRL',url:'https://offerwallapi.com/ptc-view/key/user?cid=video-1&type=VIDEO',ad_type:'Iframe'},{id:'bad-1',title:'URL externa inválida',url:'https://evil.example/ad'}]}),{status:200,headers:{'content-type':'application/json'}});return originalOfferwallFetch(input,options)};
+ const videoFeed=await fetch(base+'/api/ads/videos',{headers:{cookie:participantCookie}});
+ assert.equal(videoFeed.status,200,'authenticated participant should receive sponsored video feed');
+ const videoFeedData=await videoFeed.json();
+ assert.equal(videoFeedData.ads.length,1,'only trusted OfferwallAPI hosted video URLs should be returned');
+ assert.equal(videoFeedData.ads[0].reward,1.25);
+ global.fetch=originalOfferwallFetch;
  const participantDash=await (await fetch(base+'/api/dashboard',{headers:{cookie:participantCookie}})).json();
  assert.equal(participantDash.participant.level,'SL2','participant should see the level assigned by admin');
  assert.equal(participantDash.assignments.length,1,'participant should only see their own assigned activity');
