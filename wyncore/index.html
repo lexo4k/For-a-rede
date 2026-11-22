@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1020">
-  <meta name="description" content="WYNCORE: consulte informações públicas, organize oportunidades e acompanhe atividades com transparência."><link rel="canonical" href="https://wyncore.vercel.app/"><meta property="og:url" content="https://wyncore.vercel.app/"><meta name="robots" content="index,follow"><meta property="og:type" content="website"><meta property="og:title" content="WYNCORE | Oportunidades com transparência"><meta property="og:description" content="Informação, organização e acompanhamento de oportunidades em um só lugar.">
+  <meta name="description" content="WYNCORE: vídeos patrocinados, atividades, TD Mais, níveis SL1-SL9, equipes e carteira em uma plataforma integrada."><link rel="canonical" href="https://wyncore.vercel.app/"><meta property="og:url" content="https://wyncore.vercel.app/"><meta name="robots" content="index,follow"><meta property="og:type" content="website"><meta property="og:title" content="WYNCORE | Campanhas e atividades"><meta property="og:description" content="Vídeos patrocinados, tarefas, evolução e carteira com validação financeira.">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css">
-  <title>WYNCORE | Oportunidades e organização</title>
+  <title>WYNCORE | Campanhas e atividades</title>
 </head>
 <body>
   <section id="auth-screen" class="auth-screen">
@@ -26,7 +26,7 @@
 <section class="public-section public-faq"><div class="section-heading"><div><p class="eyebrow">TRANSPARÊNCIA</p><h2>Regras claras</h2></div></div><details><summary>Assistir a um vídeo gera pagamento?</summary><p>Não por si só. A campanha precisa estar financiada, a participação precisa cumprir os critérios e a recompensa depende da validação do anunciante e do provedor.</p></details><details><summary>Preciso pagar para subir de nível?</summary><p>Não. A WYNCORE não vende níveis nem exige depósito para liberar tarefas ou progressão.</p></details><details><summary>O saldo da carteira é dinheiro recebido?</summary><p>Não necessariamente. Valores pendentes, em análise ou transferidos para processamento são identificados separadamente. Só um repasse confirmado aparece como recebido.</p></details></section>
 <section class="public-auth"><div class="section-heading"><div><p class="eyebrow">ÁREA DA PLATAFORMA</p><h2>Entre ou solicite participação.</h2><p class="muted">Novos cadastros aguardam aprovação da administração.</p></div></div><div class="auth-grid">
 <form id="login-form" class="auth-card"><div class="brand-mark">W</div><p class="eyebrow">WYNCORE · ACESSO SEGURO</p><h2>Entrar</h2><p class="muted">Participantes entram com celular e senha. A administração usa a credencial exclusiva do responsável.</p><label>Celular ou acesso administrativo<input id="login-email" type="text" inputmode="text" autocomplete="username" placeholder="Seu celular ou ADMIN"></label><label>Senha<input id="owner-password" type="password" autocomplete="current-password" required></label><button class="primary" type="submit">Entrar</button><div id="google-login-button" class="google-login-placeholder" role="status">Verificando acesso Google...</div><p id="login-error" class="auth-error" role="alert"></p></form>
-<form id="access-form" class="auth-card"><h2>Criar conta</h2><p class="muted">Solicite acesso gratuito à plataforma.</p><label>Nome completo<input id="access-name" autocomplete="name" required minlength="2"></label><label>Número de celular com DDD<input id="access-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(11) 99999-9999" required minlength="10"></label><label>E-mail (opcional)<input id="access-email" type="email" autocomplete="email" placeholder="voce@email.com"></label><label>Crie uma senha<input id="access-password" type="password" autocomplete="new-password" minlength="10" required></label><button class="primary" type="submit">Solicitar acesso</button><p class="muted">A conta só será liberada após aprovação.</p><p id="access-message" class="auth-error" role="status"></p></form></div></section>
+<form id="access-form" class="auth-card"><h2>Criar conta</h2><p class="muted">Solicite acesso gratuito à plataforma.</p><label>Nome completo<input id="access-name" autocomplete="name" required minlength="2"></label><label>Número de celular com DDD<input id="access-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(11) 99999-9999" required minlength="10"></label><label>E-mail (opcional)<input id="access-email" type="email" autocomplete="email" placeholder="voce@email.com" required></label><label>Crie uma senha<input id="access-password" type="password" autocomplete="new-password" minlength="10" required></label><button class="primary" type="submit">Solicitar acesso</button><p class="muted">A conta só será liberada após aprovação.</p><p id="access-message" class="auth-error" role="status"></p></form></div></section>
 <footer class="public-footer"><span>© <span id="public-year">2026</span> WYNCORE.</span><nav aria-label="Links institucionais"><a href="/sobre.html">Sobre</a><a href="/privacidade.html">Privacidade</a><a href="/termos.html">Termos de uso</a><a href="/anunciantes.html">Anunciantes</a></nav></footer>
 </div></section>  <aside class="sidebar hidden">
     <a class="brand" href="#"><span class="brand-mark">W</span><span>WYNCORE<small>PLATAFORMA INTEGRADA</small></span></a>
@@ -34,14 +34,14 @@
       <button class="nav-item active" data-view="overview">▦ <span>Início</span></button>
       <button class="nav-item" data-view="videos">▶ <span>Vídeos e campanhas</span></button><a class="nav-item" href="/ads.html">◉ <span>Central de campanhas</span></a>
       <button class="nav-item" data-view="stage">♧ <span>TD Mais</span></button>
-      <button class="nav-item" data-view="levels">✦ <span>Níveis SL</span></button>
+      <button class="nav-item" data-view="levels">✦ <span>Níveis SL1–SL9</span></button>
       <button class="nav-item" data-view="referrals">♧ <span>Indicações</span></button>
       <button class="nav-item" data-view="team">♙ <span>Equipe e aprovações</span></button>
       <button class="nav-item" data-view="opportunities">⌕ <span>Atividades</span></button>
       <button class="nav-item" data-view="tasks">▤ <span>Minhas tarefas</span></button>
       <button class="nav-item" data-view="wallet">◈ <span>Carteira</span></button>
       <button class="nav-item" data-view="pix">▧ <span>Pagamentos Stripe</span></button>
-      <button class="nav-item" data-view="company">▣ <span>WYNCORE Company</span></button>
+      <button class="nav-item" data-view="company">▣ <span>Anunciantes</span></button>
       <button class="nav-item" data-view="reports">▥ <span>Relatórios</span></button>
     </nav>
     <div class="sidebar-foot"><span class="status-dot"></span> <span id="server-status">Verificando servidor...</span></div>
