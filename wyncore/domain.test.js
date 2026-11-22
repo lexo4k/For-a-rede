@@ -18,7 +18,7 @@ test('access approval, task lifecycle and payment ledger enforce roles',()=>{
  d.submitAssignment(s,participant,a.id,'comprovante-ref-123');
  d.reviewAssignment(s,manager,a.id,'approved','Entrega validada');
  assert.equal(s.ledger.length,0,'approval alone must not fabricate a payment');
- assert.throws(()=>d.recordPayment(s,manager,a.id,'payment-ref-123'),/Permissão/);
+ assert.throws(()=>d.recordPayment(s,participant,a.id,'payment-ref-123'),/Permissão/);
  d.recordPayment(s,admin,a.id,'payment-ref-123');
  assert.equal(s.ledger[0].amount,12.5);
  assert.equal(s.ledger[0].reference,'payment-ref-123');
