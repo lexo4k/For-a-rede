@@ -98,8 +98,8 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  const credited=await fetch(base+'/api/ads/offerwallapi/postback',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:offerwallPayload});
  assert.equal(credited.status,200,'signed OfferwallAPI video postback should credit an active participant');
  assert.equal(await credited.text(),'ok');
- const duplicate=await fetch(base+'/api/ads/offerwallapi/postback',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:offerwallPayload});
- assert.equal(duplicate.status,200,'duplicate postback should be idempotent');
+ const offerwallDuplicate=await fetch(base+'/api/ads/offerwallapi/postback',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:offerwallPayload});
+ assert.equal(offerwallDuplicate.status,200,'duplicate postback should be idempotent');
  const beforeChargeback=(await (await fetch(base+'/api/dashboard',{headers:{cookie}})).json()).ledger.filter(x=>x.reference===offerwallTrans);
  assert.equal(beforeChargeback.length,1,'a conversion must only be credited once');
  assert.equal(beforeChargeback[0].amount,1.75);
