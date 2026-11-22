@@ -13,7 +13,7 @@ process.env.WYNCORE_CONVERSION_SECRET='wyncore-test-conversion-secret';
 process.env.OFFERWALLME_API_KEY='test-offerwall-key';
 process.env.OFFERWALLME_BEARER_TOKEN='test-offerwall-bearer';
 process.env.OFFERWALLME_SECRET='wyncore-test-secret';
-process.env.OFFERWALLAPI_CURRENCY='BRL';
+
 const {createServer,validateOpportunity,limited,STATUSES}=require('./server');
 let server,base,cookie;
 test('rate limiter tolerates serverless requests without a socket object',()=>{
@@ -96,14 +96,14 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  const offerwallSignature=crypto.createHash('md5').update(participant.id+offerwallTrans+offerwallReward+process.env.OFFERWALLME_SECRET).digest('hex');
  const offerwallPayload=new URLSearchParams({subId:participant.id,transId:offerwallTrans,reward:offerwallReward,reward_name:'BRL',offer_name:'Trailer patrocinado',offer_type:'video',status:'1',debug:'0',signature:offerwallSignature});
  const credited=await fetch(base+'/api/ads/offerwallme/postback',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:offerwallPayload});
- assert.equal(credited.status,200,'signed OfferwallAPI video postback should credit an active participant: '+await credited.clone().text());
+ assert.equal(credited.status,200,'signed Offerwall.me video postback should credit an active participant: '+await credited.clone().text());
  assert.equal(await credited.text(),'ok');
  const offerwallDuplicate=await fetch(base+'/api/ads/offerwallme/postback',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:offerwallPayload});
  assert.equal(offerwallDuplicate.status,200,'duplicate postback should be idempotent');
  const beforeChargeback=(await (await fetch(base+'/api/dashboard',{headers:{cookie}})).json()).ledger.filter(x=>x.reference===offerwallTrans);
  assert.equal(beforeChargeback.length,1,'a conversion must only be credited once');
  assert.equal(beforeChargeback[0].amount,1.75);
- const chargebackPayload=new URLSearchParams({subId:participant.id,transId:offerwallTrans,reward:offerwallReward,reward_name:'BRL',offer_name:'Trailer patrocinado',offer_type:'video',status:'2',debug:'0',signature2:offerwallSignature});
+ const chargebackPayload=new URLSearchParams({subId:participant.id,transId:offerwallTrans,reward:offerwallReward,reward_name:'BRL',offer_name:'Trailer patrocinado',offer_type:'video',status:'2',debug:'0',signature:offerwallSignature});
  const reversed=await fetch(base+'/api/ads/offerwallme/postback',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:chargebackPayload});
  assert.equal(reversed.status,200,'signed chargeback should reverse a credited conversion');
  const afterChargeback=(await (await fetch(base+'/api/dashboard',{headers:{cookie}})).json()).ledger.filter(x=>x.reference===offerwallTrans);
@@ -145,7 +145,7 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  const integrationStatus=await fetch(base+'/api/integrations/status',{headers:{cookie}});
  assert.equal(integrationStatus.status,200);
  const integrationHealth=await integrationStatus.json();
- assert.equal(integrationHealth.advertisingNetwork.configured,true,'OfferwallAPI feed credentials should be reported as configured');
+ assert.equal(integrationHealth.advertisingNetwork.configured,true,'Offerwall.me feed credentials should be reported as configured');
  assert.equal(integrationHealth.advertisingNetwork.conversionValidation,true,'signed conversion postback validation should be active');
  assert.equal(integrationHealth.pix.providerConfigured,false);
  assert.equal(integrationHealth.pix.payoutsEnabled,false);
