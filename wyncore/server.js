@@ -131,7 +131,7 @@ async function handler(req,res){try{
    if(!OFFERWALLME_API_KEY||!OFFERWALLME_BEARER_TOKEN||!OFFERWALLME_SECRET)return send(res,503,{configured:false,ads:[],currency:OFFERWALLME_CURRENCY,error:'A rede de anúncios ainda não está conectada ao WYNCORE.'});
    const ip=String(req.headers['x-real-ip']||String(req.headers['x-forwarded-for']||'').split(',')[0]||req.socket?.remoteAddress||'0.0.0.0').trim();
    const expires=String(Math.floor(Date.now()/1000)+3600);
-   const message='offerwall-user-v1\\n'+OFFERWALLME_API_KEY+'\\n'+me.id+'\\n'+expires;
+   const message='offerwall-user-v1\n'+OFFERWALLME_API_KEY+'\n'+me.id+'\n'+expires;
    const identitySignature=crypto.createHmac('sha256',OFFERWALLME_SECRET).update(message).digest('hex');
    const query=new URLSearchParams({api:OFFERWALLME_API_KEY,token:OFFERWALLME_BEARER_TOKEN,id:me.id,ip,country:'BR',identityExpires:expires,identitySignature});
    let response,payload;try{response=await fetch('https://offerwall.me/api.php?'+query.toString(),{headers:{Accept:'application/json'},signal:AbortSignal.timeout(12000)});payload=await response.json()}catch{return send(res,502,{configured:true,ads:[],error:'Não foi possível consultar os anúncios agora.'})}
