@@ -100,7 +100,7 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.equal(invalidApp.status,400,'unknown providers must not be registered');
  const adminApp=await fetch(base+'/api/work/applications',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({providerId:'telus-qa-br'})});
 
- assert.equal(adminApp.status,403,'admin account cannot register participant applications');
+ assert.equal(adminApp.status,201,'owner account can also use participant opportunity features');
  const missingTaskSource=await fetch(base+'/api/work/tasks',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({title:'Tarefa sem autorização',source:'Parceiro',sourceTaskId:'task-001',instructions:'Siga as instruções oficiais da atividade.',mediaType:'video',amount:10})});
  assert.equal(missingTaskSource.status,400,'task publication must require an official HTTPS source reference');
  const taskCreate=await fetch(base+'/api/work/tasks',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({title:'Tarefa autorizada de teste',source:'Parceiro de teste',sourceTaskId:'task-002',instructions:'Siga as instruções oficiais da atividade.',mediaType:'video',amount:10,sourceUrl:'https://example.org/task-002'})});
