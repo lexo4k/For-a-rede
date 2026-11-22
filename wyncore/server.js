@@ -49,7 +49,7 @@ async function load(){
   const d=JSON.parse(raw);
   return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[],adEarnings:d.adEarnings||[],advertiserInquiries:d.advertiserInquiries||[]});
  }
- try{const d=JSON.parse(await fs.readFile(DATA_FILE,'utf8'));return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],workAccounts:d.workAccounts||[],workTasks:d.workTasks||[],workLedger:d.workLedger||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[],advertiserInquiries:d.advertiserInquiries||[]})}catch(e){if(e.code!=='ENOENT')throw e;return D.ensureState({opportunities:[],tasks:[],events:[],users:[],adCampaigns:[],adReviews:[],adEarnings:[],advertiserInquiries:[]})}
+ try{const d=JSON.parse(await fs.readFile(DATA_FILE,'utf8'));return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[],advertiserInquiries:d.advertiserInquiries||[]})}catch(e){if(e.code!=='ENOENT')throw e;return D.ensureState({opportunities:[],tasks:[],events:[],users:[],adCampaigns:[],adReviews:[],adEarnings:[],advertiserInquiries:[]})}
 }
 async function notifyAdvertiserLead(lead){
  const apiKey=process.env.RESEND_API_KEY||'',from=process.env.WYNCORE_LEADS_FROM||'',to=process.env.WYNCORE_LEADS_TO||'';
