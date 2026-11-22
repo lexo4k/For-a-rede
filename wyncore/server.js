@@ -143,7 +143,7 @@ async function handleStripeCheckout(req,res,kind,id){
  if(attempt.existing)return send(res,200,{ok:true,checkoutUrl:attempt.url,reused:true});
  let session;
  try{
-  const origin=publicOrigin();
+  const origin=publicOrigin(req);
   session=await Stripe.createCheckoutSession({amountCents:attempt.amountCents,name:attempt.name,description:attempt.description,successUrl:origin+(kind==='ad-campaigns'?'/ads.html':'/')+'?checkout=success&session_id={CHECKOUT_SESSION_ID}',cancelUrl:origin+(kind==='ad-campaigns'?'/ads.html':'/')+'?checkout=cancel',metadata:attempt.metadata,clientReferenceId:attempt.clientReferenceId,idempotencyKey:'wyncore-checkout-'+kind+'-'+id+'-'+attempt.attemptId});
  }catch(error){
   await Storage.withTransaction(()=>withLock('state',async()=>{const d=await load(),resource=kind==='ad-campaigns'?(d.adCampaigns||[]).find(x=>x.id===id):(d.programs||[]).find(x=>x.id===id);if(resource&&resource.stripeCheckoutAttemptId===attempt.attemptId){resource.stripeCheckoutStatus='checkout_failed';resource.stripeCheckoutError=String(error.message||'Stripe indisponível').slice(0,300);resource.updatedAt=new Date().toISOString();await save(d)}}));
@@ -243,7 +243,7 @@ async function handler(req,res){
   let requestPath='/';
   try{requestPath=new URL(req.url,'http://localhost').pathname}catch{}
   const apiRequest=requestPath.startsWith('/api/')||(!PUBLIC_FILES.has(requestPath)&&requestPath!=='/'&&requestPath!=='/health'&&!/\.[a-z0-9]+$/i.test(requestPath));
-  if(apiRequest&&requestPath==='/api/my-stripe-withdrawal'){req.__wyncoreStateLock=true;return handleStripeWithdrawal(req,res).catch(error=>{console.error('WYNCORE Pix withdrawal error:',error);if(!res.headersSent)send(res,error.status||503,{error:error.status?error.message:'Não foi possível concluir a solicitação com segurança. Confira a carteira antes de tentar novamente.'})})}
+  if(apiRequest&&requestPath==='/api/my-stripe-withdrawal'){req.__wyncoreStateLock=true;return handleStripeWithdrawal(req,res).catch(error=>{console.error('WYNCORE Stripe withdrawal error:',error);if(!res.headersSent)send(res,error.status||503,{error:error.status?error.message:'Não foi possível concluir a solicitação com segurança. Confira a carteira antes de tentar novamente.'})})}
   if(apiRequest&&requestPath==='/api/stripe/connect'){req.__wyncoreStateLock=true;return handleStripeConnect(req,res).catch(error=>{console.error('WYNCORE Stripe connect error:',error);if(!res.headersSent)send(res,error.status||503,{error:error.message||'Não foi possível conectar o Stripe.'})})}
   if(apiRequest&&requestPath==='/api/webhooks/stripe'){req.__wyncoreStateLock=true;return handleStripeWebhook(req,res).catch(error=>{console.error('WYNCORE Stripe webhook error:',error);if(!res.headersSent)send(res,error.status||503,{error:'Falha ao processar webhook Stripe.'})})}
   const checkoutMatch=requestPath.match(/^\/api\/(ad-campaigns|programs)\/([\w-]+)\/checkout$/);if(apiRequest&&checkoutMatch){req.__wyncoreStateLock=true;return handleStripeCheckout(req,res,checkoutMatch[1],checkoutMatch[2]).catch(error=>{console.error('WYNCORE Stripe checkout error:',error);if(!res.headersSent)send(res,error.status||503,{error:error.message||'Não foi possível criar checkout Stripe.'})})}
@@ -263,7 +263,7 @@ async function handler(req,res){
   const person=D.requestAccess(d,{name,email,phone});d.users.push({id:person.id,email,phone,passwordHash:await hashPassword(pass)});await save(d);return send(res,201,{ok:true,message:'Cadastro recebido. Aguarde a liberação da equipe.'});
  }
 
- if(req.method==='POST'&&p==='/api/webhooks/asaas')return send(res,410,{error:'Webhook Asaas desativado. WYNCORE usa Stripe.'});
+ if(req.method==='POST'&&p==='/api/webhooks/asaas')return send(res,410,{error:'Webhook legado desativado. WYNCORE usa Stripe.'});
  
  if(!p.startsWith('/api/')){const file=p==='/'?'/index.html':p;if(!PUBLIC_FILES.has(file))return send(res,404,{error:'Não encontrado'});const full=path.resolve(ROOT,'.'+file);try{const data=await fs.readFile(full);const extension=path.extname(full);const cachePolicy=['.html','.js','.css','.webmanifest'].includes(extension)?'no-cache':'public, max-age=3600';res.writeHead(200,{'Content-Type':MIME[extension]||'application/octet-stream','Cache-Control':cachePolicy});return res.end(data)}catch{return send(res,404,{error:'Arquivo não encontrado'})}}
  if(req.method==='POST'&&p==='/api/advertiser-inquiries'){
@@ -310,126 +310,6 @@ async function handler(req,res){
 
   if(SECRET.length<32)return send(res,503,{error:'A autenticação de sessão ainda não está configurada no servidor. O pedido de cadastro pode ser recebido, mas a entrada ficará indisponível até a configuração.'});
  if(p==='/api/work'||p.startsWith('/api/work/'))return send(res,410,{error:'O antigo módulo WYNCORE Work foi desativado. As atividades agora ficam no painel integrado.'});
- if(p==='/api/work'){
-  if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
-  const d=await load();d.workAccounts||=[];d.workTasks||=[];d.workLedger||=[];
-  let b={},action=String(url.searchParams.get('action')||'');
-  if(['POST','PATCH','DELETE'].includes(req.method)){b=await body(req);action=String(b.action||action)}
-  if(req.method==='GET'&&action==='health')return send(res,200,{ok:true,service:'WYNCORE Work',accountRegistration:true,privatePerAccountStorage:true,externalPlatformsPayWorkersDirectly:true});
-  if(req.method==='POST'&&action==='register'){
-   const name=String(b.name||'').trim().slice(0,90),email=String(b.email||'').trim().toLowerCase(),pass=String(b.password||'');
-   if(limited(req,'work-register',email,5,3600000))return send(res,429,{error:'Muitas tentativas de cadastro. Aguarde uma hora.'});
-   if(name.length<2||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||pass.length<10)err('Informe nome, e-mail válido e senha com pelo menos 10 caracteres.');
-   if(d.workAccounts.some(x=>x.email===email))err('Este e-mail já possui uma conta WYNCORE Work.',409);
-   const account={id:crypto.randomUUID(),name,email,passwordHash:await hashPassword(pass),createdAt:new Date().toISOString()};
-   d.workAccounts.push(account);await save(d);
-   const user={id:account.id,role:'work',email:account.email,name:account.name};
-   return send(res,201,{ok:true,user},{'Set-Cookie':cookie(makeSession(user),SESSION_MS/1000)});
-  }
-  if(req.method==='POST'&&action==='login'){
-   const email=String(b.email||'').trim().toLowerCase(),pass=String(b.password||'');
-   if(limited(req,'work-login',email,10,900000))return send(res,429,{error:'Muitas tentativas. Aguarde 15 minutos.'});
-   const account=d.workAccounts.find(x=>x.email===email);
-   if(!account||!await verifyPassword(pass,account.passwordHash))return send(res,401,{error:'E-mail ou senha incorretos.'});
-   const user={id:account.id,role:'work',email:account.email,name:account.name};
-   return send(res,200,{ok:true,user},{'Set-Cookie':cookie(makeSession(user),SESSION_MS/1000)});
-  }
-  if(req.method==='POST'&&action==='logout')return send(res,200,{ok:true},{'Set-Cookie':cookie('',0)});
-  const session=readSession(req);
-  if(!session||session.role!=='work')return send(res,401,{error:'Entre na sua conta WYNCORE Work.'});
-  const account=d.workAccounts.find(x=>x.id===session.id);
-  if(!account)return send(res,401,{error:'Conta não encontrada. Entre novamente.'});
-  if(req.method==='GET'&&action==='me')return send(res,200,{id:account.id,name:account.name,email:account.email});
-  if(req.method==='GET'&&action==='tasks')return send(res,200,{tasks:d.workTasks.filter(x=>x.accountId===account.id)});
-  if(req.method==='POST'&&action==='create-task'){
-   const title=String(b.title||'').trim().slice(0,120),platform=String(b.platform||'').trim().slice(0,50),note=String(b.note||'').trim().slice(0,500),urlValue=String(b.url||'').trim(),status=String(b.status||'saved');
-   if(title.length<2||!platform||!['saved','started','submitted','done'].includes(status))err('Confira título, plataforma e status.');
-   let taskUrl='';if(urlValue){let u;try{u=new URL(urlValue)}catch{}if(!u||u.protocol!=='https:')err('O link precisa ser HTTPS válido.');taskUrl=u.href}
-   const task={id:crypto.randomUUID(),accountId:account.id,title,platform,note,url:taskUrl,status,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
-   d.workTasks.unshift(task);await save(d);return send(res,201,{task});
-  }
-  if(['PATCH','DELETE'].includes(req.method)&&['update-task','delete-task'].includes(action)){
-   const task=d.workTasks.find(x=>x.id===String(b.taskId||'')&&x.accountId===account.id);
-   if(!task)return send(res,404,{error:'Tarefa não encontrada.'});
-   if(req.method==='PATCH'&&action==='update-task'){
-    if(b.status!==undefined){if(!['saved','started','submitted','done'].includes(b.status))err('Status inválido.');task.status=b.status}
-    if(b.note!==undefined)task.note=String(b.note||'').trim().slice(0,500);
-    task.updatedAt=new Date().toISOString();await save(d);return send(res,200,{task});
-   }
-   if(req.method==='DELETE'&&action==='delete-task'){d.workTasks=d.workTasks.filter(x=>x.id!==task.id);await save(d);return send(res,200,{ok:true})}
-  }
-  if(req.method==='GET'&&action==='earnings'){
-   const items=d.workLedger.filter(x=>x.accountId===account.id);
-   return send(res,200,{items,summary:{reported:items.reduce((n,x)=>n+Number(x.amount||0),0),received:items.filter(x=>x.status==='received').reduce((n,x)=>n+Number(x.amount||0),0)}});
-  }
-  if(req.method==='POST'&&action==='create-earning'){
-   const platform=String(b.platform||'').trim().slice(0,50),description=String(b.description||'').trim().slice(0,120),amount=Number(b.amount),status=String(b.status||'reported'),reference=String(b.reference||'').trim().slice(0,120);
-   if(!platform||description.length<2||!Number.isFinite(amount)||amount<=0||amount>1000000||!['reported','received'].includes(status))err('Informe plataforma, descrição e valor válido.');
-   if(status==='received'&&reference.length<4)err('Para marcar como recebido, informe uma referência pessoal do comprovante.');
-   const item={id:crypto.randomUUID(),accountId:account.id,platform,description,amount:Math.round(amount*100)/100,status,reference,createdAt:new Date().toISOString(),manual:true};
-   d.workLedger.unshift(item);await save(d);return send(res,201,{item});
-  }
-  return send(res,404,{error:'Ação Work não encontrada.'});
- } if(req.method==='POST'&&p==='/api/google-login'){
-  if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
-  if(!GOOGLE_CLIENT_ID)return send(res,503,{error:'O acesso Google ainda aguarda a configuração do Client ID OAuth no servidor.'});
-  const b=await body(req),credential=String(b.credential||'');if(!credential||credential.length>12000)return send(res,400,{error:'Credencial Google inválida.'});
-  if(limited(req,'google-login',credential.slice(0,80),10,900000))return send(res,429,{error:'Muitas tentativas de acesso. Aguarde 15 minutos.'});
-  let profile;try{const verify=await fetch('https://oauth2.googleapis.com/tokeninfo?id_token='+encodeURIComponent(credential),{headers:{accept:'application/json'},signal:AbortSignal.timeout(8000)});if(!verify.ok)return send(res,401,{error:'Não foi possível validar sua conta Google.'});profile=await verify.json()}catch{return send(res,503,{error:'O serviço de autenticação Google está temporariamente indisponível.'})}
-  if(profile.aud!==GOOGLE_CLIENT_ID||!profile.sub||!profile.email||profile.email_verified!=='true'||!['accounts.google.com','https://accounts.google.com'].includes(profile.iss)||Number(profile.exp)*1000<=Date.now())return send(res,401,{error:'A identidade Google não passou na validação.'});
-  const d=await load(),email=String(profile.email).toLowerCase(),sub=String(profile.sub);
-  let record=d.users.find(x=>x.googleSub===sub||x.email===email),person=record&&d.participants.find(x=>x.id===record.id);
-  if(!person){person=d.participants.find(x=>x.email===email);if(person){record=d.users.find(x=>x.id===person.id)||{id:person.id,email,phone:person.phone||''};if(!d.users.some(x=>x.id===record.id))d.users.push(record)}else{person=D.requestAccess(d,{name:String(profile.name||email.split('@')[0]).slice(0,100),email,phone:''});record={id:person.id,email,phone:'',googleSub:sub};d.users.push(record)}}
-  record.googleSub=sub;record.email=email;
-  if(person.status!=='active'){await save(d);return send(res,202,{ok:true,pending:true,message:'Conta Google reconhecida. Seu pedido de acesso foi enviado e aguarda aprovação da equipe.'})}
-  person.lastLoginAt=new Date().toISOString();person.lastLoginMethod='google';await save(d);
-  const user={id:person.id,role:person.role,email:person.email,phone:person.phone};
-  return send(res,200,{ok:true},{'Set-Cookie':cookie(makeSession(user),SESSION_MS/1000)});
- }
- if(req.method==='POST'&&p==='/api/integrations/campaigns'){
-  if(!PARTNER_SECRET)return send(res,503,{error:'Integração de parceiros ainda não configurada no servidor.'});
-  const raw=await rawBody(req),provided=String(req.headers['x-wyncore-signature']||'').replace(/^sha256=/,'').toLowerCase(),expected=crypto.createHmac('sha256',PARTNER_SECRET).update(raw).digest('hex');
-  if(!provided||!safeEqual(provided,expected))return send(res,401,{error:'Assinatura do parceiro inválida.'});
-  let payload;try{payload=raw?JSON.parse(raw):{}}catch{return send(res,400,{error:'JSON inválido.'})}
-  const d=await load(),partner={id:'partner-webhook',role:'manager'};
-  const campaign=D.createProgram(d,partner,{title:payload.title,source:payload.sponsor,sponsor:payload.sponsor,reward:payload.reward,budget:payload.budget,url:payload.url,videoUrl:payload.videoUrl});
-  await save(d);return send(res,201,{ok:true,campaignId:campaign.id,status:campaign.status,message:'Campanha importada e aguardando conferência de financiamento.'});
- }
- if(req.method==='POST'&&p==='/api/integrations/conversions'){
-  const conversionSecret=process.env.WYNCORE_CONVERSION_SECRET||'';
-  if(!conversionSecret)return send(res,503,{error:'Webhook de conversões ainda não configurado.'});
-  const raw=await rawBody(req),provided=String(req.headers['x-wyncore-signature']||'').replace(/^sha256=/,'').toLowerCase(),expected=crypto.createHmac('sha256',conversionSecret).update(raw).digest('hex');
-  if(!provided||!safeEqual(provided,expected))return send(res,401,{error:'Assinatura da conversão inválida.'});
-  let event;try{event=raw?JSON.parse(raw):{}}catch{return send(res,400,{error:'JSON inválido.'})}
-  const d=await load(),result=D.recordPartnerConversion(d,event);await save(d);
-  return send(res,result.duplicate?200:201,{ok:true,duplicate:result.duplicate,conversion:result.conversion});
- }
- if(req.method==='POST'&&p==='/api/login'){
-  if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
-  const b=await body(req),identifier=String(b.identifier||b.email||'').trim();if(limited(req,'login',identifier,10,900000))return send(res,429,{error:'Muitas tentativas para esta conta. Aguarde 15 minutos.'});let user=null,d=null,person=null;
-  if(identifier.trim().toLowerCase()==='admin'&&PASSWORD&&safeEqual(b.password||'',PASSWORD))user={id:'owner',role:'admin',email:'owner'};
-  else {d=await load();const normalized=identifier.toLowerCase(),digits=normalizePhone(identifier),u=d.users.find(x=>(normalized.includes('@')&&x.email===normalized)||(digits.length>=10&&normalizePhone(x.phone)===digits));if(u&&await verifyPassword(b.password||'',u.passwordHash)){person=d.participants.find(x=>x.id===u.id);if(!person||person.status!=='active')return send(res,403,{error:'Cadastro aguardando aprovação da equipe.'});person.lastLoginAt=new Date().toISOString();person.lastLoginMethod=digits.length>=10?'phone':'email';user={id:person.id,role:person.role,email:person.email,phone:person.phone};await save(d)}}
-  if(!user)return send(res,401,{error:'E-mail ou senha incorretos.'});return send(res,200,{ok:true},{'Set-Cookie':cookie(makeSession(user),SESSION_MS/1000)});
- }
- if(req.method==='POST'&&p==='/api/logout')return send(res,200,{ok:true},{'Set-Cookie':cookie('',0)});
- if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
- const session=readSession(req);if(!session)return send(res,401,{error:'Sessão expirada.'});
- const d=await load(),me=actor(session,d);if(!me)return send(res,403,{error:'Conta inativa ou sem permissão.'});
- if(req.method==='GET'&&p==='/api/me')return send(res,200,{id:me.id,role:me.role,email:me.email,name:me.name||'Administrador'});
- if(req.method==='GET'&&p==='/api/integrations/status'){
-  if(me.role!=='admin')err('Somente administrador.',403);
-  const stripeReady=Stripe.configured()&&Stripe.webhookConfigured()&&Stripe.connectEnabled()&&payoutStorageSafe();
-  return send(res,200,{stripe:{provider:'Stripe',configured:Stripe.configured(),webhookConfigured:Stripe.webhookConfigured(),connectEnabled:Stripe.connectEnabled(),storageSafe:payoutStorageSafe(),ready:stripeReady,reason:!Stripe.configured()?'Chave privada Stripe ausente no servidor.':!Stripe.webhookConfigured()?'Webhook Stripe ainda não configurado.':!Stripe.connectEnabled()?'Stripe Connect não está habilitado como plataforma.':!payoutStorageSafe()?'Repasses bloqueados: armazenamento transacional não disponível.':'Integração pronta para homologação.'},adscend:{configured:Adscend.configured(),provider:'Adscend Media',postbackConfigured:Adscend.postbackConfigured(),reason:Adscend.configured()?'Credenciais presentes; campanhas dependem da aprovação do publisher.':'Rede externa opcional ainda não conectada.'}});
- }
- if(req.method==='POST'&&p==='/api/campaign-feedback'){if(me.role!=='participant')err('Somente participantes podem avaliar campanhas.',403);if(limited(req,'campaign-feedback',me.id,30,3600000))return send(res,429,{error:'Limite de avaliações atingido. Tente novamente mais tarde.'});const b=await body(req),programId=String(b.programId||''),rating=Number(b.rating),comment=String(b.comment||'').trim().slice(0,300),program=d.programs.find(x=>x.id===programId&&x.status==='active'&&x.videoUrl);if(!program)err('Campanha de vídeo indisponível.',404);if(!Number.isInteger(rating)||rating<1||rating>5)err('Escolha uma avaliação entre 1 e 5.');let feedback=d.campaignFeedback.find(x=>x.programId===programId&&x.participantId===me.id);const now=new Date().toISOString();if(feedback){feedback.rating=rating;feedback.comment=comment;feedback.updatedAt=now;await save(d);return send(res,200,{ok:true,feedback,updated:true})}feedback={id:crypto.randomUUID(),programId,participantId:me.id,rating,comment,createdAt:now,updatedAt:now};d.campaignFeedback.unshift(feedback);await save(d);return send(res,201,{ok:true,feedback,updated:false});}
- if(req.method==='POST'&&p==='/api/participants'){if(me.role!=='admin')err('Somente administrador.',403);const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),phone=normalizePhone(b.phone),pass=String(b.password||'');if(name.length<2||!/^\S+@\S+\.\S+$/.test(email)||!phone||phone.length<10||phone.length>13||pass.length<10)err('Para cadastrar um participante, informe nome, e-mail válido, celular com DDD e senha com pelo menos 10 caracteres.');if(d.users.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone))||d.participants.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone)))err('Este e-mail ou telefone já está cadastrado.',409);const person=D.createParticipant(d,me,{name,email,phone});d.users.push({id:person.id,email,phone,passwordHash:await hashPassword(pass)});await save(d);return send(res,201,{ok:true,participant:{id:person.id,name:person.name,email:person.email,phone:person.phone,status:person.status},message:'Participante cadastrado. Aprove o acesso para liberar o login.'});}
-
-
-
-
-
-  if(req.method==='POST'&&(p==='/api/payout-profile'||p==='/api/pix-key'))return send(res,410,{error:'Cadastro de Pix e PayPal foi desativado. WYNCORE usa Stripe.'});
- 
  if(req.method==='GET'&&p==='/api/ad-workspace'){
   const campaigns=d.adCampaigns||[],reviews=d.adReviews||[];
   const stripeIntegration={configured:Stripe.configured(),webhookConfigured:Stripe.webhookConfigured(),connectEnabled:Stripe.connectEnabled(),storageSafe:payoutStorageSafe(),ready:Stripe.configured()&&Stripe.webhookConfigured()&&Stripe.connectEnabled()&&payoutStorageSafe(),reason:!Stripe.configured()?'Chave privada Stripe ausente.':!Stripe.webhookConfigured()?'Webhook Stripe não configurado.':!Stripe.connectEnabled()?'Stripe Connect não habilitado como plataforma.':!payoutStorageSafe()?'Armazenamento transacional não disponível.':'Pronto para homologação.'};
@@ -480,7 +360,7 @@ async function handler(req,res){
   }
   await save(d);return send(res,200,{ok:true,lead});
  }
- adMatch=p.match(/^\/api\/ad-campaigns\/([\w-]+)\/(open|pause|complete)$/);
+ let adMatch=p.match(/^\/api\/ad-campaigns\/([\w-]+)\/(open|pause|complete)$/);
  if(req.method==='POST'&&adMatch){
   if(me.role!=='admin')err('Somente administração.',403);
   const c=(d.adCampaigns||[]).find(x=>x.id===adMatch[1]);if(!c)return send(res,404,{error:'Campanha não encontrada.'});
