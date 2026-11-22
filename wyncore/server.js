@@ -252,7 +252,7 @@ async function handler(req,res){
  }
  try{
  const url=new URL(req.url,'http://localhost');let p=url.pathname;if(p!=='/'&&!p.startsWith('/api/')&&!PUBLIC_FILES.has(p)&&p!=='/health'&&!/\.[a-z0-9]+$/i.test(p))p='/api'+p;
- if(req.method==='GET'&&(p==='/health'||p==='/api/health'))return send(res,200,{ok:true,service:'WYNCORE',storage:process.env.DATABASE_URL?'postgres-transactional':Storage.rpcConfigured()?'supabase-rest-cas':process.env.BLOB_READ_WRITE_TOKEN?'vercel-blob-private':'single-writer-json',supabaseConfigured:Storage.rpcConfigured(),authConfigured:Boolean(PASSWORD&&SECRET.length>=32),ownerLoginConfigured:Boolean(PASSWORD),participantLoginConfigured:SECRET.length>=32,phoneLoginEnabled:SECRET.length>=32,googleEnabled:Boolean(GOOGLE_CLIENT_ID),googleClientId:GOOGLE_CLIENT_ID||null,integrations:{adscend:{configured:Adscend.configured(),postbackConfigured:Adscend.postbackConfigured()},asaas:{configured:Asaas.configured(),webhookConfigured:Asaas.webhookConfigured()},paypal:{configured:Paypal.configured()},payoutStorageSafe:payoutStorageSafe()},signupAvailable:true,publicAccess:true});
+ if(req.method==='GET'&&(p==='/health'||p==='/api/health'))return send(res,200,{ok:true,service:'WYNCORE',storage:process.env.DATABASE_URL?'postgres-transactional':Storage.rpcConfigured()?'supabase-rest-cas':process.env.BLOB_READ_WRITE_TOKEN?'vercel-blob-private':'single-writer-json',supabaseConfigured:Storage.rpcConfigured(),authConfigured:Boolean(PASSWORD&&SECRET.length>=32),ownerLoginConfigured:Boolean(PASSWORD),participantLoginConfigured:SECRET.length>=32,phoneLoginEnabled:SECRET.length>=32,googleEnabled:Boolean(GOOGLE_CLIENT_ID),googleClientId:GOOGLE_CLIENT_ID||null,integrations:{adscend:{configured:Adscend.configured(),postbackConfigured:Adscend.postbackConfigured()},stripe:{configured:Stripe.configured(),webhookConfigured:Stripe.webhookConfigured(),connectEnabled:Stripe.connectEnabled(),payoutStorageSafe:payoutStorageSafe()},payoutStorageSafe:payoutStorageSafe()},signupAvailable:true,publicAccess:true});
  if(req.method==='POST'&&p==='/api/access-request'){
   if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
   const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),phone=normalizePhone(b.phone),pass=String(b.password||'');if(limited(req,'signup',email||phone,5,3600000))return send(res,429,{error:'Muitas tentativas de cadastro para este contato. Aguarde um pouco.'});
@@ -261,42 +261,8 @@ async function handler(req,res){
   const person=D.requestAccess(d,{name,email,phone});d.users.push({id:person.id,email,phone,passwordHash:await hashPassword(pass)});await save(d);return send(res,201,{ok:true,message:'Cadastro recebido. Aguarde a liberação da equipe.'});
  }
 
- if(req.method==='POST'&&p==='/api/webhooks/asaas'){
-  const token=req.headers['asaas-access-token'];
-  if(!Asaas.verifyWebhook(token))return send(res,401,{error:'Webhook Asaas não autenticado.'});
-  const event=await body(req),eventId=String(event.id||''),type=String(event.event||'');
-  if(!eventId)return send(res,400,{error:'Evento sem identificador.'});
-  return await withLock('wallet',async()=>{
-   const d=await load();
-   d.asaasWebhookEvents||=[];
-   if(d.asaasWebhookEvents.includes(eventId))return send(res,200,{ok:true,duplicate:true});
-   const payment=event.payment||{},transfer=event.transfer||{};
-   if(type==='PAYMENT_RECEIVED'&&String(payment.externalReference||'').startsWith('wyncore-campaign:')){
-    const campaignId=String(payment.externalReference).slice('wyncore-campaign:'.length);
-    const campaign=(d.adCampaigns||[]).find(x=>x.id===campaignId);
-    if(campaign&&String(payment.id)===String(campaign.asaasPaymentId)&&Number(payment.value)>=Number(campaign.contractValue)){
-     campaign.contractStatus='received';campaign.contractReference=payment.id;campaign.receivedAt=new Date().toISOString();campaign.updatedAt=campaign.receivedAt;
-    }
-   }
-   if(['TRANSFER_DONE','TRANSFER_FAILED','TRANSFER_CANCELLED'].includes(type)&&String(transfer.externalReference||'').startsWith('wyncore-earning:')){
-    const updated=Payouts.applyTransferEvent(d,transfer,type,new Date().toISOString());
-    if(!updated){
-     const earningId=String(transfer.externalReference).slice('wyncore-earning:'.length);
-     const legacy=(d.adEarnings||[]).find(x=>x.id===earningId&&String(x.asaasTransferId)===String(transfer.id));
-     if(legacy){
-      if(type==='TRANSFER_DONE'){legacy.status='paid';legacy.paidAt=new Date().toISOString();legacy.paymentReference=transfer.id;}
-      else{legacy.status='approved_unpaid';legacy.payoutError=String(transfer.failReason||type).slice(0,300);}
-      legacy.updatedAt=new Date().toISOString();
-     }
-    }
-   }
-   d.asaasWebhookEvents.push(eventId);
-   if(d.asaasWebhookEvents.length>5000)d.asaasWebhookEvents=d.asaasWebhookEvents.slice(-4000);
-   await save(d);
-   return send(res,200,{ok:true});
-  });
- }
-
+ if(req.method==='POST'&&p==='/api/webhooks/asaas')return send(res,410,{error:'Webhook Asaas desativado. WYNCORE usa Stripe.'});
+ 
  if(!p.startsWith('/api/')){const file=p==='/'?'/index.html':p;if(!PUBLIC_FILES.has(file))return send(res,404,{error:'Não encontrado'});const full=path.resolve(ROOT,'.'+file);try{const data=await fs.readFile(full);const extension=path.extname(full);const cachePolicy=['.html','.js','.css','.webmanifest'].includes(extension)?'no-cache':'public, max-age=3600';res.writeHead(200,{'Content-Type':MIME[extension]||'application/octet-stream','Cache-Control':cachePolicy});return res.end(data)}catch{return send(res,404,{error:'Arquivo não encontrado'})}}
  if(req.method==='POST'&&p==='/api/advertiser-inquiries'){
   if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
@@ -447,7 +413,11 @@ async function handler(req,res){
  const session=readSession(req);if(!session)return send(res,401,{error:'Sessão expirada.'});
  const d=await load(),me=actor(session,d);if(!me)return send(res,403,{error:'Conta inativa ou sem permissão.'});
  if(req.method==='GET'&&p==='/api/me')return send(res,200,{id:me.id,role:me.role,email:me.email,name:me.name||'Administrador'});
- if(req.method==='GET'&&p==='/api/integrations/status'){if(me.role!=='admin')err('Somente administrador.',403);return send(res,200,{adscend:{configured:Adscend.configured(),provider:'Adscend Media',product:'Rewarded Video',countryAware:true,postbackConfigured:Adscend.postbackConfigured(),reason:Adscend.configured()?'API conectável; inventário e liberação de Rewarded Video dependem da aprovação e ativação pela Adscend.':'Configure ADSCEND_PUBLISHER_ID e ADSCEND_API_KEY após aprovação do publisher.'},advertisingNetwork:{configured:Adscend.configured(),conversionValidation:Boolean(process.env.ADSCEND_POSTBACK_SECRET),reason:'Inventário regional depende do país, da conta aprovada e das categorias liberadas.'},partnerCampaignWebhook:{configured:Boolean(PARTNER_SECRET),conversionValidation:Boolean(process.env.WYNCORE_CONVERSION_SECRET),reason:'A importação de campanhas depende de contrato e credenciais emitidas pelo parceiro.'},pix:{provider:'Asaas',providerConfigured:Asaas.configured(),webhookConfigured:Asaas.webhookConfigured(),payoutsEnabled:Asaas.configured()&&Asaas.webhookConfigured()&&payoutStorageSafe(),bankVerification:Asaas.configured()&&Asaas.webhookConfigured(),reason:!Asaas.configured()?'Configure ASAAS_API_KEY no ambiente do servidor.':!Asaas.webhookConfigured()?'Configure ASAAS_WEBHOOK_TOKEN.':!payoutStorageSafe()?'Saque bloqueado até usar armazenamento persistente de instância única (WYNCORE_PAYOUT_STORAGE_MODE=single_writer); Vercel Blob/serverless não oferece reserva transacional.':'Asaas e armazenamento de instância única configurados; faça testes no Sandbox antes de liberar produção.'},paypal:{provider:'PayPal Payouts',configured:Paypal.configured(),mode:Paypal.mode,reason:Paypal.configured()?'Credenciais presentes; teste sandbox e elegibilidade do país ainda são necessários.':'Configure PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET e PAYPAL_MODE no servidor.'},automaticPaymentTransfers:Asaas.configured()&&Asaas.webhookConfigured()});}
+ if(req.method==='GET'&&p==='/api/integrations/status'){
+  if(me.role!=='admin')err('Somente administrador.',403);
+  const stripeReady=Stripe.configured()&&Stripe.webhookConfigured()&&Stripe.connectEnabled()&&payoutStorageSafe();
+  return send(res,200,{stripe:{provider:'Stripe',configured:Stripe.configured(),webhookConfigured:Stripe.webhookConfigured(),connectEnabled:Stripe.connectEnabled(),storageSafe:payoutStorageSafe(),ready:stripeReady,reason:!Stripe.configured()?'Chave privada Stripe ausente no servidor.':!Stripe.webhookConfigured()?'Webhook Stripe ainda não configurado.':!Stripe.connectEnabled()?'Stripe Connect não está habilitado como plataforma.':!payoutStorageSafe()?'Repasses bloqueados: armazenamento transacional não disponível.':'Integração pronta para homologação.'},adscend:{configured:Adscend.configured(),provider:'Adscend Media',postbackConfigured:Adscend.postbackConfigured(),reason:Adscend.configured()?'Credenciais presentes; campanhas dependem da aprovação do publisher.':'Rede externa opcional ainda não conectada.'}});
+ }
  if(req.method==='POST'&&p==='/api/campaign-feedback'){if(me.role!=='participant')err('Somente participantes podem avaliar campanhas.',403);if(limited(req,'campaign-feedback',me.id,30,3600000))return send(res,429,{error:'Limite de avaliações atingido. Tente novamente mais tarde.'});const b=await body(req),programId=String(b.programId||''),rating=Number(b.rating),comment=String(b.comment||'').trim().slice(0,300),program=d.programs.find(x=>x.id===programId&&x.status==='active'&&x.videoUrl);if(!program)err('Campanha de vídeo indisponível.',404);if(!Number.isInteger(rating)||rating<1||rating>5)err('Escolha uma avaliação entre 1 e 5.');let feedback=d.campaignFeedback.find(x=>x.programId===programId&&x.participantId===me.id);const now=new Date().toISOString();if(feedback){feedback.rating=rating;feedback.comment=comment;feedback.updatedAt=now;await save(d);return send(res,200,{ok:true,feedback,updated:true})}feedback={id:crypto.randomUUID(),programId,participantId:me.id,rating,comment,createdAt:now,updatedAt:now};d.campaignFeedback.unshift(feedback);await save(d);return send(res,201,{ok:true,feedback,updated:false});}
  if(req.method==='POST'&&p==='/api/participants'){if(me.role!=='admin')err('Somente administrador.',403);const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),phone=normalizePhone(b.phone),pass=String(b.password||'');if(name.length<2||!/^\S+@\S+\.\S+$/.test(email)||!phone||phone.length<10||phone.length>13||pass.length<10)err('Para cadastrar um participante, informe nome, e-mail válido, celular com DDD e senha com pelo menos 10 caracteres.');if(d.users.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone))||d.participants.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone)))err('Este e-mail ou telefone já está cadastrado.',409);const person=D.createParticipant(d,me,{name,email,phone});d.users.push({id:person.id,email,phone,passwordHash:await hashPassword(pass)});await save(d);return send(res,201,{ok:true,participant:{id:person.id,name:person.name,email:person.email,phone:person.phone,status:person.status},message:'Participante cadastrado. Aprove o acesso para liberar o login.'});}
 
@@ -455,31 +425,16 @@ async function handler(req,res){
 
 
 
-  if(req.method==='POST'&&p==='/api/payout-profile'){
-  if(me.role!=='participant')err('Somente participantes podem configurar recebimento.',403);
-  const b=await body(req),country=String(b.country||'').trim().toUpperCase(),email=String(b.paypalEmail||'').trim().toLowerCase();
-  if(!/^[A-Z]{2}$/.test(country))err('Informe o país usando o código ISO de duas letras.');
-  if(email&&!/^\\S+@\\S+\\.\\S+$/.test(email))err('E-mail PayPal inválido.');
-  if(country!=='BR'&&!email)err('Para recebimento internacional, informe seu e-mail PayPal.');
-  const person=d.participants.find(x=>x.id===me.id);person.payoutCountry=country;person.paypalEmailEncrypted=email?encryptSecret(email):null;person.payoutProfileUpdatedAt=new Date().toISOString();await save(d);
-  return send(res,200,{ok:true,message:'Preferência de recebimento salva com segurança.'});
- }
-if(req.method==='POST'&&p==='/api/pix-key'){
-  if(me.role!=='participant')err('Somente participantes podem cadastrar a chave Pix.',403);
-  const b=await body(req),key=String(b.key||'').trim(),type=String(b.type||'').toUpperCase();
-  if(!['CPF','CNPJ','EMAIL','PHONE','EVP'].includes(type)||key.length<5||key.length>180)err('Informe uma chave Pix válida e seu tipo.');
-  if(type==='EMAIL'&&!/^\S+@\S+\.\S+$/.test(key))err('E-mail Pix inválido.');
-  if(type==='CPF'&&key.replace(/\\D/g,'').length!==11)err('CPF Pix precisa ter 11 dígitos.');
-  if(type==='CNPJ'&&key.replace(/\\D/g,'').length!==14)err('CNPJ Pix precisa ter 14 dígitos.');
-  if(type==='PHONE'&&key.replace(/\\D/g,'').length!==11)err('Celular Pix precisa conter DDD e 11 dígitos.');
-  const person=d.participants.find(x=>x.id===me.id);person.pixKeyEncrypted=encryptSecret(key);person.pixKeyType=type;person.pixKeyUpdatedAt=new Date().toISOString();await save(d);return send(res,200,{ok:true,message:'Chave Pix cadastrada para os repasses WYNCORE.'});
- }
-
+  if(req.method==='POST'&&(p==='/api/payout-profile'||p==='/api/pix-key'))return send(res,410,{error:'Cadastro de Pix e PayPal foi desativado. WYNCORE usa Stripe.'});
+ 
  if(req.method==='GET'&&p==='/api/ad-workspace'){
   const campaigns=d.adCampaigns||[],reviews=d.adReviews||[];
-  if(me.role==='admin')return send(res,200,{campaigns,reviews,earnings:d.adEarnings||[],adscendConversions:d.adscendConversions||[],adscendIntegration:{configured:Adscend.configured(),postbackConfigured:Adscend.postbackConfigured(),postbackUrl:Adscend.postbackConfigured()&&process.env.WYNCORE_PUBLIC_URL?String(process.env.WYNCORE_PUBLIC_URL).replace(/\/$/,'')+'/api/webhooks/adscend?token='+encodeURIComponent(process.env.ADSCEND_POSTBACK_SECRET)+'&user=[SB1]&time=[UTS]&ip=[IP]&offer=[SB2]&pay=[PAY]&cur=[CUR]':null},payoutIntegration:{configured:Asaas.configured(),webhookConfigured:Asaas.webhookConfigured(),storageSafe:payoutStorageSafe(),ready:Asaas.configured()&&Asaas.webhookConfigured()&&payoutStorageSafe(),storage:Storage.databaseConfigured()?'PostgreSQL transacional':process.env.BLOB_READ_WRITE_TOKEN?'Vercel Blob (saques bloqueados)':'JSON em disco',reason:!Asaas.configured()?'Configure ASAAS_API_KEY.':!Asaas.webhookConfigured()?'Configure ASAAS_WEBHOOK_TOKEN com 32 a 255 caracteres.':!payoutStorageSafe()?'Configure DATABASE_URL ou disco persistente de instância única com DATA_DIR e WYNCORE_PAYOUT_STORAGE_MODE=single_writer.':'Armazenamento e Asaas configurados. Homologue no Sandbox antes de produção.'},paypalIntegration:{configured:Paypal.configured(),mode:Paypal.mode},advertiserInquiries:d.advertiserInquiries||[],participants:d.participants.map(x=>({id:x.id,name:x.name,email:x.email,phone:x.phone,role:x.role,status:x.status,createdAt:x.createdAt,pixKeyType:x.pixKeyType,pixKeyConfigured:Boolean(x.pixKeyEncrypted),payoutCountry:x.payoutCountry||'BR',paypalEmailConfigured:Boolean(x.paypalEmailEncrypted)})),summary:{campaigns:campaigns.length,open:campaigns.filter(x=>x.status==='open').length,reviews:reviews.length,pending:reviews.filter(x=>x.status==='pending').length,accepted:reviews.filter(x=>x.status==='accepted').length,contracted:campaigns.reduce((n,x)=>n+(Number(x.contractValue)||0),0),received:campaigns.filter(x=>x.contractStatus==='received').reduce((n,x)=>n+(Number(x.contractValue)||0),0)}});
+  const stripeIntegration={configured:Stripe.configured(),webhookConfigured:Stripe.webhookConfigured(),connectEnabled:Stripe.connectEnabled(),storageSafe:payoutStorageSafe(),ready:Stripe.configured()&&Stripe.webhookConfigured()&&Stripe.connectEnabled()&&payoutStorageSafe(),reason:!Stripe.configured()?'Chave privada Stripe ausente.':!Stripe.webhookConfigured()?'Webhook Stripe não configurado.':!Stripe.connectEnabled()?'Stripe Connect não habilitado como plataforma.':!payoutStorageSafe()?'Armazenamento transacional não disponível.':'Pronto para homologação.'};
+  if(me.role==='admin')return send(res,200,{campaigns,reviews,earnings:d.adEarnings||[],adscendConversions:d.adscendConversions||[],adscendIntegration:{configured:Adscend.configured(),postbackConfigured:Adscend.postbackConfigured(),postbackUrl:Adscend.postbackConfigured()&&process.env.WYNCORE_PUBLIC_URL?String(process.env.WYNCORE_PUBLIC_URL).replace(/\/$/,'')+'/api/webhooks/adscend?token='+encodeURIComponent(process.env.ADSCEND_POSTBACK_SECRET)+'&user=[SB1]&time=[UTS]&ip=[IP]&offer=[SB2]&pay=[PAY]&cur=[CUR]':null},stripeIntegration,advertiserInquiries:d.advertiserInquiries||[],participants:(d.participants||[]).map(x=>({id:x.id,name:x.name,email:x.email,phone:x.phone,role:x.role,status:x.status,createdAt:x.createdAt,stripeAccountConfigured:Boolean(x.stripeAccountId),stripePayoutsEnabled:Boolean(x.stripePayoutsEnabled)})),summary:{campaigns:campaigns.length,open:campaigns.filter(x=>x.status==='open').length,reviews:reviews.length,pending:reviews.filter(x=>x.status==='pending').length,accepted:reviews.filter(x=>x.status==='accepted').length,contracted:campaigns.reduce((n,x)=>n+(Number(x.contractValue)||0),0),received:campaigns.filter(x=>x.contractStatus==='received').reduce((n,x)=>n+(Number(x.contractValue)||0),0)}});
   if(me.role!=='participant')err('Acesso não permitido.',403);
-  const mine=reviews.filter(x=>x.participantId===me.id);const earnings=(d.adEarnings||[]).filter(x=>x.participantId===me.id);const withdrawable=earnings.filter(x=>x.status==='approved_unpaid'&&(x.provider==='adscend'&&x.providerConfirmed===true||(d.adCampaigns||[]).some(c=>c.id===x.campaignId&&c.contractStatus==='received')));const availableForPix=Math.round(withdrawable.reduce((n,x)=>n+Number(x.amount||0),0)*100)/100;return send(res,200,{campaigns:campaigns.filter(x=>x.status==='open'),reviews:mine,earnings,earningSummary:{approvedUnpaid:earnings.filter(x=>x.status==='approved_unpaid').reduce((n,x)=>n+x.amount,0),availableForPix,paid:earnings.filter(x=>x.status==='paid').reduce((n,x)=>n+x.amount,0)},adscendConversions:(d.adscendConversions||[]).filter(x=>x.participantId===me.id),payoutProfile:{country:me.payoutCountry||'BR',pixKeyConfigured:Boolean(me.pixKeyEncrypted),paypalEmailConfigured:Boolean(me.paypalEmailEncrypted)},campaignHistory:Object.fromEntries(mine.map(r=>{const c=campaigns.find(x=>x.id===r.campaignId);return [r.campaignId,c?c.title:'Campanha encerrada']}))});
+  const mine=reviews.filter(x=>x.participantId===me.id),earnings=(d.adEarnings||[]).filter(x=>x.participantId===me.id),withdrawable=earnings.filter(x=>x.status==='approved_unpaid'&&(x.provider==='adscend'&&x.providerConfirmed===true||(d.adCampaigns||[]).some(c=>c.id===x.campaignId&&c.contractStatus==='received'))),availableForWithdrawal=Math.round(withdrawable.reduce((n,x)=>n+Number(x.amount||0),0)*100)/100;
+  const person=d.participants.find(x=>x.id===me.id)||{};
+  return send(res,200,{campaigns:campaigns.filter(x=>x.status==='open'),reviews:mine,earnings,earningSummary:{approvedUnpaid:earnings.filter(x=>x.status==='approved_unpaid').reduce((n,x)=>n+x.amount,0),availableForWithdrawal,availableForPix:availableForWithdrawal,paid:earnings.filter(x=>x.status==='paid').reduce((n,x)=>n+x.amount,0),pending:earnings.filter(x=>x.status==='payout_pending').reduce((n,x)=>n+x.amount,0)},adscendConversions:(d.adscendConversions||[]).filter(x=>x.participantId===me.id),stripeProfile:{connected:Boolean(person.stripeAccountId),payoutsEnabled:Boolean(person.stripePayoutsEnabled),detailsSubmitted:Boolean(person.stripeDetailsSubmitted)},stripeIntegration:{configured:Stripe.configured(),connectEnabled:Stripe.connectEnabled()},campaignHistory:Object.fromEntries(mine.map(r=>{const c=campaigns.find(x=>x.id===r.campaignId);return [r.campaignId,c?c.title:'Campanha encerrada']}))});
  }
  if(req.method==='GET'&&p==='/api/adscend/offers'){
   if(me.role!=='participant')err('Somente participantes podem consultar campanhas.',403);
@@ -492,19 +447,7 @@ if(req.method==='POST'&&p==='/api/pix-key'){
    return send(res,200,{ok:true,...result,source:'Adscend Media',currency:'USD',rewardIsEstimate:true});
   }catch(e){return send(res,e.status||502,{error:e.status?e.message:'Não foi possível consultar a Adscend agora.'})}
  }
- if(req.method==='POST'&&p==='/api/integrations/asaas/webhook'){
-  if(me.role!=='admin')err('Somente administração.',403);
-  const publicUrl=String(process.env.WYNCORE_PUBLIC_URL||'').replace(/\/$/,'');
-  const notifyEmail=String(process.env.WYNCORE_LEADS_TO||'').trim();
-  if(!publicUrl||!/^https:\/\//i.test(publicUrl))err('Configure WYNCORE_PUBLIC_URL com o endereço HTTPS público da aplicação.',503);
-  if(!/^\S+@\S+\.\S+$/.test(notifyEmail))err('Configure WYNCORE_LEADS_TO com o e-mail que receberá alertas.',503);
-  if(!Asaas.webhookConfigured())err('Configure ASAAS_WEBHOOK_TOKEN com 32 a 255 caracteres, sem espaços.',503);
-  const d=await load();
-  if(d.asaasWebhookId)return send(res,200,{ok:true,alreadyConfigured:true,id:d.asaasWebhookId,url:d.asaasWebhookUrl});
-  const created=await Asaas.createWebhook({url:publicUrl+'/api/webhooks/asaas',email:notifyEmail});
-  d.asaasWebhookId=created.id;d.asaasWebhookUrl=publicUrl+'/api/webhooks/asaas';d.asaasWebhookCreatedAt=new Date().toISOString();await save(d);
-  return send(res,201,{ok:true,id:created.id,url:d.asaasWebhookUrl,message:'Webhook Asaas criado. Faça uma cobrança de teste no Sandbox e confirme o evento recebido.'});
- }
+ if(req.method==='POST'&&p==='/api/integrations/asaas/webhook')return send(res,410,{error:'Webhook Asaas desativado. WYNCORE usa Stripe.'});
  if(req.method==='POST'&&p==='/api/ad-campaigns'){
   if(me.role!=='admin')err('Somente administração pode criar campanhas.',403);
   const b=await body(req),title=String(b.title||'').trim().slice(0,120),client=String(b.client||'').trim().slice(0,120),brief=String(b.brief||'').trim().slice(0,3000),channel=String(b.channel||'digital'),objective=String(b.objective||'').trim().slice(0,500),mediaUrl=String(b.mediaUrl||'').trim().slice(0,2000),value=Number(b.contractValue||0),reward=Number(b.rewardPerReview||0),maxParticipants=Number(b.maxParticipants||0),requiredWatchSeconds=Number(b.requiredWatchSeconds||8),advertiserDocument=String(b.advertiserDocument||'').replace(/\\D/g,'').slice(0,14),advertiserEmail=String(b.advertiserEmail||'').trim().toLowerCase(),advertiserPhone=normalizePhone(b.advertiserPhone);
