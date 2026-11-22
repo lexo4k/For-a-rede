@@ -1,7 +1,7 @@
 name: WYNCORE checks
 on:
   push:
-    branches: [wyncore-core]
+    branches: [wyncore-core, wyncore-supabase-production]
     paths: ["wyncore/**", ".github/workflows/wyncore-check.yml"]
   pull_request:
     branches: [forcarede-init]
@@ -17,6 +17,7 @@ jobs:
       - name: Syntax checks
         run: |
           node --check wyncore/server.js
+          node --check wyncore/supabase-store.js
           node --check wyncore/app.js
           node --check wyncore/sw.js
       - name: Backend tests
