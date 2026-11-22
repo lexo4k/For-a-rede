@@ -1,6 +1,6 @@
 'use strict';
 const http=require('node:http'),fs=require('node:fs/promises'),path=require('node:path'),crypto=require('node:crypto');
-const D=require('./domain'),Asaas=require('./asaas'),Adscend=require('./adscend'),Paypal=require('./paypal'),Payouts=require('./payouts'),Storage=require('./storage');
+const D=require('./domain'),Asaas=require('./asaas'),Adscend=require('./adscend'),Paypal=require('./paypal'),Payouts=require('./payouts'),Storage=require('./storage'),Stripe=require('./stripe');
 const ROOT=__dirname,DATA_DIR=process.env.DATA_DIR||path.join(ROOT,'data'),DATA_FILE=path.join(DATA_DIR,'wyncore.json');
 const PORT=Number(process.env.PORT||3000),PASSWORD=process.env.WYNCORE_OWNER_PASSWORD||'',SECRET=process.env.WYNCORE_SESSION_SECRET||'',PARTNER_SECRET=process.env.WYNCORE_PARTNER_WEBHOOK_SECRET||'',GOOGLE_CLIENT_ID=process.env.WYNCORE_GOOGLE_CLIENT_ID||'',PROD=process.env.NODE_ENV==='production';
 const COOKIE='wyncore_session',SESSION_MS=8*60*60*1000;
