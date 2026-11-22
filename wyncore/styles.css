@@ -188,3 +188,22 @@ input,select,textarea,button{max-width:100%}
   .sidebar .nav-item{min-height:46px;padding-top:4px;padding-bottom:4px}
   .main{padding-bottom:75px}
 }
+
+
+/* WYNCORE visual identity — graphite + emerald */
+:root{--bg:#080d12;--surface:#101a20;--surface-2:#14231f;--surface-3:#1b3028;--line:#263b33;--text:#f2f7f4;--muted:#91a69a;--accent:#57d69a;--accent-2:#9be7bd;--good:#57d69a;--warn:#e9c879;--danger:#ed8d8d}
+body{background:radial-gradient(ellipse at 85% 0%,#15372b 0,transparent 34%),linear-gradient(145deg,#0b1213 0%,#080d12 55%,#0d1915 100%)}
+.sidebar{background:rgba(8,15,13,.97);border-right-color:#20352c}
+.brand-mark{border-color:#57d69a66;background:linear-gradient(145deg,#1b5b3e,#123126);color:#a8f1c8;box-shadow:0 8px 28px #0005}
+.nav-item.active,.nav-item:hover{background:linear-gradient(100deg,#173a2b,#13291f);border-color:#2e6548;color:#f2fff7}
+.primary,.public-actions .primary{background:linear-gradient(135deg,#37bd7b,#238957);border-color:#3fc786;color:#04150d;box-shadow:0 8px 24px #1a9d6030}
+.primary:hover{filter:brightness(1.08)}
+.secondary{border-color:#345a46;color:#c4f1d5}
+.public-top{border-bottom-color:#20352c}
+.public-hero-mark{background:radial-gradient(circle,#1d6845 0,#102b20 55%,#0b1511 100%);border-color:#3c9c68}
+.public-hero-mark span{color:#a5efc2}
+.public-card,.auth-card,.panel,.stat-card,.card{background:linear-gradient(145deg,#14221c,#101a16);border-color:#294336;box-shadow:0 18px 48px #0003}
+.feature-icon,.eyebrow{color:#69dfa0}
+input,select,textarea{background:#0b1511;border-color:#30483b;color:#f2f7f4}
+input:focus,select:focus,textarea:focus{outline:2px solid #57d69a55;border-color:#57d69a}
+@media(max-width:760px){.sidebar{background:#09120e}.public-hero{padding-top:35px}.public-card-grid{gap:12px}}
