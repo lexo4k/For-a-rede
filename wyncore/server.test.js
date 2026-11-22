@@ -184,7 +184,7 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.equal(offerwallQuery.get('country'),'BR','provider feed should request Brazil inventory');
  const identityExpiry=Number(offerwallQuery.get('identityExpires'));
  assert.ok(identityExpiry>Math.floor(Date.now()/1000)&&identityExpiry<=Math.floor(Date.now()/1000)+3600,'signed identity should expire within one hour');
- const identityMessage='offerwall-user-v1\\n'+process.env.OFFERWALLME_API_KEY+'\\n'+participant.id+'\\n'+String(identityExpiry);
+ const identityMessage='offerwall-user-v1\n'+process.env.OFFERWALLME_API_KEY+'\n'+participant.id+'\n'+String(identityExpiry);
  const expectedIdentity=crypto.createHmac('sha256',process.env.OFFERWALLME_SECRET).update(identityMessage).digest('hex');
  assert.equal(offerwallQuery.get('identitySignature'),expectedIdentity,'provider identity must be HMAC-signed server-side');
 
