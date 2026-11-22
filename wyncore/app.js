@@ -32,4 +32,5 @@ async function loadOpportunities(force=false){
  }catch(e){status.textContent='Não foi possível atualizar a busca: '+e.message}
 }
 $('refresh-opportunities')?.addEventListener('click',()=>loadOpportunities(true));
-\n(async()=>{try{await load()}catch(e){showLogin()}})();
+
+(async()=>{try{await load()}catch(e){showLogin()}})();
