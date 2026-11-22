@@ -11,6 +11,6 @@
     "test": "node --test"
   },
   "dependencies": {
-    "@vercel/blob": "^2.0.0"
+    "@vercel/blob": "^2.3.0"
   }
 }
