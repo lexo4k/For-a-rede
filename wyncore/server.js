@@ -91,70 +91,163 @@ function hashPassword(p,salt=crypto.randomBytes(16).toString('hex')){return new 
 async function verifyPassword(p,stored){if(!stored||!stored.includes(':'))return false;const [salt,key]=stored.split(':');const got=await hashPassword(p,salt);return safeEqual(got.split(':')[1],key)}
 function actor(session,d){if(!session)return null;if(session.role==='admin'&&session.id==='owner')return{id:'owner',role:'admin',email:'owner'};return d.participants.find(p=>p.id===session.id&&p.status==='active'&&p.role===session.role)||null}
 
-async function handlePixWithdrawal(req,res){
+async function resolveRequestActor(req){
+ const session=readSession(req);if(!session)return null;
+ return Storage.withTransaction(()=>withLock('state',async()=>{const state=await load();return actor(session,state)}));
+}
+function publicOrigin(){return String(process.env.WYNCORE_PUBLIC_URL||'https://wyncore.vercel.app').replace(/\/$/,'')}
+async function handleStripeConnect(req,res){
  if(req.method!=='POST')return send(res,405,{error:'Método não permitido.'});
  if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
- if(SECRET.length<32)return send(res,503,{error:'Autenticação ainda não configurada.'});
- const session=readSession(req);
- if(!session)return send(res,401,{error:'Sessão expirada.'});
- const me=await Storage.withTransaction(()=>withLock('state',async()=>{const state=await load();return actor(session,state)}));
- if(!me)return send(res,403,{error:'Conta inativa ou sem permissão.'});
- if(me.role!=='participant')return send(res,403,{error:'Somente participantes podem solicitar saque.'});
- if(limited(req,'pix-withdrawal',me.id,3,60000))return send(res,429,{error:'Aguarde um minuto antes de solicitar outro Pix.'});
- const b=await body(req),raw=String(b.amount??'').trim().replace(',','.'),amount=Number(raw);
- if(!/^\\d+(?:\\.\\d{1,2})?$/.test(raw)||!Number.isFinite(amount)||amount<1)err('Informe um valor a partir de R$ 1,00, com até duas casas decimais.');
- if(!Asaas.configured()||!Asaas.webhookConfigured())err('O Pix ainda não está liberado. A administração precisa configurar Asaas e o webhook.');
- if(!payoutStorageSafe())err('Saque temporariamente bloqueado: configure PostgreSQL ou disco persistente de instância única. O armazenamento atual não garante reserva transacional contra saques simultâneos.',503);
- const reservationData=await Storage.withTransaction(()=>withLock('state',async()=>{
-  const state=await load(),participant=state.participants.find(x=>x.id===me.id&&x.status==='active');
-  if(!participant?.pixKeyEncrypted||!participant?.pixKeyType)err('Cadastre sua chave Pix antes de solicitar o saque.');
-  const pixAddressKey=decryptSecret(participant.pixKeyEncrypted);
-  const amountCents=Math.round(amount*100),withdrawalId=crypto.randomUUID(),now=new Date().toISOString();
-  Payouts.reserveWithdrawal(state,{participantId:me.id,amountCents,withdrawalId,now});
-  await save(state);
-  return {pixAddressKey,pixAddressKeyType:participant.pixKeyType,amountCents,withdrawalId};
+ const me=await resolveRequestActor(req);if(!me)return send(res,401,{error:'Sessão expirada.'});
+ if(me.role!=='participant')return send(res,403,{error:'Somente participantes podem conectar uma conta de recebimento.'});
+ if(!Stripe.configured()||!Stripe.connectEnabled())return send(res,503,{error:'Stripe Connect ainda não está habilitado para a WYNCORE.'});
+ const person=await Storage.withTransaction(()=>withLock('state',async()=>{const d=await load();const p=d.participants.find(x=>x.id===me.id&&x.status==='active');return p?{id:p.id,email:p.email,stripeAccountId:p.stripeAccountId||null}:null}));
+ if(!person)return send(res,403,{error:'Participante inativo.'});
+ if(!person.email)return send(res,400,{error:'Cadastre um e-mail válido antes de conectar o Stripe.'});
+ let accountId=person.stripeAccountId;
+ if(!accountId){
+  const account=await Stripe.createConnectedAccount({email:person.email,country:'BR',idempotencyKey:'wyncore-connect-'+person.id});
+  accountId=account.id;
+  await Storage.withTransaction(()=>withLock('state',async()=>{const d=await load(),p=d.participants.find(x=>x.id===me.id);if(!p)throw Object.assign(new Error('Participante não encontrado.'),{status:404});p.stripeAccountId=accountId;p.stripeDetailsSubmitted=Boolean(account.details_submitted);p.stripePayoutsEnabled=Boolean(account.payouts_enabled);p.stripeAccountCreatedAt=new Date().toISOString();await save(d)}));
+ }
+ const origin=publicOrigin();
+ const link=await Stripe.createAccountLink({accountId,refreshUrl:origin+'/ads.html?connect=refresh',returnUrl:origin+'/ads.html?connect=return'});
+ return send(res,200,{ok:true,url:link.url,message:'Conclua a validação da sua conta no Stripe.'});
+}
+async function handleStripeCheckout(req,res,kind,id){
+ if(req.method!=='POST')return send(res,405,{error:'Método não permitido.'});
+ if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
+ const me=await resolveRequestActor(req);if(!me)return send(res,401,{error:'Sessão expirada.'});
+ if(me.role!=='admin')return send(res,403,{error:'Somente a administração pode financiar campanhas.'});
+ if(!Stripe.configured())return send(res,503,{error:'Chave privada Stripe ausente no servidor.'});
+ const attempt=await Storage.withTransaction(()=>withLock('state',async()=>{
+  const d=await load(),now=Date.now();
+  if(kind==='ad-campaigns'){
+   const c=(d.adCampaigns||[]).find(x=>x.id===id);if(!c)throw Object.assign(new Error('Campanha não encontrada.'),{status:404});
+   if(c.contractStatus==='received')throw Object.assign(new Error('Esta campanha já foi financiada.'),{status:409});
+   const amountCents=Math.round(Number(c.contractValue||0)*100);if(!Number.isInteger(amountCents)||amountCents<100)throw Object.assign(new Error('Defina um valor de contrato de pelo menos R$ 1,00.'),{status:400});
+   if(c.stripeCheckoutUrl&&Number(c.stripeCheckoutExpiresAt||0)>now)return {existing:true,url:c.stripeCheckoutUrl};
+   if(c.stripeCheckoutStatus==='creating')throw Object.assign(new Error('A cobrança desta campanha já está sendo criada. Aguarde alguns segundos.'),{status:409});
+   const attemptId=crypto.randomUUID();c.stripeCheckoutStatus='creating';c.stripeCheckoutAttemptId=attemptId;c.updatedAt=new Date().toISOString();await save(d);
+   return {kind,id,attemptId,amountCents,name:c.title,description:'Financiamento de campanha WYNCORE: '+c.client,metadata:{kind:'ad_campaign',campaignId:c.id},clientReferenceId:'wyncore-campaign:'+c.id};
+  }
+  const p=(d.programs||[]).find(x=>x.id===id);if(!p)throw Object.assign(new Error('Atividade não encontrada.'),{status:404});
+  if(p.fundingStatus==='paid'||p.status==='active')throw Object.assign(new Error('Esta atividade já está financiada.'),{status:409});
+  const amountCents=Math.round(Number(p.budget||0)*100);if(!Number.isInteger(amountCents)||amountCents<100)throw Object.assign(new Error('Defina um orçamento de pelo menos R$ 1,00.'),{status:400});
+  if(p.stripeCheckoutUrl&&Number(p.stripeCheckoutExpiresAt||0)>now)return {existing:true,url:p.stripeCheckoutUrl};
+  if(p.stripeCheckoutStatus==='creating')throw Object.assign(new Error('A cobrança desta atividade já está sendo criada. Aguarde alguns segundos.'),{status:409});
+  const attemptId=crypto.randomUUID();p.stripeCheckoutStatus='creating';p.stripeCheckoutAttemptId=attemptId;p.updatedAt=new Date().toISOString();await save(d);
+  return {kind,id,attemptId,amountCents,name:p.title,description:'Financiamento de atividade WYNCORE',metadata:{kind:'program_funding',programId:p.id},clientReferenceId:'wyncore-program:'+p.id};
  }));
- let transfer;
+ if(attempt.existing)return send(res,200,{ok:true,checkoutUrl:attempt.url,reused:true});
+ let session;
  try{
-  // Reservation is committed before contacting Asaas; no database transaction spans a network call.
-  transfer=await Asaas.transferPix({value:reservationData.amountCents/100,pixAddressKey:reservationData.pixAddressKey,pixAddressKeyType:reservationData.pixAddressKeyType,description:'WYNCORE saque',externalReference:'wyncore-earning:'+reservationData.withdrawalId});
+  const origin=publicOrigin();
+  session=await Stripe.createCheckoutSession({amountCents:attempt.amountCents,name:attempt.name,description:attempt.description,successUrl:origin+(kind==='ad-campaigns'?'/ads.html':'/')+'?checkout=success&session_id={CHECKOUT_SESSION_ID}',cancelUrl:origin+(kind==='ad-campaigns'?'/ads.html':'/')+'?checkout=cancel',metadata:attempt.metadata,clientReferenceId:attempt.clientReferenceId,idempotencyKey:'wyncore-checkout-'+kind+'-'+id+'-'+attempt.attemptId});
  }catch(error){
-  let finalStatus='payout_review_required';
-  try{
-   finalStatus=await Storage.withTransaction(()=>withLock('state',async()=>{
-    const state=await load(),reservation=(state.adEarnings||[]).find(x=>x.id===reservationData.withdrawalId&&x.selfServiceWithdrawal);
-    if(!reservation)return 'missing';
-    if(reservation.status==='payout_requested'){
-     reservation.status='payout_review_required';
-     reservation.payoutError=String(error.message||'Falha ou resposta inconclusiva do Asaas.').slice(0,300);
-     reservation.updatedAt=new Date().toISOString();
-     await save(state);
+  await Storage.withTransaction(()=>withLock('state',async()=>{const d=await load(),resource=kind==='ad-campaigns'?(d.adCampaigns||[]).find(x=>x.id===id):(d.programs||[]).find(x=>x.id===id);if(resource&&resource.stripeCheckoutAttemptId===attempt.attemptId){resource.stripeCheckoutStatus='checkout_failed';resource.stripeCheckoutError=String(error.message||'Stripe indisponível').slice(0,300);resource.updatedAt=new Date().toISOString();await save(d)}}));
+  return send(res,error.status||503,{error:error.message||'Não foi possível criar a cobrança Stripe.'});
+ }
+ await Storage.withTransaction(()=>withLock('state',async()=>{const d=await load(),resource=kind==='ad-campaigns'?(d.adCampaigns||[]).find(x=>x.id===id):(d.programs||[]).find(x=>x.id===id);if(!resource||resource.stripeCheckoutAttemptId!==attempt.attemptId)throw Object.assign(new Error('O estado da campanha mudou durante a criação da cobrança. Confira o painel Stripe antes de tentar novamente.'),{status:409});resource.stripeCheckoutSessionId=session.id;resource.stripeCheckoutUrl=session.url;resource.stripeCheckoutExpiresAt=Number(session.expires_at||0)*1000;resource.stripeCheckoutStatus='awaiting_stripe';resource.updatedAt=new Date().toISOString();await save(d)}));
+ return send(res,201,{ok:true,checkoutUrl:session.url,sessionId:session.id});
+}
+async function handleStripeEarningPayout(req,res,earningId){
+ if(req.method!=='POST')return send(res,405,{error:'Método não permitido.'});
+ if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
+ const me=await resolveRequestActor(req);if(!me)return send(res,401,{error:'Sessão expirada.'});if(me.role!=='admin')return send(res,403,{error:'Somente administração pode iniciar repasses.'});
+ if(!Stripe.configured()||!Stripe.connectEnabled())return send(res,503,{error:'Stripe Connect ainda não está habilitado.'});
+ if(!payoutStorageSafe())return send(res,503,{error:'O armazenamento atual não garante reserva transacional para repasses.'});
+ const snapshot=await Storage.withTransaction(()=>withLock('state',async()=>{const d=await load(),e=(d.adEarnings||[]).find(x=>x.id===earningId),p=e&&(d.participants||[]).find(x=>x.id===e.participantId),c=e&&(d.adCampaigns||[]).find(x=>x.id===e.campaignId);if(!e)throw Object.assign(new Error('Recompensa não encontrada.'),{status:404});if(e.status!=='approved_unpaid')throw Object.assign(new Error('A recompensa não está disponível para repasse.'),{status:409});if(c?.contractStatus!=='received'&&!(e.provider==='adscend'&&e.providerConfirmed===true))throw Object.assign(new Error('O financiamento da campanha ainda não foi confirmado.'),{status:409});if(!p?.stripeAccountId)throw Object.assign(new Error('O participante ainda não conectou uma conta Stripe.'),{status:409});e.status='payout_requested';e.payoutProvider='stripe_connect';e.payoutRequestedAt=new Date().toISOString();await save(d);return {participantId:p.id,accountId:p.stripeAccountId,amountCents:Math.round(Number(e.amount)*100)}}));
+ try{
+  const connected=await Stripe.getConnectedAccount(snapshot.accountId);if(!connected.payouts_enabled||connected.capabilities?.transfers!=='active')throw Object.assign(new Error('A conta Stripe do participante ainda não está habilitada para receber repasses.'),{status:409});
+  const transfer=await Stripe.createTransfer({amountCents:snapshot.amountCents,destination:snapshot.accountId,withdrawalId:earningId,participantId:snapshot.participantId,idempotencyKey:'wyncore-ad-earning-'+earningId});
+  await Storage.withTransaction(()=>withLock('state',async()=>{const d=await load(),e=(d.adEarnings||[]).find(x=>x.id===earningId);if(!e)throw new Error('Recompensa não encontrada após a resposta Stripe.');e.stripeTransferId=transfer.id;e.payoutProvider='stripe_connect';e.status='payout_pending';e.updatedAt=new Date().toISOString();await save(d)}));
+  return send(res,202,{ok:true,status:'payout_pending',transferId:transfer.id,message:'Transferência enviada à conta Stripe conectada. O recebimento bancário depende da confirmação de payout do Stripe.'});
+ }catch(error){await Storage.withTransaction(()=>withLock('state',async()=>{const d=await load(),e=(d.adEarnings||[]).find(x=>x.id===earningId);if(e&&e.status==='payout_requested'){e.status='payout_review_required';e.payoutError=String(error.message||'Falha ao enviar transferência Stripe.').slice(0,300);e.updatedAt=new Date().toISOString();await save(d)}}));return send(res,error.status||503,{error:error.message||'Não foi possível enviar o repasse Stripe.'})}
+}
+async function handleStripeAssignmentPayout(req,res,assignmentId){
+ if(req.method!=='POST')return send(res,405,{error:'Método não permitido.'});
+ if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
+ const me=await resolveRequestActor(req);if(!me)return send(res,401,{error:'Sessão expirada.'});if(me.role!=='admin')return send(res,403,{error:'Somente administração pode iniciar repasses.'});
+ if(!Stripe.configured()||!Stripe.connectEnabled())return send(res,503,{error:'Stripe Connect ainda não está habilitado.'});
+ const snap=await Storage.withTransaction(()=>withLock('state',async()=>{const d=await load(),a=(d.assignments||[]).find(x=>x.id===assignmentId),p=a&&(d.participants||[]).find(x=>x.id===a.participantId),program=a&&(d.programs||[]).find(x=>x.id===a.programId);if(!a)throw Object.assign(new Error('Atividade não encontrada.'),{status:404});if(a.state!=='approved')throw Object.assign(new Error('A entrega ainda não está aprovada para pagamento.'),{status:409});if(!program||program.fundingStatus!=='paid')throw Object.assign(new Error('O orçamento da atividade ainda não foi confirmado pelo Stripe.'),{status:409});if(!p?.stripeAccountId)throw Object.assign(new Error('O participante ainda não conectou uma conta Stripe.'),{status:409});a.state='payout_requested';a.payoutProvider='stripe_connect';a.payoutRequestedAt=new Date().toISOString();await save(d);return {participantId:p.id,accountId:p.stripeAccountId,amountCents:Math.round(Number(a.reward)*100)}}));
+ try{
+  const connected=await Stripe.getConnectedAccount(snap.accountId);if(!connected.payouts_enabled||connected.capabilities?.transfers!=='active')throw Object.assign(new Error('A conta Stripe do participante ainda não está habilitada para receber repasses.'),{status:409});
+  const transfer=await Stripe.createTransfer({amountCents:snap.amountCents,destination:snap.accountId,withdrawalId:assignmentId,participantId:snap.participantId,assignmentId,idempotencyKey:'wyncore-assignment-'+assignmentId});
+  await Storage.withTransaction(()=>withLock('state',async()=>{const d=await load(),a=(d.assignments||[]).find(x=>x.id===assignmentId);if(!a)throw new Error('Atividade não encontrada após a resposta Stripe.');a.stripeTransferId=transfer.id;a.state='payout_pending';a.updatedAt=new Date().toISOString();await save(d)}));
+  return send(res,202,{ok:true,status:'payout_pending',transferId:transfer.id,message:'Transferência enviada à conta Stripe conectada. O recebimento bancário depende do Stripe.'});
+ }catch(error){await Storage.withTransaction(()=>withLock('state',async()=>{const d=await load(),a=(d.assignments||[]).find(x=>x.id===assignmentId);if(a&&a.state==='payout_requested'){a.state='payout_review_required';a.payoutError=String(error.message||'Falha ao enviar transferência Stripe.').slice(0,300);await save(d)}}));return send(res,error.status||503,{error:error.message||'Não foi possível enviar o repasse Stripe.'})}
+}
+async function handleStripeWithdrawal(req,res){
+ if(req.method!=='POST')return send(res,405,{error:'Método não permitido.'});if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
+ const me=await resolveRequestActor(req);if(!me)return send(res,401,{error:'Sessão expirada.'});if(me.role!=='participant')return send(res,403,{error:'Somente participantes podem solicitar repasse.'});
+ if(limited(req,'stripe-withdrawal',me.id,3,60000))return send(res,429,{error:'Aguarde um minuto antes de solicitar outro repasse.'});
+ if(!Stripe.configured()||!Stripe.connectEnabled())return send(res,503,{error:'Stripe Connect ainda não está habilitado.'});if(!payoutStorageSafe())return send(res,503,{error:'O armazenamento atual não garante reserva transacional para repasses.'});
+ const b=await body(req),raw=String(b.amount??'').trim().replace(',','.'),amount=Number(raw);if(!/^\d+(?:\.\d{1,2})?$/.test(raw)||!Number.isFinite(amount)||amount<1)return send(res,400,{error:'Informe um valor a partir de R$ 1,00.'});
+ const person=await Storage.withTransaction(()=>withLock('state',async()=>{const d=await load(),p=d.participants.find(x=>x.id===me.id&&x.status==='active');return p?{id:p.id,stripeAccountId:p.stripeAccountId||null}:null}));
+ if(!person?.stripeAccountId)return send(res,409,{error:'Conecte sua conta Stripe antes de solicitar repasse.'});
+ const connected=await Stripe.getConnectedAccount(person.stripeAccountId);if(!connected.payouts_enabled||connected.capabilities?.transfers!=='active')return send(res,409,{error:'Sua conta Stripe ainda não está habilitada para receber repasses.'});
+ const amountCents=Math.round(amount*100),withdrawalId=crypto.randomUUID(),now=new Date().toISOString();
+ await Storage.withTransaction(()=>withLock('state',async()=>{const d=await load();Payouts.reserveWithdrawal(d,{participantId:me.id,amountCents,withdrawalId,now});await save(d)}));
+ try{
+  const transfer=await Stripe.createTransfer({amountCents,destination:person.stripeAccountId,withdrawalId,participantId:me.id,idempotencyKey:'wyncore-withdrawal-'+withdrawalId});
+  const status=await Storage.withTransaction(()=>withLock('state',async()=>{const d=await load(),e=(d.adEarnings||[]).find(x=>x.id===withdrawalId);Payouts.attachTransfer(e,transfer,new Date().toISOString());await save(d);return e.status}));
+  return send(res,202,{ok:true,status,amount:amountCents/100,transferId:transfer.id,withdrawalId,message:'Transferência enviada à conta Stripe. O recebimento bancário será confirmado pelo webhook do Stripe.'});
+ }catch(error){await Storage.withTransaction(()=>withLock('state',async()=>{const d=await load(),e=(d.adEarnings||[]).find(x=>x.id===withdrawalId);if(e&&e.status==='payout_requested'){e.status='payout_review_required';e.payoutError=String(error.message||'Falha ao enviar transferência Stripe.').slice(0,300);e.updatedAt=new Date().toISOString();await save(d)}}));return send(res,error.status||503,{error:error.message||'Não foi possível concluir o repasse Stripe. O saldo permanece reservado para conferência.'})}
+}
+async function handleStripeWebhook(req,res){
+ const raw=await rawBody(req);if(!Stripe.verifyWebhook(raw,req.headers['stripe-signature']))return send(res,401,{error:'Assinatura do webhook Stripe inválida.'});
+ let event;try{event=JSON.parse(raw)}catch{return send(res,400,{error:'Evento Stripe inválido.'})}
+ if(!event.id)return send(res,400,{error:'Evento Stripe sem identificador.'});
+ await Storage.withTransaction(()=>withLock('wallet',async()=>{
+  const d=await load();d.stripeWebhookEvents||=[];if(d.stripeWebhookEvents.includes(event.id))return;
+  const now=new Date().toISOString(),object=event.data?.object||{};
+  if(['checkout.session.completed','checkout.session.async_payment_succeeded'].includes(event.type)&&object.payment_status==='paid'&&String(object.currency||'').toLowerCase()==='brl'){
+   const meta=object.metadata||{};
+   if(meta.kind==='ad_campaign'){
+    const c=(d.adCampaigns||[]).find(x=>x.id===meta.campaignId&&x.stripeCheckoutSessionId===object.id);
+    if(c&&Number(object.amount_total)>=Math.round(Number(c.contractValue||0)*100)){c.contractStatus='received';c.contractReference=String(object.payment_intent||object.id);c.receivedAt=now;c.updatedAt=now}
+   }else if(meta.kind==='program_funding'){
+    const p=(d.programs||[]).find(x=>x.id===meta.programId&&x.stripeCheckoutSessionId===object.id);
+    if(p&&Number(object.amount_total)>=Math.round(Number(p.budget||0)*100)){p.fundingStatus='paid';p.fundingReference=String(object.payment_intent||object.id);p.fundedAt=now;p.status='active';p.updatedAt=now}
+   }
+  }
+  if(event.type==='account.updated'){
+   const accountId=String(event.account||object.id||''),p=(d.participants||[]).find(x=>x.stripeAccountId===accountId);
+   if(p){p.stripeDetailsSubmitted=Boolean(object.details_submitted);p.stripePayoutsEnabled=Boolean(object.payouts_enabled);p.stripeTransfersEnabled=object.capabilities?.transfers==='active';p.stripeAccountUpdatedAt=now}
+  }
+  if(['transfer.created','transfer.updated','transfer.reversed','payout.paid','payout.failed'].includes(event.type)){
+   Payouts.applyTransferEvent(d,event.type,object,String(event.account||''),now);
+   const assignmentId=String(object.metadata?.wyncoreAssignmentId||'');
+   if(assignmentId){
+    const a=(d.assignments||[]).find(x=>x.id===assignmentId);
+    if(a&&event.type==='transfer.created'){a.stripeTransferId=String(object.id);a.state='payout_pending';a.updatedAt=now}
+    if(a&&event.type==='transfer.reversed'){a.state='approved';a.payoutError='Transferência Stripe revertida.';a.updatedAt=now}
+   }
+   if(['payout.paid','payout.failed'].includes(event.type)){
+    const participant=(d.participants||[]).find(p=>p.stripeAccountId===String(event.account||'')),amount=Number(object.amount);
+    if(participant){
+     const candidates=(d.assignments||[]).filter(a=>a.participantId===participant.id&&a.state==='payout_pending'&&Math.round(Number(a.reward||0)*100)===amount);
+     if(candidates.length===1){const a=candidates[0];if(event.type==='payout.paid'){a.state='paid';a.paidAt=now;a.paymentReference=String(object.id||'');delete a.payoutError}else{a.payoutError=String(object.failure_message||'O Stripe não concluiu o repasse bancário.').slice(0,300)}a.updatedAt=now}
     }
-    return reservation.status;
-   }));
-  }catch(updateError){console.error('WYNCORE Pix review status could not be saved:',updateError)}
-  return send(res,503,{ok:false,status:finalStatus,amount:reservationData.amountCents/100,withdrawalId:reservationData.withdrawalId,message:'O saldo permanece reservado. A resposta do Asaas precisa ser reconciliada antes de liberar ou reenviar este valor.'});
- }
- try{
-  const finalStatus=await Storage.withTransaction(()=>withLock('state',async()=>{
-   const state=await load(),reservation=(state.adEarnings||[]).find(x=>x.id===reservationData.withdrawalId&&x.selfServiceWithdrawal);
-   if(!reservation)throw new Error('Reserva não encontrada após a resposta do Asaas.');
-   Payouts.attachTransfer(reservation,transfer,new Date().toISOString());
-   await save(state);
-   return reservation.status;
-  }));
-  return send(res,202,{ok:true,status:finalStatus,amount:reservationData.amountCents/100,transferId:transfer.id,withdrawalId:reservationData.withdrawalId,message:finalStatus==='paid'?'Pix confirmado pelo Asaas.':'Solicitação de Pix enviada. O saldo foi reservado e será atualizado quando o Asaas confirmar a transferência.'});
- }catch(error){
-  console.error('WYNCORE Pix transfer accepted but final reconciliation failed:',error);
-  return send(res,503,{ok:false,status:'payout_review_required',amount:reservationData.amountCents/100,withdrawalId:reservationData.withdrawalId,transferId:transfer.id,message:'O Asaas aceitou a transferência, mas a gravação final precisa ser reconciliada. O saldo continua reservado. Não repita o saque.'});
- }
+   }
+  }
+  d.stripeWebhookEvents.push(event.id);if(d.stripeWebhookEvents.length>5000)d.stripeWebhookEvents=d.stripeWebhookEvents.slice(-4000);await save(d);
+ }));
+ return send(res,200,{ok:true});
 }
 async function handler(req,res){
  if(!req.__wyncoreStateLock){
   let requestPath='/';
   try{requestPath=new URL(req.url,'http://localhost').pathname}catch{}
   const apiRequest=requestPath.startsWith('/api/')||(!PUBLIC_FILES.has(requestPath)&&requestPath!=='/'&&requestPath!=='/health'&&!/\.[a-z0-9]+$/i.test(requestPath));
-  if(apiRequest&&requestPath==='/api/my-pix-withdrawal'){req.__wyncoreStateLock=true;return handlePixWithdrawal(req,res).catch(error=>{console.error('WYNCORE Pix withdrawal error:',error);if(!res.headersSent)send(res,error.status||503,{error:error.status?error.message:'Não foi possível concluir a solicitação com segurança. Confira a carteira antes de tentar novamente.'})})}
+  if(apiRequest&&requestPath==='/api/my-stripe-withdrawal'){req.__wyncoreStateLock=true;return handleStripeWithdrawal(req,res).catch(error=>{console.error('WYNCORE Pix withdrawal error:',error);if(!res.headersSent)send(res,error.status||503,{error:error.status?error.message:'Não foi possível concluir a solicitação com segurança. Confira a carteira antes de tentar novamente.'})})}
+  if(apiRequest&&requestPath==='/api/stripe/connect'){req.__wyncoreStateLock=true;return handleStripeConnect(req,res).catch(error=>{console.error('WYNCORE Stripe connect error:',error);if(!res.headersSent)send(res,error.status||503,{error:error.message||'Não foi possível conectar o Stripe.'})})}
+  if(apiRequest&&requestPath==='/api/webhooks/stripe'){req.__wyncoreStateLock=true;return handleStripeWebhook(req,res).catch(error=>{console.error('WYNCORE Stripe webhook error:',error);if(!res.headersSent)send(res,error.status||503,{error:'Falha ao processar webhook Stripe.'})})}
+  const checkoutMatch=requestPath.match(/^\/api\/(ad-campaigns|programs)\/([\w-]+)\/checkout$/);if(apiRequest&&checkoutMatch){req.__wyncoreStateLock=true;return handleStripeCheckout(req,res,checkoutMatch[1],checkoutMatch[2]).catch(error=>{console.error('WYNCORE Stripe checkout error:',error);if(!res.headersSent)send(res,error.status||503,{error:error.message||'Não foi possível criar checkout Stripe.'})})}
+  const earningPayoutMatch=requestPath.match(/^\/api\/ad-earnings\/([\w-]+)\/pay-stripe$/);if(apiRequest&&earningPayoutMatch){req.__wyncoreStateLock=true;return handleStripeEarningPayout(req,res,earningPayoutMatch[1]).catch(error=>{console.error('WYNCORE Stripe earning payout error:',error);if(!res.headersSent)send(res,error.status||503,{error:error.message||'Falha ao enviar repasse Stripe.'})})}
+  const assignmentPayoutMatch=requestPath.match(/^\/api\/assignments\/([\w-]+)\/payout$/);if(apiRequest&&assignmentPayoutMatch){req.__wyncoreStateLock=true;return handleStripeAssignmentPayout(req,res,assignmentPayoutMatch[1]).catch(error=>{console.error('WYNCORE Stripe assignment payout error:',error);if(!res.headersSent)send(res,error.status||503,{error:error.message||'Falha ao enviar repasse Stripe.'})})}
   if(apiRequest){req.__wyncoreStateLock=true;return Storage.withTransaction(()=>withLock('state',()=>handler(req,res))).catch(error=>{console.error('WYNCORE storage transaction error:',error);if(!res.headersSent)send(res,503,{error:'Armazenamento temporariamente indisponível. Nenhuma alteração foi confirmada.'})})}
  }
  try{
