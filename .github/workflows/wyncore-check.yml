@@ -1,7 +1,7 @@
 name: WYNCORE checks
 on:
   push:
-    branches: [wyncore-core]
+    branches: [wyncore-core, wyncore-wallet-rebuild]
     paths: ["wyncore/**", ".github/workflows/wyncore-check.yml"]
   pull_request:
     branches: [forcarede-init]
