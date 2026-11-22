@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "WYNCORE | Oportunidades e organização",
+  "name": "WYNCORE | Campanhas e atividades",
   "short_name": "WYNCORE",
-  "description": "Consulte informações públicas e organize oportunidades com transparência.",
+  "description": "Vídeos patrocinados, tarefas, TD Mais, níveis SL1-SL9, equipes e carteira.",
   "lang": "pt-BR",
   "start_url": "./",
   "scope": "./",
