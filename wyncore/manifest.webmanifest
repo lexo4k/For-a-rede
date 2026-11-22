@@ -1,13 +1,20 @@
 {
   "id": "./",
-  "name": "WYNCORE | Oportunidades e organização",
-  "short_name": "WYNCORE",
-  "description": "Consulte informações públicas e organize oportunidades com transparência.",
+  "name": "WYNCORE Work | Oportunidades remuneradas",
+  "short_name": "WYNCORE Work",
+  "description": "Central de oportunidades remuneradas, candidaturas e acompanhamento de trabalhos.",
   "lang": "pt-BR",
-  "start_url": "./",
+  "start_url": "./work",
   "scope": "./",
   "display": "standalone",
   "background_color": "#0b1020",
   "theme_color": "#0b1020",
-  "icons": [{"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
 }
