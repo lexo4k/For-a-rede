@@ -64,3 +64,16 @@ input:focus,select:focus,textarea:focus{border-color:#8cddb4;box-shadow:0 0 0 3p
 footer{border-color:#203d32}
 @media(max-width:780px){.participant-hero{align-items:flex-start;flex-direction:column;padding:22px}.participant-shortcuts{justify-content:flex-start;width:100%}.participant-shortcuts a{flex:1;justify-content:space-between}.top-right{gap:7px}.work-link{margin-right:0;padding:7px}}
 @media(max-width:480px){.participant-shortcuts{display:grid;grid-template-columns:1fr}.participant-shortcuts a{width:100%}.top-right #session-label{max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+
+
+/* WYNCORE ADS — same emerald visual system as the main platform */
+:root{--bg:#080d12;--panel:#101a15;--panel2:#17271e;--line:#294235;--text:#f2f7f4;--muted:#91a69a;--gold:#57d69a;--mint:#a2edc1;--red:#ed8d8d}
+body{background:radial-gradient(ellipse at 12% 0%,#173a29 0,transparent 40%),linear-gradient(145deg,#0b1210,#080d12 60%,#101d16)}
+.top{background:#09130fe8;border-color:#294235}
+.brand b,.mark,.eyebrow{color:#57d69a}
+.mark{border-color:#57d69a}
+.auth-card,.panel{background:linear-gradient(145deg,#17271e,#101a15);border-color:#294235;box-shadow:0 22px 60px #0005}
+.primary{background:linear-gradient(135deg,#37bd7b,#238957);border-color:#3fc786;color:#04150d}
+.chips span,.notice{background:#14291e;border-color:#315941;color:#a2edc1}
+input,select,textarea{background:#0b1510;border-color:#30483b;color:#f2f7f4}
+input:focus,select:focus,textarea:focus{outline:2px solid #57d69a55;border-color:#57d69a}
