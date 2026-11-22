@@ -24,30 +24,40 @@ function recordPayment(s,actor,assignmentId,reference){ensureState(s);requireRol
 function addReferral(s,actor,email){ensureState(s);requireRole(actor,['participant']);const target=String(email||'').trim().toLowerCase();if(!/^\S+@\S+\.\S+$/.test(target)||target===actor.email)throw Object.assign(new Error('E-mail de indicação inválido.'),{status:400});const r={id:id(),inviterId:actor.id,email:target,status:'invited',createdAt:new Date().toISOString()};s.referrals.unshift(r);audit(s,actor,'referral_created',r.id);return r}
 function recordPartnerConversion(s,event){
  ensureState(s);s.conversions ||= [];
- const eventId=String(event.eventId||'').trim(),transactionId=String(event.transactionId||'').trim(),participantId=String(event.participantId||'').trim(),programId=String(event.programId||'').trim(),status=String(event.status||'').trim(),revenue=Number(event.revenue);
+ const eventId=String(event.eventId||'').trim(),transactionId=String(event.transactionId||'').trim(),participantId=String(event.participantId||'').trim(),programId=String(event.programId||'').trim(),status=String(event.status||'').trim(),currency=String(event.currency||'BRL').toUpperCase(),revenue=Number(event.revenue);
  if(!eventId||eventId.length>160||!transactionId||transactionId.length>160)throw Object.assign(new Error('Identificadores do evento e da transação são obrigatórios.'),{status:400});
  if(!['approved','settled','reversed'].includes(status))throw Object.assign(new Error('Estado de conversão inválido.'),{status:400});
- if(!Number.isFinite(revenue)||revenue<=0||revenue>10000000||String(event.currency||'BRL').toUpperCase()!=='BRL')throw Object.assign(new Error('Receita deve ser positiva e estar em BRL.'),{status:400});
- if(s.conversions.some(x=>x.eventIds.includes(eventId)))return {duplicate:true,conversion:s.conversions.find(x=>x.eventIds.includes(eventId))};
+ if(!Number.isFinite(revenue)||revenue<=0||revenue>10000000||currency!=='BRL')throw Object.assign(new Error('Receita deve ser positiva e estar em BRL.'),{status:400});
+ const duplicate=s.conversions.find(x=>(x.eventIds||[]).includes(eventId));
+ if(duplicate)return {duplicate:true,conversion:duplicate};
  let c=s.conversions.find(x=>x.transactionId===transactionId);
  if(!c){
   const participant=s.participants.find(x=>x.id===participantId&&x.status==='active'),program=s.programs.find(x=>x.id===programId);
   if(!participant||!program)throw Object.assign(new Error('Participante ou campanha não encontrado/ativo.'),{status:404});
-  c={id:id(),transactionId,participantId,programId,revenue,currency:'BRL',status:'pending',reward:0,eventIds:[],createdAt:new Date().toISOString()};
+  c={id:id(),transactionId,participantId,programId,revenue,currency,status:'pending',reward:0,eventIds:[],createdAt:new Date().toISOString()};
   s.conversions.unshift(c);
- }else if(c.participantId!==participantId||c.programId!==programId)throw Object.assign(new Error('A transação já pertence a outro participante ou campanha.'),{status:409});
- c.eventIds.push(eventId);c.lastEventAt=new Date().toISOString();c.revenue=revenue;
- if(status==='approved'&&c.status!=='settled'&&c.status!=='reversed'){c.status='approved';}
- if(status==='settled'&&c.status!=='reversed'){
-  if(c.status!=='settled'){
-   const pct=Math.max(1,Math.min(90,Number(process.env.WYNCORE_REWARD_SHARE_PERCENT)||60));
-   c.reward=Math.round(revenue*pct)/100;
-   c.status='settled';c.settledAt=new Date().toISOString();
-   s.ledger.unshift({id:id(),participantId:c.participantId,conversionId:c.id,kind:'earning_confirmed',amount:c.reward,reference:transactionId,at:c.settledAt});
-  }
+ }else{
+  if(c.participantId!==participantId||c.programId!==programId)throw Object.assign(new Error('A transação já pertence a outro participante ou campanha.'),{status:409});
+  if(String(c.currency||'BRL').toUpperCase()!==currency||Math.round(Number(c.revenue)*100)!==Math.round(revenue*100))throw Object.assign(new Error('O valor e a moeda da transação não podem mudar entre eventos.'),{status:409});
  }
- if(status==='reversed'&&c.status!=='reversed'){
+ c.eventIds ||= [];
+ c.eventIds.push(eventId);c.lastEventAt=new Date().toISOString();
+ // Reversals remain valid after settlement; stale events cannot reopen a reversed transaction.
+ if(c.status==='reversed')return {duplicate:false,conversion:c};
+ if(status==='reversed'){
   if(c.status==='settled')s.ledger.unshift({id:id(),participantId:c.participantId,conversionId:c.id,kind:'earning_reversed',amount:-c.reward,reference:transactionId,at:new Date().toISOString()});
+  c.status='reversed';c.reversedAt=new Date().toISOString();
+  return {duplicate:false,conversion:c};
+ }
+ if(c.status==='settled')return {duplicate:false,conversion:c};
+ if(status==='approved')c.status='approved';
+ if(status==='settled'){
+  const pct=Math.max(1,Math.min(90,Number(process.env.WYNCORE_REWARD_SHARE_PERCENT)||60));
+  c.reward=Math.round(revenue*pct)/100;
+  c.status='settled';c.settledAt=new Date().toISOString();
+  s.ledger.unshift({id:id(),participantId:c.participantId,conversionId:c.id,kind:'earning_confirmed',amount:c.reward,reference:transactionId,at:c.settledAt});
+ }
+ if(status==='reversed'){
   c.status='reversed';c.reversedAt=new Date().toISOString();
  }
  return {duplicate:false,conversion:c};

@@ -1,7 +1,7 @@
 name: WYNCORE checks
 on:
   push:
-    branches: [wyncore-core]
+    branches: [wyncore-core, wyncore-wallet-rebuild]
     paths: ["wyncore/**", ".github/workflows/wyncore-check.yml"]
   pull_request:
     branches: [forcarede-init]
@@ -17,6 +17,8 @@ jobs:
       - name: Syntax checks
         run: |
           node --check wyncore/server.js
+          node --check wyncore/domain.js
+          node --check wyncore/discovery.js
           node --check wyncore/app.js
           node --check wyncore/sw.js
       - name: Backend tests
