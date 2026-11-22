@@ -263,6 +263,34 @@ async function handler(req,res){
   const person=D.requestAccess(d,{name,email,phone});d.users.push({id:person.id,email,phone,passwordHash:await hashPassword(pass)});await save(d);return send(res,201,{ok:true,message:'Cadastro recebido. Aguarde a liberação da equipe.'});
  }
 
+ if(req.method==='POST'&&p==='/api/login'){
+  if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
+  if(SECRET.length<32)return send(res,503,{error:'A autenticação ainda não está configurada no servidor.'});
+  const b=await body(req),identifier=String(b.identifier||b.email||'').trim();if(limited(req,'login',identifier,10,900000))return send(res,429,{error:'Muitas tentativas para esta conta. Aguarde 15 minutos.'});let user=null,d=null,person=null;
+  if(identifier.trim().toLowerCase()==='admin'&&PASSWORD&&safeEqual(b.password||'',PASSWORD))user={id:'owner',role:'admin',email:'owner'};
+  else{d=await load();const normalized=identifier.toLowerCase(),digits=normalizePhone(identifier),u=d.users.find(x=>(normalized.includes('@')&&x.email===normalized)||(digits.length>=10&&normalizePhone(x.phone)===digits));if(u&&await verifyPassword(b.password||'',u.passwordHash)){person=d.participants.find(x=>x.id===u.id);if(!person||person.status!=='active')return send(res,403,{error:'Cadastro aguardando aprovação da equipe.'});person.lastLoginAt=new Date().toISOString();person.lastLoginMethod=digits.length>=10?'phone':'email';user={id:person.id,role:person.role,email:person.email,phone:person.phone};await save(d)}}
+  if(!user)return send(res,401,{error:'E-mail ou senha incorretos.'});
+  return send(res,200,{ok:true},{'Set-Cookie':cookie(makeSession(user),SESSION_MS/1000)});
+ }
+ if(req.method==='POST'&&p==='/api/google-login'){
+  if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
+  if(SECRET.length<32)return send(res,503,{error:'A autenticação ainda não está configurada no servidor.'});
+  if(!GOOGLE_CLIENT_ID)return send(res,503,{error:'O acesso Google ainda aguarda a configuração do Client ID OAuth no servidor.'});
+  const b=await body(req),credential=String(b.credential||'');if(!credential||credential.length>12000)return send(res,400,{error:'Credencial Google inválida.'});
+  if(limited(req,'google-login',credential.slice(0,80),10,900000))return send(res,429,{error:'Muitas tentativas de acesso. Aguarde 15 minutos.'});
+  let profile;try{const verify=await fetch('https://oauth2.googleapis.com/tokeninfo?id_token='+encodeURIComponent(credential),{headers:{accept:'application/json'},signal:AbortSignal.timeout(8000)});if(!verify.ok)return send(res,401,{error:'Não foi possível validar sua conta Google.'});profile=await verify.json()}catch{return send(res,503,{error:'O serviço de autenticação Google está temporariamente indisponível.'})}
+  if(profile.aud!==GOOGLE_CLIENT_ID||!profile.sub||!profile.email||profile.email_verified!=='true'||!['accounts.google.com','https://accounts.google.com'].includes(profile.iss)||Number(profile.exp)*1000<=Date.now())return send(res,401,{error:'A identidade Google não passou na validação.'});
+  const d=await load(),email=String(profile.email).toLowerCase(),sub=String(profile.sub);
+  let record=d.users.find(x=>x.googleSub===sub||x.email===email),person=record&&d.participants.find(x=>x.id===record.id);
+  if(!person){person=d.participants.find(x=>x.email===email);if(person){record=d.users.find(x=>x.id===person.id)||{id:person.id,email,phone:person.phone||''};if(!d.users.some(x=>x.id===record.id))d.users.push(record)}else{person=D.requestAccess(d,{name:String(profile.name||email.split('@')[0]).slice(0,100),email,phone:''});record={id:person.id,email,phone:'',googleSub:sub};d.users.push(record)}}
+  record.googleSub=sub;record.email=email;
+  if(person.status!=='active'){await save(d);return send(res,202,{ok:true,pending:true,message:'Conta Google reconhecida. Seu pedido de acesso foi enviado e aguarda aprovação da equipe.'})}
+  person.lastLoginAt=new Date().toISOString();person.lastLoginMethod='google';await save(d);
+  const user={id:person.id,role:person.role,email:person.email,phone:person.phone};
+  return send(res,200,{ok:true},{'Set-Cookie':cookie(makeSession(user),SESSION_MS/1000)});
+ }
+ if(req.method==='POST'&&p==='/api/logout')return send(res,200,{ok:true},{'Set-Cookie':cookie('',0)});
+
  if(req.method==='POST'&&p==='/api/webhooks/asaas')return send(res,410,{error:'Webhook legado desativado. WYNCORE usa Stripe.'});
  
  if(!p.startsWith('/api/')){const file=p==='/'?'/index.html':p;if(!PUBLIC_FILES.has(file))return send(res,404,{error:'Não encontrado'});const full=path.resolve(ROOT,'.'+file);try{const data=await fs.readFile(full);const extension=path.extname(full);const cachePolicy=['.html','.js','.css','.webmanifest'].includes(extension)?'no-cache':'public, max-age=3600';res.writeHead(200,{'Content-Type':MIME[extension]||'application/octet-stream','Cache-Control':cachePolicy});return res.end(data)}catch{return send(res,404,{error:'Arquivo não encontrado'})}}
@@ -308,8 +336,16 @@ async function handler(req,res){
    });
   }
 
-  if(SECRET.length<32)return send(res,503,{error:'A autenticação de sessão ainda não está configurada no servidor. O pedido de cadastro pode ser recebido, mas a entrada ficará indisponível até a configuração.'});
  if(p==='/api/work'||p.startsWith('/api/work/'))return send(res,410,{error:'O antigo módulo WYNCORE Work foi desativado. As atividades agora ficam no painel integrado.'});
+ if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
+ const session=readSession(req);if(!session)return send(res,401,{error:'Sessão expirada.'});
+ const d=await load(),me=actor(session,d);if(!me)return send(res,403,{error:'Conta inativa ou sem permissão.'});
+ if(req.method==='GET'&&p==='/api/me')return send(res,200,{id:me.id,role:me.role,email:me.email,name:me.name||'Administrador'});
+ if(req.method==='GET'&&p==='/api/integrations/status'){
+  if(me.role!=='admin')err('Somente administração.',403);
+  const stripe={provider:'Stripe',configured:Stripe.configured(),webhookConfigured:Stripe.webhookConfigured(),connectEnabled:Stripe.connectEnabled(),storageSafe:payoutStorageSafe(),ready:Stripe.configured()&&Stripe.webhookConfigured()&&Stripe.connectEnabled()&&payoutStorageSafe()};
+  return send(res,200,{stripe,adscend:{configured:Adscend.configured(),postbackConfigured:Adscend.postbackConfigured()},automaticPayoutEnabled:stripe.ready});
+ }
  if(req.method==='GET'&&p==='/api/ad-workspace'){
   const campaigns=d.adCampaigns||[],reviews=d.adReviews||[];
   const stripeIntegration={configured:Stripe.configured(),webhookConfigured:Stripe.webhookConfigured(),connectEnabled:Stripe.connectEnabled(),storageSafe:payoutStorageSafe(),ready:Stripe.configured()&&Stripe.webhookConfigured()&&Stripe.connectEnabled()&&payoutStorageSafe(),reason:!Stripe.configured()?'Chave privada Stripe ausente.':!Stripe.webhookConfigured()?'Webhook Stripe não configurado.':!Stripe.connectEnabled()?'Stripe Connect não habilitado como plataforma.':!payoutStorageSafe()?'Armazenamento transacional não disponível.':'Pronto para homologação.'};
