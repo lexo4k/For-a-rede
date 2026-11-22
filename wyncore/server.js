@@ -4,6 +4,7 @@ const D=require('./domain');
 const ROOT=__dirname,DATA_DIR=process.env.DATA_DIR||path.join(ROOT,'data'),DATA_FILE=path.join(DATA_DIR,'wyncore.json');
 const PORT=Number(process.env.PORT||3000),PASSWORD=process.env.WYNCORE_OWNER_PASSWORD||'',SECRET=process.env.WYNCORE_SESSION_SECRET||'',PARTNER_SECRET=process.env.WYNCORE_PARTNER_WEBHOOK_SECRET||'',GOOGLE_CLIENT_ID=process.env.WYNCORE_GOOGLE_CLIENT_ID||'',PROD=process.env.NODE_ENV==='production';
 const COOKIE='wyncore_session',SESSION_MS=8*60*60*1000;
+const OFFERWALLAPI_API_KEY=process.env.OFFERWALLAPI_API_KEY||'',OFFERWALLAPI_BEARER_TOKEN=process.env.OFFERWALLAPI_BEARER_TOKEN||'',OFFERWALLAPI_SECRET=process.env.OFFERWALLAPI_SECRET||'',OFFERWALLAPI_CURRENCY=String(process.env.OFFERWALLAPI_CURRENCY||'BRL').toUpperCase();
 const PUBLIC_FILES=new Set(['/','/index.html','/styles.css','/app.js','/manifest.webmanifest','/icon.svg','/sw.js','/sobre.html','/privacidade.html','/termos.html','/robots.txt','/sitemap.xml','/guia-aprendizagem.html','/guia-estagio.html','/seguranca-oportunidades.html','/organizar-candidatura.html']);
 const MIME={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml','.webmanifest':'application/manifest+json','.xml':'application/xml; charset=utf-8','.txt':'text/plain; charset=utf-8'};
 const rate=new Map();
@@ -72,7 +73,32 @@ async function handler(req,res){try{
   const user={id:person.id,role:person.role,email:person.email,phone:person.phone};
   return send(res,200,{ok:true},{'Set-Cookie':cookie(makeSession(user),SESSION_MS/1000)});
  }
- if(req.method==='POST'&&p==='/api/integrations/campaigns'){
+ if(req.method==='POST'&&p==='/api/ads/offerwallapi/postback'){
+   if(!OFFERWALLAPI_SECRET)return send(res,503,{error:'Postback OfferwallAPI não configurado.'});
+   const raw=await rawBody(req);let event={};
+   try{if(String(req.headers['content-type']||'').includes('application/json'))event=raw?JSON.parse(raw):{};else event=Object.fromEntries(new URLSearchParams(raw))}catch{return send(res,400,{error:'Postback inválido.'})}
+   const subId=String(event.subId||''),transId=String(event.transId||''),rewardText=String(event.reward||''),signature2=String(event.signature2||''),signature=String(event.signature||''),status=String(event.status||'');
+   if(!subId||subId.length>64||!transId||transId.length>160||!/^\\d+(?:\\.\\d{1,8})?$/.test(rewardText))return send(res,400,{error:'Campos de conversão inválidos.'});
+   const expected2=crypto.createHmac('sha256',OFFERWALLAPI_SECRET).update(subId+transId+rewardText).digest('hex');
+   const expected=crypto.createHash('md5').update(subId+transId+rewardText+OFFERWALLAPI_SECRET).digest('hex');
+   if(!(signature2&&safeEqual(signature2.toLowerCase(),expected2))&&!(signature&&safeEqual(signature.toLowerCase(),expected)))return send(res,401,{error:'Assinatura do postback inválida.'});
+   if(String(event.debug||'0')==='1'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end('ok')}
+   const reward=Number(rewardText),currency=String(event.reward_name||OFFERWALLAPI_CURRENCY).toUpperCase();
+   if(!Number.isFinite(reward)||reward<=0||reward>1000000||currency!==OFFERWALLAPI_CURRENCY||!['1','2'].includes(status))return send(res,400,{error:'Valor, moeda ou estado do postback inválido.'});
+   const d=await load();D.ensureState(d);d.offerwallTransactions||=[];
+   const participant=d.participants.find(x=>x.id===subId&&x.status==='active');
+   if(!participant)return send(res,404,{error:'Participante não encontrado.'});
+   let tx=d.offerwallTransactions.find(x=>x.transactionId===transId);
+   if(status==='1'){
+    if(!tx){tx={id:crypto.randomUUID(),transactionId:transId,participantId:subId,provider:'offerwallapi',amount:reward,currency,status:'credited',offerName:String(event.offer_name||'Vídeo patrocinado').slice(0,160),offerType:String(event.offer_type||'video').slice(0,40),createdAt:new Date().toISOString()};d.offerwallTransactions.unshift(tx);d.ledger.unshift({id:crypto.randomUUID(),participantId:subId,kind:'earning_confirmed',amount:reward,currency,reference:transId,source:'offerwallapi',description:tx.offerName,at:tx.createdAt})}
+   }else{
+    if(!tx){tx={id:crypto.randomUUID(),transactionId:transId,participantId:subId,provider:'offerwallapi',amount:reward,currency,status:'reversed',createdAt:new Date().toISOString(),reversedAt:new Date().toISOString()};d.offerwallTransactions.unshift(tx)}
+    else if(tx.participantId!==subId)return send(res,409,{error:'Transação vinculada a outro participante.'});
+    else if(tx.status==='credited'){tx.status='reversed';tx.reversedAt=new Date().toISOString();d.ledger.unshift({id:crypto.randomUUID(),participantId:subId,kind:'earning_reversed',amount:-Math.abs(Number(tx.amount)||reward),currency,reference:transId,source:'offerwallapi',description:'Estorno de conversão do anunciante',at:tx.reversedAt})}
+   }
+   await save(d);res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end('ok');
+  }
+  if(req.method==='POST'&&p==='/api/integrations/campaigns'){
   if(!PARTNER_SECRET)return send(res,503,{error:'Integração de parceiros ainda não configurada no servidor.'});
   const raw=await rawBody(req),provided=String(req.headers['x-wyncore-signature']||'').replace(/^sha256=/,'').toLowerCase(),expected=crypto.createHmac('sha256',PARTNER_SECRET).update(raw).digest('hex');
   if(!provided||!safeEqual(provided,expected))return send(res,401,{error:'Assinatura do parceiro inválida.'});
@@ -101,8 +127,18 @@ async function handler(req,res){try{
  if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
  const session=readSession(req);if(!session)return send(res,401,{error:'Sessão expirada.'});
  const d=await load(),me=actor(session,d);if(!me)return send(res,403,{error:'Conta inativa ou sem permissão.'});
- if(req.method==='GET'&&p==='/api/me')return send(res,200,{id:me.id,role:me.role,email:me.email,name:me.name||'Administrador'});
- if(req.method==='GET'&&p==='/api/integrations/status'){if(me.role!=='admin')err('Somente administrador.',403);return send(res,200,{advertisingNetwork:{configured:false,conversionValidation:false,reason:'Nenhuma rede de anunciantes está conectada.'},partnerCampaignWebhook:{configured:Boolean(PARTNER_SECRET),conversionValidation:Boolean(process.env.WYNCORE_CONVERSION_SECRET),reason:process.env.WYNCORE_CONVERSION_SECRET?'Webhook assinado de conversões configurado; falta homologação com parceiro e conciliação de liquidação.':'Webhook de campanhas pode importar campanhas; webhook de conversões ainda não configurado.'},pix:{providerConfigured:false,payoutsEnabled:false,bankVerification:false,reason:'Provedor Pix e credenciais de integração não configurados.'},automaticPaymentTransfers:false});}
+ if(req.method==='GET'&&p==='/api/ads/videos'){
+   if(me.role!=='participant')err('Somente participantes podem acessar os anúncios.',403);
+   if(!OFFERWALLAPI_API_KEY||!OFFERWALLAPI_BEARER_TOKEN||!OFFERWALLAPI_SECRET)return send(res,503,{configured:false,ads:[],currency:OFFERWALLAPI_CURRENCY,error:'A rede de anúncios ainda não está conectada ao WYNCORE.'});
+   const forwarded=String(req.headers['x-forwarded-for']||'').split(',')[0].trim(),ip=forwarded||req.socket?.remoteAddress||'0.0.0.0';
+   const endpoint='https://offerwallapi.com/video-api/'+encodeURIComponent(OFFERWALLAPI_API_KEY)+'/'+encodeURIComponent(me.id)+'/'+encodeURIComponent(ip);
+   let response,payload;try{response=await fetch(endpoint,{headers:{Authorization:'Bearer '+OFFERWALLAPI_BEARER_TOKEN,Accept:'application/json'},signal:AbortSignal.timeout(12000)});payload=await response.json()}catch{return send(res,502,{configured:true,ads:[],error:'Não foi possível consultar os anúncios agora.'})}
+   if(!response.ok||String(payload.status)!=='200')return send(res,502,{configured:true,ads:[],error:String(payload.message||'A rede não retornou anúncios disponíveis.')});
+   const ads=(Array.isArray(payload.data)?payload.data:[]).filter(x=>{try{const u=new URL(x.url);return u.protocol==='https:'&&u.hostname==='offerwallapi.com'}catch{return false}}).map(x=>({id:String(x.id||''),title:String(x.title||'Vídeo patrocinado').slice(0,160),description:String(x.description||'').slice(0,500),duration:Number(x.duration)||0,reward:Number(x.reward)||0,currency:String(x.currency_name||OFFERWALLAPI_CURRENCY),url:x.url,adType:String(x.ad_type||'Iframe')}));
+   return send(res,200,{configured:true,currency:OFFERWALLAPI_CURRENCY,ads});
+  }
+  if(req.method==='GET'&&p==='/api/me')return send(res,200,{id:me.id,role:me.role,email:me.email,name:me.name||'Administrador'});
+ if(req.method==='GET'&&p==='/api/integrations/status'){if(me.role!=='admin')err('Somente administrador.',403);return send(res,200,{advertisingNetwork:{provider:'OfferwallAPI',configured:Boolean(OFFERWALLAPI_API_KEY&&OFFERWALLAPI_BEARER_TOKEN&&OFFERWALLAPI_SECRET),conversionValidation:Boolean(OFFERWALLAPI_SECRET),reason:OFFERWALLAPI_API_KEY&&OFFERWALLAPI_BEARER_TOKEN&&OFFERWALLAPI_SECRET?'Feed de vídeos e postback assinado configurados; falta homologar a conta publisher.':'Credenciais de publisher OfferwallAPI ainda não configuradas.'},partnerCampaignWebhook:{configured:Boolean(PARTNER_SECRET),conversionValidation:Boolean(process.env.WYNCORE_CONVERSION_SECRET),reason:process.env.WYNCORE_CONVERSION_SECRET?'Webhook assinado de conversões configurado; falta homologação com parceiro e conciliação de liquidação.':'Webhook de campanhas pode importar campanhas; webhook de conversões ainda não configurado.'},pix:{providerConfigured:false,payoutsEnabled:false,bankVerification:false,reason:'Provedor Pix e credenciais de integração não configurados.'},automaticPaymentTransfers:false});}
  if(req.method==='POST'&&p==='/api/campaign-feedback'){if(me.role!=='participant')err('Somente participantes podem avaliar campanhas.',403);if(limited(req,'campaign-feedback',me.id,30,3600000))return send(res,429,{error:'Limite de avaliações atingido. Tente novamente mais tarde.'});const b=await body(req),programId=String(b.programId||''),rating=Number(b.rating),comment=String(b.comment||'').trim().slice(0,300),program=d.programs.find(x=>x.id===programId&&x.status==='active'&&x.videoUrl);if(!program)err('Campanha de vídeo indisponível.',404);if(!Number.isInteger(rating)||rating<1||rating>5)err('Escolha uma avaliação entre 1 e 5.');let feedback=d.campaignFeedback.find(x=>x.programId===programId&&x.participantId===me.id);const now=new Date().toISOString();if(feedback){feedback.rating=rating;feedback.comment=comment;feedback.updatedAt=now;await save(d);return send(res,200,{ok:true,feedback,updated:true})}feedback={id:crypto.randomUUID(),programId,participantId:me.id,rating,comment,createdAt:now,updatedAt:now};d.campaignFeedback.unshift(feedback);await save(d);return send(res,201,{ok:true,feedback,updated:false});}
  if(req.method==='POST'&&p==='/api/participants'){if(me.role!=='admin')err('Somente administrador.',403);const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),phone=normalizePhone(b.phone),pass=String(b.password||'');if(name.length<2||!/^\S+@\S+\.\S+$/.test(email)||!phone||phone.length<10||phone.length>13||pass.length<10)err('Para cadastrar um participante, informe nome, e-mail válido, celular com DDD e senha com pelo menos 10 caracteres.');if(d.users.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone))||d.participants.some(u=>(email&&u.email===email)||(phone&&normalizePhone(u.phone)===phone)))err('Este e-mail ou telefone já está cadastrado.',409);const person=D.createParticipant(d,me,{name,email,phone});d.users.push({id:person.id,email,phone,passwordHash:await hashPassword(pass)});await save(d);return send(res,201,{ok:true,participant:{id:person.id,name:person.name,email:person.email,phone:person.phone,status:person.status},message:'Participante cadastrado. Aprove o acesso para liberar o login.'});}
  if(req.method==='GET'&&p==='/api/dashboard'){
