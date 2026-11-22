@@ -2,6 +2,9 @@
 const http=require('node:http'),fs=require('node:fs/promises'),path=require('node:path'),crypto=require('node:crypto');
 const D=require('./domain');
 const ROOT=__dirname,DATA_DIR=process.env.DATA_DIR||path.join(ROOT,'data'),DATA_FILE=path.join(DATA_DIR,'wyncore.json');
+const SUPABASE_URL=process.env.WYNCORE_SUPABASE_URL||'',SUPABASE_ANON_KEY=process.env.WYNCORE_SUPABASE_ANON_KEY||'',SUPABASE_RPC_SECRET=process.env.WYNCORE_SUPABASE_RPC_SECRET||'';
+const SUPABASE_ANY=Boolean(SUPABASE_URL||SUPABASE_ANON_KEY||SUPABASE_RPC_SECRET),SUPABASE_READY=Boolean(SUPABASE_URL&&SUPABASE_ANON_KEY&&SUPABASE_RPC_SECRET);
+const supabaseStore=SUPABASE_READY?require('./supabase-store').createSupabaseStore({url:SUPABASE_URL,anonKey:SUPABASE_ANON_KEY,rpcSecret:SUPABASE_RPC_SECRET}):null;
 const PORT=Number(process.env.PORT||3000),PASSWORD=process.env.WYNCORE_OWNER_PASSWORD||'',SECRET=process.env.WYNCORE_SESSION_SECRET||'',PARTNER_SECRET=process.env.WYNCORE_PARTNER_WEBHOOK_SECRET||'',GOOGLE_CLIENT_ID=process.env.WYNCORE_GOOGLE_CLIENT_ID||'',PROD=process.env.NODE_ENV==='production';
 const COOKIE='wyncore_session',SESSION_MS=8*60*60*1000;
 const PUBLIC_FILES=new Set(['/','/index.html','/styles.css','/app.js','/manifest.webmanifest','/icon.svg','/sw.js','/sobre.html','/privacidade.html','/termos.html','/robots.txt','/sitemap.xml','/guia-aprendizagem.html','/guia-estagio.html','/seguranca-oportunidades.html','/organizar-candidatura.html']);
@@ -17,7 +20,15 @@ function cookie(v,age){return COOKIE+'='+v+'; Path=/; HttpOnly; SameSite=Strict;
 function send(res,status,data,headers={}){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',...headers});res.end(JSON.stringify(data))}
 async function rawBody(req){let raw='';for await(const c of req){raw+=c;if(raw.length>65536)throw Object.assign(Error('Corpo muito grande'),{status:413})}return raw}
 async function body(req){const raw=await rawBody(req);try{return raw?JSON.parse(raw):{}}catch{throw Object.assign(Error('JSON inválido'),{status:400})}}
+function storageMode(){return supabaseStore?'supabase-postgres':process.env.BLOB_READ_WRITE_TOKEN?'vercel-blob-private':'persistent-json'}
+function assertStorageConfig(){if(SUPABASE_ANY&&!SUPABASE_READY)throw Object.assign(new Error('A configuração de armazenamento Supabase está incompleta. O WYNCORE bloqueou gravações para evitar dividir os dados entre bancos.'),{status:503})}
 async function load(){
+ assertStorageConfig();
+ if(supabaseStore){
+  const d=await supabaseStore.load();
+  d.opportunities ||= [];d.tasks ||= [];d.events ||= [];d.users ||= [];
+  return D.ensureState(d);
+ }
  if(process.env.BLOB_READ_WRITE_TOKEN){
   const {get}=require('@vercel/blob');
   const found=await get('wyncore/data.json',{access:'private',useCache:false});
@@ -29,6 +40,8 @@ async function load(){
  try{const d=JSON.parse(await fs.readFile(DATA_FILE,'utf8'));return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[]})}catch(e){if(e.code!=='ENOENT')throw e;return D.ensureState({opportunities:[],tasks:[],events:[],users:[]})}
 }
 async function save(d){
+ assertStorageConfig();
+ if(supabaseStore){await supabaseStore.save(d);return}
  if(process.env.BLOB_READ_WRITE_TOKEN){
   const {put}=require('@vercel/blob');
   await put('wyncore/data.json',JSON.stringify(d),{access:'private',addRandomSuffix:false,allowOverwrite:true,contentType:'application/json'});
@@ -46,7 +59,7 @@ async function verifyPassword(p,stored){if(!stored||!stored.includes(':'))return
 function actor(session,d){if(!session)return null;if(session.role==='admin'&&session.id==='owner')return{id:'owner',role:'admin',email:'owner'};return d.participants.find(p=>p.id===session.id&&p.status==='active'&&p.role===session.role)||null}
 async function handler(req,res){try{
  const url=new URL(req.url,'http://localhost');let p=url.pathname;if(p!=='/'&&!p.startsWith('/api/')&&!PUBLIC_FILES.has(p)&&p!=='/health'&&!/\.[a-z0-9]+$/i.test(p))p='/api'+p;
- if(req.method==='GET'&&(p==='/health'||p==='/api/health'))return send(res,200,{ok:true,service:'WYNCORE',storage:process.env.BLOB_READ_WRITE_TOKEN?'vercel-blob-private':'persistent-json',authConfigured:Boolean(PASSWORD&&SECRET.length>=32),ownerLoginConfigured:Boolean(PASSWORD),participantLoginConfigured:SECRET.length>=32,phoneLoginEnabled:SECRET.length>=32,googleEnabled:Boolean(GOOGLE_CLIENT_ID),googleClientId:GOOGLE_CLIENT_ID||null,signupAvailable:true,publicAccess:true});
+ if(req.method==='GET'&&(p==='/health'||p==='/api/health'))return send(res,200,{ok:true,service:'WYNCORE',storage:storageMode(),supabaseStorageConfigured:SUPABASE_READY,authConfigured:Boolean(PASSWORD&&SECRET.length>=32),ownerLoginConfigured:Boolean(PASSWORD),participantLoginConfigured:SECRET.length>=32,phoneLoginEnabled:SECRET.length>=32,googleEnabled:Boolean(GOOGLE_CLIENT_ID),googleClientId:GOOGLE_CLIENT_ID||null,signupAvailable:true,publicAccess:true});
  if(req.method==='POST'&&p==='/api/access-request'){
   if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
   const b=await body(req),name=String(b.name||'').trim(),email=String(b.email||'').trim().toLowerCase(),phone=normalizePhone(b.phone),pass=String(b.password||'');if(limited(req,'signup',email||phone,5,3600000))return send(res,429,{error:'Muitas tentativas de cadastro para este contato. Aguarde um pouco.'});
