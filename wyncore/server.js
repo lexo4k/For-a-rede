@@ -336,7 +336,7 @@ async function handler(req,res){
    });
   }
 
- if(p==='/api/work'||p.startsWith('/api/work/'))return send(res,410,{error:'O antigo módulo WYNCORE Work foi desativado. As atividades agora ficam no painel integrado.'});
+ if(p==='/api/work'||p.startsWith('/api/work/'))return send(res,410,{error:'Rota antiga desativada. Utilize as atividades do painel principal.'});
  if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
  const session=readSession(req);if(!session)return send(res,401,{error:'Sessão expirada.'});
  const d=await load(),me=actor(session,d);if(!me)return send(res,403,{error:'Conta inativa ou sem permissão.'});
