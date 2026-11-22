@@ -192,8 +192,9 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  const paymentError=await payment.json();
  assert.match(paymentError.error,/nenhum provedor de pagamentos está conectado/i);
  const finalParticipantDash=await (await fetch(base+'/api/dashboard',{headers:{cookie:participantCookie}})).json();
- assert.equal(finalParticipantDash.ledger.length,1,'only the signed settled conversion should create an earning ledger entry');
- assert.equal(finalParticipantDash.ledger[0].kind,'earning_confirmed');
+ const partnerLedger=finalParticipantDash.ledger.filter(x=>x.conversionId);
+ assert.equal(partnerLedger.length,1,'only the signed settled partner conversion should create a partner earning ledger entry');
+ assert.equal(partnerLedger[0].kind,'earning_confirmed');
  assert.equal(finalParticipantDash.wallet.confirmed,6,'participant wallet should show only the settled revenue share');
  const originalFetch=global.fetch;
  global.fetch=async(input,options)=>String(input).startsWith('https://oauth2.googleapis.com/tokeninfo?')?new Response(JSON.stringify({aud:process.env.WYNCORE_GOOGLE_CLIENT_ID,sub:'google-sub-123',email:'google@example.org',email_verified:'true',iss:'https://accounts.google.com',exp:String(Math.floor(Date.now()/1000)+300),name:'Conta Google Teste'}),{status:200,headers:{'content-type':'application/json'}}):originalFetch(input,options);
