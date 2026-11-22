@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "WYNCORE | Oportunidades e organização",
+  "name": "WYNCORE | Anúncios patrocinados e recompensas",
   "short_name": "WYNCORE",
-  "description": "Consulte informações públicas e organize oportunidades com transparência.",
+  "description": "Assista a anúncios e trailers patrocinados e acompanhe recompensas validadas.",
   "lang": "pt-BR",
   "start_url": "./",
   "scope": "./",
