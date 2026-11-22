@@ -108,7 +108,7 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.equal(reversed.status,200,'signed chargeback should reverse a credited conversion');
  const afterChargeback=(await (await fetch(base+'/api/dashboard',{headers:{cookie}})).json()).ledger.filter(x=>x.reference===offerwallTrans);
  assert.equal(afterChargeback.length,2,'chargeback should create one compensating ledger entry');
- assert.equal(afterChargeback[1].amount,-1.75);
+ assert.equal(afterChargeback[0].amount,-1.75);
  const levelAdvance=await fetch(base+'/api/participants/'+participant.id+'/level',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({direction:'next'})});
  assert.equal(levelAdvance.status,200,'admin should advance participant level');
  assert.equal((await levelAdvance.json()).level,'SL2');
