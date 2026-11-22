@@ -78,7 +78,7 @@ async function handler(req,res){try{
    const raw=await rawBody(req);let event={};
    try{if(String(req.headers['content-type']||'').includes('application/json'))event=raw?JSON.parse(raw):{};else event=Object.fromEntries(new URLSearchParams(raw))}catch{return send(res,400,{error:'Postback inválido.'})}
    const subId=String(event.subId||''),transId=String(event.transId||''),rewardText=String(event.reward||''),signature2=String(event.signature2||''),signature=String(event.signature||''),status=String(event.status||'');
-   if(!subId||subId.length>64||!transId||transId.length>160||!/^\\d+(?:\\.\\d{1,8})?$/.test(rewardText))return send(res,400,{error:'Campos de conversão inválidos.'});
+   if(!subId||subId.length>64||!transId||transId.length>160||!/^\d+(?:\.\d{1,8})?$/.test(rewardText))return send(res,400,{error:'Campos de conversão inválidos.'});
    const expected2=crypto.createHmac('sha256',OFFERWALLAPI_SECRET).update(subId+transId+rewardText).digest('hex');
    const expected=crypto.createHash('md5').update(subId+transId+rewardText+OFFERWALLAPI_SECRET).digest('hex');
    if(!(signature2&&safeEqual(signature2.toLowerCase(),expected2))&&!(signature&&safeEqual(signature.toLowerCase(),expected)))return send(res,401,{error:'Assinatura do postback inválida.'});
