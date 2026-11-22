@@ -4,7 +4,7 @@ const D=require('./domain');
 const ROOT=__dirname,DATA_DIR=process.env.DATA_DIR||path.join(ROOT,'data'),DATA_FILE=path.join(DATA_DIR,'wyncore.json');
 const PORT=Number(process.env.PORT||3000),PASSWORD=process.env.WYNCORE_OWNER_PASSWORD||'',SECRET=process.env.WYNCORE_SESSION_SECRET||'',PARTNER_SECRET=process.env.WYNCORE_PARTNER_WEBHOOK_SECRET||'',GOOGLE_CLIENT_ID=process.env.WYNCORE_GOOGLE_CLIENT_ID||'',PROD=process.env.NODE_ENV==='production';
 const COOKIE='wyncore_session',SESSION_MS=8*60*60*1000;
-const OFFERWALLAPI_API_KEY=process.env.OFFERWALLAPI_API_KEY||'',OFFERWALLAPI_BEARER_TOKEN=process.env.OFFERWALLAPI_BEARER_TOKEN||'',OFFERWALLAPI_SECRET=process.env.OFFERWALLAPI_SECRET||'',OFFERWALLAPI_CURRENCY=String(process.env.OFFERWALLAPI_CURRENCY||'BRL').toUpperCase();
+const OFFERWALLAPI_API_KEY=process.env.OFFERWALLAPI_API_KEY||'',OFFERWALLAPI_BEARER_TOKEN=process.env.OFFERWALLAPI_BEARER_TOKEN||'',OFFERWALLAPI_SECRET=process.env.OFFERWALLAPI_SECRET||'',OFFERWALLAPI_CURRENCY='BRL';
 const PUBLIC_FILES=new Set(['/','/index.html','/styles.css','/app.js','/manifest.webmanifest','/icon.svg','/sw.js','/sobre.html','/privacidade.html','/termos.html','/robots.txt','/sitemap.xml','/guia-aprendizagem.html','/guia-estagio.html','/seguranca-oportunidades.html','/organizar-candidatura.html']);
 const MIME={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml','.webmanifest':'application/manifest+json','.xml':'application/xml; charset=utf-8','.txt':'text/plain; charset=utf-8'};
 const rate=new Map();
@@ -89,6 +89,7 @@ async function handler(req,res){try{
    const participant=d.participants.find(x=>x.id===subId&&x.status==='active');
    if(!participant)return send(res,404,{error:'Participante não encontrado.'});
    let tx=d.offerwallTransactions.find(x=>x.transactionId===transId);
+   if(tx&&tx.participantId!==subId)return send(res,409,{error:'Transação vinculada a outro participante.'});
    if(status==='1'){
     if(!tx){tx={id:crypto.randomUUID(),transactionId:transId,participantId:subId,provider:'offerwallapi',amount:reward,currency,status:'credited',offerName:String(event.offer_name||'Vídeo patrocinado').slice(0,160),offerType:String(event.offer_type||'video').slice(0,40),createdAt:new Date().toISOString()};d.offerwallTransactions.unshift(tx);d.ledger.unshift({id:crypto.randomUUID(),participantId:subId,kind:'earning_confirmed',amount:reward,currency,reference:transId,source:'offerwallapi',description:tx.offerName,at:tx.createdAt})}
    }else{
