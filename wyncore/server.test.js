@@ -145,7 +145,8 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  const integrationStatus=await fetch(base+'/api/integrations/status',{headers:{cookie}});
  assert.equal(integrationStatus.status,200);
  const integrationHealth=await integrationStatus.json();
- assert.equal(integrationHealth.advertisingNetwork.configured,false);
+ assert.equal(integrationHealth.advertisingNetwork.configured,true,'OfferwallAPI feed credentials should be reported as configured');
+ assert.equal(integrationHealth.advertisingNetwork.conversionValidation,true,'signed conversion postback validation should be active');
  assert.equal(integrationHealth.pix.providerConfigured,false);
  assert.equal(integrationHealth.pix.payoutsEnabled,false);
  const programResponse=await fetch(base+'/api/programs',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({title:'Atividade de teste',source:'Fonte oficial',reward:75,budget:150,url:'https://example.org/task',videoUrl:'https://example.org/ad.mp4'})});
