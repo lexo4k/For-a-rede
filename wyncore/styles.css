@@ -258,3 +258,7 @@ input,select,textarea,.form-grid input,.auth-card input{background:#0a130e;borde
 @media(max-width:820px){.sidebar{width:220px}.main{margin-left:220px;padding:22px 18px}.dashboard-columns{grid-template-columns:1fr}.wallet-highlight{min-height:0}}
 @media(max-width:720px){.sidebar{width:auto}.main{margin:0;padding:16px 13px 88px}.dashboard-welcome{padding:23px 20px;min-height:165px}.welcome-emblem{width:68px;height:68px;border-radius:19px}.welcome-emblem span{font-size:37px}.dashboard-welcome h2{font-size:27px}.dashboard-section-head{margin-top:23px}.dashboard-metrics{gap:8px}.dashboard-metric{padding:13px}.dashboard-metric>strong{font-size:19px}.dashboard-shortcuts{gap:8px}.shortcut-card{padding:11px 9px;gap:8px}.shortcut-card small{font-size:8px}.dashboard-panel{padding:15px}}
 @media(max-width:390px){.welcome-emblem{display:none}.dashboard-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-metric>strong{font-size:17px}.shortcut-card{align-items:flex-start}.shortcut-card>b{display:none}.live-indicator{font-size:8px}}
+
+
+.empty-chart{position:absolute;inset:12px 12px 30px;opacity:.42;background-image:linear-gradient(#33544055 1px,transparent 1px),linear-gradient(90deg,#33544055 1px,transparent 1px);background-size:100% 32px,10% 100%;border-bottom:1px solid #35533f}
+.empty-chart svg{display:none}
