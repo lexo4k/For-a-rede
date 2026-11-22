@@ -1,84 +1,74 @@
-# Integrações comerciais e financeiras WYNCORE
+# Integrações WYNCORE
 
-Este documento define o que falta para uma integração real. Ele não afirma que qualquer parceiro, conta, contrato ou API já esteja conectado.
+Este documento descreve as integrações que o código suporta e separa claramente o que está implementado do que depende de autorização e credenciais externas.
 
-## 1. Rede de campanhas / anunciantes
+## 1. Campanhas e anunciantes
 
-A integração só deve ser ativada com uma rede que:
-- aceite formalmente tráfego incentivado e recompensas em dinheiro para o tipo de tarefa proposto;
-- forneça API ou offerwall para publishers e identificação estável do participante (sub-ID);
-- envie postbacks de conversão assinados, com ID único, valor, moeda e estado;
-- documente reversões, chargebacks, fraude, limites, países permitidos e prazo de liquidação;
-- pague a conta empresarial da WYNCORE por um meio contratado e verificável.
+A WYNCORE permite cadastrar anunciantes, briefings, materiais, orçamento, quantidade de avaliações e regras de participação. Uma campanha só pode ser aberta depois que o financiamento for confirmado por webhook Stripe assinado, com referência, valor e moeda conciliados.
 
-Fluxo exigido:
-1. Importar campanha e regras oficiais.
-2. Registrar participante e identificador de atribuição sem expor dados pessoais desnecessários.
-3. Receber postback HTTPS e validar assinatura, timestamp e ID único.
-4. Deduplicar conversões e suportar reversões.
-5. Conciliar receita liquidada do publisher antes de calcular qualquer repasse.
-6. Nunca remunerar clique artificial, visualização não autorizada ou conversão não validada.
+O formulário comercial cria um pedido de contato. Isso não significa que um anunciante já tenha contratado ou financiado uma campanha.
 
-Uma chave de webhook isolada apenas autentica a origem de uma chamada; não prova que houve receita, nem substitui o contrato e a conciliação financeira.
+## 2. Stripe Checkout
 
-## 2. Webhook de conversões do parceiro
+Variáveis exclusivas do servidor:
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `WYNCORE_PUBLIC_URL`
 
-O endpoint server-to-server `POST /api/integrations/conversions` recebe eventos JSON assinados com HMAC-SHA256 no cabeçalho `X-Wyncore-Signature: sha256=<hex>`. A assinatura é calculada sobre o corpo JSON bruto usando `WYNCORE_CONVERSION_SECRET`, configurado somente no ambiente do servidor.
+Checkout é criado para financiar campanhas e atividades. A campanha permanece bloqueada até a confirmação do webhook Stripe. Eventos de pagamento atrasado são tratados separadamente; nenhum operador pode marcar manualmente um contrato como recebido.
 
-Exemplo de evento:
-```json
-{
-  "eventId": "identificador-unico-do-evento",
-  "transactionId": "identificador-unico-da-conversao",
-  "participantId": "id-interno-do-participante",
-  "programId": "id-interno-da-campanha",
-  "status": "settled",
-  "revenue": 10.00,
-  "currency": "BRL"
-}
-```
+Webhook:
+`POST /api/webhooks/stripe`
 
-Estados aceitos: `approved` (em análise, sem saldo disponível), `settled` (receita liquidada ao publisher, credita a participação) e `reversed` (estorna uma conversão anteriormente liquidada). Eventos repetidos são idempotentes por `eventId`; a mesma transação não pode mudar de participante ou campanha. O percentual de repasse usa `WYNCORE_REWARD_SHARE_PERCENT` (padrão 60%, limitado de 1% a 90%). O percentual precisa ser definido no contrato e nos termos publicados antes de operar. Este endpoint genérico ainda exige homologação e mapeamento específico do parceiro; não significa que uma rede esteja conectada.
+Eventos relevantes:
+- `checkout.session.completed`
+- `checkout.session.async_payment_succeeded`
+- `account.updated`
+- `transfer.created`
+- `transfer.reversed`
+- `payout.paid`
+- `payout.failed`
 
-## 2. Provedor Pix Asaas
+## 3. Stripe Connect
 
-O adaptador Asaas está implementado em `asaas.js`. Ele utiliza os endpoints oficiais para cadastrar pagador, criar cobrança Pix, obter QR Code e transferir para chave Pix.
+Repasses exigem que a Stripe aprove a WYNCORE como plataforma Connect e que cada participante conclua o onboarding/verificação da própria conta conectada.
 
-Variáveis secretas do servidor:
-- `ASAAS_ENV=sandbox` durante homologação;
-- `ASAAS_API_KEY` da mesma conta/ambiente;
-- `ASAAS_WEBHOOK_TOKEN` próprio, aleatório, com pelo menos 32 caracteres;
-- `ASAAS_BASE_URL` é opcional. Por padrão, Sandbox usa `https://api-sandbox.asaas.com/v3` e Produção usa `https://api.asaas.com/v3`.
+Variável:
+- `STRIPE_CONNECT_ENABLED=true` somente após aprovação formal da plataforma.
 
-Configure o webhook `POST https://SEU-DOMINIO/api/webhooks/asaas`, com header `asaas-access-token` igual a `ASAAS_WEBHOOK_TOKEN`. Eventos mínimos: `PAYMENT_RECEIVED`, `TRANSFER_DONE`, `TRANSFER_FAILED`, `TRANSFER_CANCELLED`.
+O backend reserva o saldo em armazenamento transacional, cria a transferência com chave de idempotência e concilia eventos do Stripe. Transferência enviada à conta conectada não é tratada como pagamento bancário recebido; o estado final depende do webhook de payout.
 
-Fluxo de recebimento:
-1. O sistema cadastra o pagador no Asaas com nome, CPF/CNPJ, e-mail e telefone.
-2. Cria cobrança `PIX` com referência externa `wyncore-campaign:<id>`.
-3. Exibe QR Code dinâmico e Pix copia-e-cola.
-4. Só libera a campanha quando recebe `PAYMENT_RECEIVED`, autentica o webhook, confere o ID da cobrança e confirma que o valor recebido cobre o contrato.
+## 4. Adscend (opcional)
 
-Fluxo de repasse:
-1. A chave Pix do participante é armazenada criptografada com AES-256-GCM.
-2. Ao aprovar avaliação de campanha financiada, WYNCORE solicita transferência Pix com referência `wyncore-earning:<id>`.
-3. O lançamento fica em `payout_pending` enquanto o Asaas processa.
-4. Somente `TRANSFER_DONE` altera o estado para `paid`. Falha/cancelamento retorna a recompensa para `approved_unpaid`.
+A rede Adscend só pode ser habilitada após aprovação de publisher e autorização explícita de campanhas com recompensa em dinheiro. Variáveis:
+- `ADSCEND_PUBLISHER_ID`
+- `ADSCEND_API_KEY`
+- `ADSCEND_POSTBACK_SECRET`
 
-O mesmo evento de webhook não é processado duas vezes. A chave da API nunca é enviada ao navegador. A conta Asaas precisa estar aprovada e ter saldo disponível; o envio de uma transferência não equivale a confirmação de pagamento.
+Ofertas só são exibidas quando a resposta autenticada informa país elegível e permissão explícita para incentivo financeiro. Conversões precisam de postback válido, ID único, moeda BRL, valor e estado conciliados. Sem credenciais, aprovação e inventário, o módulo permanece indisponível.
 
-## 3. Segredos e operação
+## 5. Persistência Supabase
 
-- Credenciais devem ficar somente em variáveis secretas do ambiente de servidor.
-- Nunca colocar tokens, senhas, chaves privadas ou chaves Pix em Git, frontend, logs ou conversas.
-- Preview e Production precisam de configuração separada.
-- A conta, o contrato e a autorização financeira devem pertencer à empresa e ao responsável legal autorizado, respeitando a elegibilidade do provedor.
-- Testar primeiro em homologação com valores simulados; depois fazer revisão de segurança e conciliação antes de qualquer ativação real.
+O projeto WYNCORE usa:
+- `public.wyncore_state` para o estado persistente.
+- `private.wyncore_rpc_credentials` para o segredo RPC.
+- `wyncore_state_read` e `wyncore_state_write` para leitura e escrita transacional com segredo, advisory lock e comparação de versão.
 
-## 4. Estado atual verificado no código
+As funções validam o segredo antes de acessar a tabela. O segredo nunca deve ser enviado ao navegador nem registrado em logs.
 
-- Rede de anunciantes: não conectada.
-- Validação de conversões: não ativa.
-- Webhook de campanhas: depende de `WYNCORE_PARTNER_WEBHOOK_SECRET`; mesmo configurado, não comprova receita.
-- Provedor Pix: não conectado.
-- Transferências automáticas e validação bancária: desativadas.
-- Endpoint de pagamento: responde HTTP 503 até existir integração real.
+## 6. Segurança e regras financeiras
+
+- Credenciais permanecem apenas no ambiente do servidor.
+- Webhooks são autenticados e idempotentes.
+- Confirmações manuais de financiamento e pagamento estão desativadas.
+- Saldo em análise, aprovado, transferido e recebido são estados diferentes.
+- Estimativas, cliques, convites e visualizações não criam saldo automaticamente.
+- Nunca operar com campanhas sem autorização do anunciante, orçamento recebido e critérios publicados.
+
+## 7. Estado de ativação observado
+
+Na revisão de 22/11/2026:
+- Supabase WYNCORE: projeto ativo; tabela de estado e registro de credencial RPC presentes.
+- Stripe: variáveis de chave privada, segredo de webhook e Connect não aparecem na configuração Vercel examinada; Checkout e repasses permanecem bloqueados.
+- Adscend: credenciais de publisher não aparecem na configuração Vercel examinada; ofertas permanecem indisponíveis.
+- Vercel: limite de 100 deployments por dia atingido; a nova versão não pôde ser publicada nesta janela.
