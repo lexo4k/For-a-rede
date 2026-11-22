@@ -33,7 +33,7 @@ function applyTransferEvent(state,eventType,object,connectedAccountId,now){
  if(eventType==='transfer.created'||eventType==='transfer.updated'){
   const withdrawalId=String(object?.metadata?.wyncoreWithdrawalId||'');
   if(!withdrawalId)return null;
-  const earning=state.adEarnings.find(e=>e.id===withdrawalId&&e.selfServiceWithdrawal);
+  const earning=state.adEarnings.find(e=>e.id===withdrawalId&&e.payoutProvider==='stripe_connect');
   if(!earning||earning.stripeTransferId&&earning.stripeTransferId!==String(object.id))return null;
   earning.stripeTransferId=String(object.id||earning.stripeTransferId||'');earning.payoutProvider='stripe_connect';
   if(earning.status!=='paid')earning.status='payout_pending';
@@ -41,7 +41,7 @@ function applyTransferEvent(state,eventType,object,connectedAccountId,now){
  }
  if(eventType==='transfer.reversed'){
   const withdrawalId=String(object?.metadata?.wyncoreWithdrawalId||'');
-  const earning=state.adEarnings.find(e=>e.id===withdrawalId&&e.selfServiceWithdrawal&&e.stripeTransferId===String(object.id));
+  const earning=state.adEarnings.find(e=>e.id===withdrawalId&&e.payoutProvider==='stripe_connect'&&e.stripeTransferId===String(object.id));
   if(!earning)return null;
   for(const allocation of earning.allocations||[]){const source=state.adEarnings.find(x=>x.id===allocation.earningId&&x.participantId===earning.participantId);if(source){source.amount=Math.round((Number(source.amount||0)+Number(allocation.amount||0))*100)/100;if(source.status==='allocated')source.status='approved_unpaid';source.updatedAt=now}}
   earning.status='approved_unpaid';earning.payoutError='A transferência Stripe foi revertida. O valor voltou ao saldo disponível.';earning.updatedAt=now;return earning;
@@ -50,7 +50,7 @@ function applyTransferEvent(state,eventType,object,connectedAccountId,now){
   const participant=state.participants.find(p=>p.stripeAccountId===connectedAccountId);
   if(!participant)return null;
   const amountCents=Number(object?.amount);
-  const matches=state.adEarnings.filter(e=>e.participantId===participant.id&&e.selfServiceWithdrawal&&e.payoutProvider==='stripe_connect'&&e.status==='payout_pending'&&cents(e.amount)===amountCents);
+  const matches=state.adEarnings.filter(e=>e.participantId===participant.id&&e.payoutProvider==='stripe_connect'&&e.status==='payout_pending'&&cents(e.amount)===amountCents);
   if(matches.length!==1)return null;
   const earning=matches[0];
   if(eventType==='payout.paid'){earning.status='paid';earning.paidAt=now;earning.paymentReference=String(object.id||'');delete earning.payoutError}
