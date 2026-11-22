@@ -68,11 +68,11 @@ async function createAccountLink({accountId,refreshUrl,returnUrl}){
  return request('/account_links','POST',{account:accountId,refresh_url:refreshUrl,return_url:returnUrl,type:'account_onboarding'});
 }
 async function getConnectedAccount(accountId){if(!connectEnabled())throw httpError('Stripe Connect ainda não foi habilitado.');return request('/accounts/'+encodeURIComponent(accountId))}
-async function createTransfer({amountCents,destination,withdrawalId,participantId,idempotencyKey}){
+async function createTransfer({amountCents,destination,withdrawalId,participantId,assignmentId,idempotencyKey}){
  if(!connectEnabled())throw httpError('Stripe Connect ainda não foi habilitado.');
  if(!Number.isInteger(amountCents)||amountCents<100)throw httpError('Valor mínimo de repasse: R$ 1,00.',400);
  if(!/^acct_[A-Za-z0-9]+$/.test(String(destination||'')))throw httpError('O participante ainda não conectou uma conta Stripe válida.',409);
- const params={amount:String(amountCents),currency:'brl',destination:String(destination),transfer_group:'wyncore-'+String(withdrawalId),'metadata[wyncoreWithdrawalId]':String(withdrawalId),'metadata[participantId]':String(participantId)};
+ const params={amount:String(amountCents),currency:'brl',destination:String(destination),transfer_group:'wyncore-'+String(withdrawalId),'metadata[wyncoreWithdrawalId]':String(withdrawalId),'metadata[participantId]':String(participantId),...(assignmentId?{'metadata[wyncoreAssignmentId]':String(assignmentId)}:{})};
  return request('/transfers','POST',params,null,idempotencyKey);
 }
 module.exports={configured,webhookConfigured,connectEnabled,verifyWebhook,getPlatformAccount,createCheckoutSession,createConnectedAccount,createAccountLink,getConnectedAccount,createTransfer};
