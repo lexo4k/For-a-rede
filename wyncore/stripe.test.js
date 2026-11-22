@@ -11,7 +11,7 @@ function loadStripe(env){
  return {stripe,restore(){for(const k of keys){if(previous[k]===undefined)delete process.env[k];else process.env[k]=previous[k]}delete require.cache[require.resolve('./stripe')]}};
 }
 test('Stripe webhook signature validates HMAC and rejects stale or altered payloads',()=>{
- const secret='whsec_test_secret_123456789',raw='{"id":"evt_123","type":"checkout.session.completed"}',timestamp=Math.floor(Date.now()/1000);
+ const secret='whsec_testsecret123456789',raw='{"id":"evt_123","type":"checkout.session.completed"}',timestamp=Math.floor(Date.now()/1000);
  const signature=crypto.createHmac('sha256',secret).update(timestamp+'.'+raw).digest('hex');
  const ctx=loadStripe({STRIPE_WEBHOOK_SECRET:secret});
  try{assert.equal(ctx.stripe.verifyWebhook(raw,'t='+timestamp+',v1='+signature),true);assert.equal(ctx.stripe.verifyWebhook(raw+' ','t='+timestamp+',v1='+signature),false);assert.equal(ctx.stripe.verifyWebhook(raw,'t='+(timestamp-600)+',v1='+signature),false);assert.equal(ctx.stripe.verifyWebhook(raw,'t='+timestamp+',v1=invalid'),false)}finally{ctx.restore()}
