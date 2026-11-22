@@ -45,7 +45,7 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.equal(manifest.start_url,'./','installable mobile app should open the main WYNCORE ads app');
  const serviceWorker=await (await fetch(base+'/sw.js')).text();
  assert.ok(serviceWorker.includes('wyncore-shell-v8'));
- assert.ok(serviceWorker.includes('./work.js'),'mobile shell should cache WYNCORE Work assets');
+ assert.ok(serviceWorker.includes('./app.js'),'mobile shell should cache the WYNCORE ads app');
 
 
  const publicPage=await fetch(base+'/sobre.html');
