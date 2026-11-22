@@ -1,10 +1,10 @@
 'use strict';
 const http=require('node:http'),fs=require('node:fs/promises'),path=require('node:path'),crypto=require('node:crypto');
-const D=require('./domain'),Asaas=require('./asaas'),Adscend=require('./adscend'),Paypal=require('./paypal'),Payouts=require('./payouts'),Storage=require('./storage'),Stripe=require('./stripe');
+const D=require('./domain'),Adscend=require('./adscend'),Payouts=require('./payouts'),Storage=require('./storage'),Stripe=require('./stripe');
 const ROOT=__dirname,DATA_DIR=process.env.DATA_DIR||path.join(ROOT,'data'),DATA_FILE=path.join(DATA_DIR,'wyncore.json');
 const PORT=Number(process.env.PORT||3000),PASSWORD=process.env.WYNCORE_OWNER_PASSWORD||'',SECRET=process.env.WYNCORE_SESSION_SECRET||'',PARTNER_SECRET=process.env.WYNCORE_PARTNER_WEBHOOK_SECRET||'',GOOGLE_CLIENT_ID=process.env.WYNCORE_GOOGLE_CLIENT_ID||'',PROD=process.env.NODE_ENV==='production';
 const COOKIE='wyncore_session',SESSION_MS=8*60*60*1000;
-const PUBLIC_FILES=new Set(['/','/index.html','/anunciantes.html','/styles.css','/app.js','/manifest.webmanifest','/icon.svg','/sw.js','/sobre.html','/privacidade.html','/termos.html','/robots.txt','/sitemap.xml','/guia-aprendizagem.html','/guia-estagio.html','/seguranca-oportunidades.html','/organizar-candidatura.html','/ads.html','/ads.css','/ads.js','/work.html','/work.css','/work.js']);
+const PUBLIC_FILES=new Set(['/','/index.html','/anunciantes.html','/styles.css','/app.js','/manifest.webmanifest','/icon.svg','/sw.js','/sobre.html','/privacidade.html','/termos.html','/robots.txt','/sitemap.xml','/ads.html','/ads.css','/ads.js']);
 const MIME={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml','.webmanifest':'application/manifest+json','.xml':'application/xml; charset=utf-8','.txt':'text/plain; charset=utf-8'};
 const rate=new Map();
 const operationLocks=new Map();
@@ -252,6 +252,7 @@ async function handler(req,res){
  }
  try{
  const url=new URL(req.url,'http://localhost');let p=url.pathname;if(p!=='/'&&!p.startsWith('/api/')&&!PUBLIC_FILES.has(p)&&p!=='/health'&&!/\.[a-z0-9]+$/i.test(p))p='/api'+p;
+ if(req.method==='POST'&&p==='/api/my-pix-withdrawal')return send(res,410,{error:'Saque Pix desativado. Use Stripe Connect.'});
  if(req.method==='GET'&&(p==='/health'||p==='/api/health'))return send(res,200,{ok:true,service:'WYNCORE',storage:process.env.DATABASE_URL?'postgres-transactional':Storage.rpcConfigured()?'supabase-rest-cas':process.env.BLOB_READ_WRITE_TOKEN?'vercel-blob-private':'single-writer-json',supabaseConfigured:Storage.rpcConfigured(),authConfigured:Boolean(PASSWORD&&SECRET.length>=32),ownerLoginConfigured:Boolean(PASSWORD),participantLoginConfigured:SECRET.length>=32,phoneLoginEnabled:SECRET.length>=32,googleEnabled:Boolean(GOOGLE_CLIENT_ID),googleClientId:GOOGLE_CLIENT_ID||null,integrations:{adscend:{configured:Adscend.configured(),postbackConfigured:Adscend.postbackConfigured()},stripe:{configured:Stripe.configured(),webhookConfigured:Stripe.webhookConfigured(),connectEnabled:Stripe.connectEnabled(),payoutStorageSafe:payoutStorageSafe()},payoutStorageSafe:payoutStorageSafe()},signupAvailable:true,publicAccess:true});
  if(req.method==='POST'&&p==='/api/access-request'){
   if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
@@ -460,25 +461,7 @@ async function handler(req,res){
   d.adCampaigns.unshift(c);d.audit.unshift({id:crypto.randomUUID(),actorId:me.id,type:'ad_campaign_created',entityId:c.id,details:{client},at:new Date().toISOString()});await save(d);return send(res,201,c);
  }
 
- let adMatch=p.match(/^\/api\/ad-campaigns\/([\w-]+)\/pix$/);
- if(req.method==='GET'&&adMatch){
-  if(me.role!=='admin')err('Somente administração.',403);
-  const c=(d.adCampaigns||[]).find(x=>x.id===adMatch[1]);if(!c?.asaasPaymentId)err('Ainda não existe cobrança Pix para esta campanha.',404);
-  const qr=await Asaas.getPixQrCode(c.asaasPaymentId);return send(res,200,{ok:true,paymentId:c.asaasPaymentId,payload:qr.payload,encodedImage:qr.encodedImage,expirationDate:qr.expirationDate});
- }
- if(req.method==='POST'&&adMatch){
-  if(me.role!=='admin')err('Somente administração.',403);
-  const c=(d.adCampaigns||[]).find(x=>x.id===adMatch[1]);if(!c)return send(res,404,{error:'Campanha não encontrada.'});
-  if(c.contractStatus==='received')err('Esta campanha já está paga.',409);
-  if(!Number(c.contractValue)||!c.advertiserDocument||!c.advertiserEmail)err('Cadastre CPF/CNPJ e e-mail do contratante antes de gerar o Pix.');
-  if(c.asaasPaymentId)err('Esta campanha já possui uma cobrança Pix. Consulte a cobrança existente antes de gerar outra.',409);
-  const customer=c.asaasCustomerId?{id:c.asaasCustomerId}:await Asaas.createCustomer({name:c.client,cpfCnpj:c.advertiserDocument,email:c.advertiserEmail,mobilePhone:c.advertiserPhone,externalReference:'wyncore-client:'+c.id});
-  c.asaasCustomerId=customer.id;await save(d);
-  const payment=await Asaas.createPixCharge({customer:customer.id,value:c.contractValue,description:'WYNCORE - '+c.title,externalReference:'wyncore-campaign:'+c.id});
-  c.asaasPaymentId=payment.id;c.contractStatus='awaiting_pix';c.pixCreatedAt=new Date().toISOString();await save(d);
-  const qr=await Asaas.getPixQrCode(payment.id);
-  return send(res,201,{ok:true,paymentId:payment.id,invoiceUrl:payment.invoiceUrl||null,payload:qr.payload,encodedImage:qr.encodedImage,expirationDate:qr.expirationDate});
- }
+ if(/^\/api\/ad-campaigns\/[\w-]+\/pix$/.test(p))return send(res,410,{error:'Cobrança Pix desativada. Use o checkout Stripe.'});
 
  let leadMatch=p.match(/^\/api\/advertiser-inquiries\/([\w-]+)\/(contacted|decline|create-campaign)$/);
  if(req.method==='POST'&&leadMatch){
@@ -502,13 +485,7 @@ async function handler(req,res){
   if(adMatch[2]==='open'&&(Number(c.contractValue)<=0||c.contractStatus!=='received'))err('Campanha não pode ser publicada: confirme primeiro o recebimento real do orçamento do contratante.',409);if(adMatch[2]==='open'&&(!Number(c.rewardPerReview)||!Number(c.maxParticipants)||!isPlayableAdMedia(c.mediaUrl)))err('Para publicar, informe recompensa por avaliação, limite de participantes e um vídeo compatível e acessível.',409);if(adMatch[2]==='open'&&Number(c.rewardPerReview)*Number(c.maxParticipants)>Number(c.contractValue))err('O orçamento não cobre as recompensas previstas.',409);
   c.status=({open:'open',pause:'paused',complete:'completed'})[adMatch[2]];c.updatedAt=new Date().toISOString();await save(d);return send(res,200,c);
  }
- adMatch=p.match(/^\/api\/ad-campaigns\/([\w-]+)\/contract-payment$/);
- if(req.method==='POST'&&adMatch){
-  if(me.role!=='admin')err('Somente administração.',403);
-  const c=(d.adCampaigns||[]).find(x=>x.id===adMatch[1]);if(!c)return send(res,404,{error:'Campanha não encontrada.'});
-  const b=await body(req),reference=String(b.reference||'').trim().slice(0,120);if(!reference||Number(c.contractValue)<=0)err('Informe o valor do contrato e a referência real de recebimento.');
-  c.contractStatus='received';c.contractReference=reference;c.receivedAt=new Date().toISOString();c.updatedAt=c.receivedAt;await save(d);return send(res,200,c);
- }
+ if(/^\/api\/ad-campaigns\/[\w-]+\/contract-payment$/.test(p))return send(res,410,{error:'Confirmação manual desativada. O contrato só é liberado pelo webhook Stripe.'});
  if(req.method==='POST'&&p==='/api/ad-reviews'){
   if(me.role!=='participant')err('Somente avaliadores podem enviar avaliações.',403);
   if(limited(req,'ad-review',me.id,20,3600000))return send(res,429,{error:'Limite de avaliações por hora atingido.'});
@@ -540,48 +517,8 @@ async function handler(req,res){
 
 
 
- adMatch=p.match(/^\/api\/ad-earnings\/([\w-]+)\/pay-pix$/);
- if(req.method==='POST'&&adMatch){
-  if(me.role!=='admin')err('Somente administração.',403);
-  const earning=(d.adEarnings||[]).find(x=>x.id===adMatch[1]);if(!earning)return send(res,404,{error:'Recompensa não encontrada.'});
-  if(earning.status!=='approved_unpaid')err('A recompensa não está aguardando Pix.',409);
-  const campaign=(d.adCampaigns||[]).find(x=>x.id===earning.campaignId);if(campaign?.contractStatus!=='received')err('O orçamento da campanha ainda não foi recebido.',409);
-  if(!Asaas.configured()||!Asaas.webhookConfigured())err('Configure Asaas e o webhook antes de realizar Pix automático.',503);
-  const ok=await tryAutomaticPix(earning,d);await save(d);if(!ok)err(earning.payoutError||'Cadastre uma chave Pix válida para o participante.',400);
-  return send(res,202,{ok:true,status:earning.status,transferId:earning.asaasTransferId,message:'Pix solicitado. A confirmação final chegará pelo webhook Asaas.'});
- }
+ if(/^\/api\/ad-earnings\/[\w-]+\/(pay-pix|mark-paid|pay-paypal|paypal-status)$/.test(p))return send(res,410,{error:'Repasse Pix/PayPal e baixa manual foram desativados. Use Stripe Connect.'});
 
- adMatch=p.match(/^\/api\/ad-earnings\/([\w-]+)\/mark-paid$/);
- if(req.method==='POST'&&adMatch){
-  if(me.role!=='admin')err('Somente administração.',403);
-  const earning=(d.adEarnings||[]).find(x=>x.id===adMatch[1]);if(!earning)return send(res,404,{error:'Lançamento não encontrado.'});
-  if(earning.status!=='approved_unpaid')err('Este lançamento não está aguardando pagamento.',409);
-  const b=await body(req),reference=String(b.reference||'').trim().slice(0,160);if(reference.length<4)err('Informe a referência de um pagamento realmente realizado.');
-  earning.status='paid';earning.paymentReference=reference;earning.paidAt=new Date().toISOString();earning.paidBy=me.id;await save(d);return send(res,200,earning);
- }
- adMatch=p.match(/^\/api\/ad-earnings\/([\w-]+)\/pay-paypal$/);
- if(req.method==='POST'&&adMatch){
-  if(me.role!=='admin')err('Somente administração.',403);
-  const earning=(d.adEarnings||[]).find(x=>x.id===adMatch[1]);if(!earning)return send(res,404,{error:'Recompensa não encontrada.'});
-  if(earning.status!=='approved_unpaid')err('A recompensa não está aguardando pagamento.',409);
-  if(!Paypal.configured())err('Configure PAYPAL_CLIENT_ID e PAYPAL_CLIENT_SECRET no servidor.',503);
-  const participant=(d.participants||[]).find(x=>x.id===earning.participantId);
-  if(!participant?.paypalEmailEncrypted||!participant.payoutCountry||participant.payoutCountry==='BR')err('Este participante não possui perfil internacional PayPal válido.',400);
-  if(earning.paypalBatchId)err('Já existe um lote PayPal para esta recompensa. Consulte o estado antes de tentar novamente.',409);
-  const payout=await Paypal.createPayout({email:decryptSecret(participant.paypalEmailEncrypted),amount:earning.amount,currency:earning.currency||'BRL',earningId:earning.id});
-  const header=payout.batch_header||{};earning.paypalBatchId=header.payout_batch_id||null;earning.paypalBatchStatus=header.batch_status||'PENDING';earning.paypalMode=Paypal.mode;earning.status='payout_pending';earning.payoutProvider='paypal';earning.payoutRequestedAt=new Date().toISOString();await save(d);
-  return send(res,202,{ok:true,status:earning.status,batchId:earning.paypalBatchId,batchStatus:earning.paypalBatchStatus,message:'Lote enviado ao PayPal. Confirme o estado final antes de considerar o pagamento concluído.'});
- }
- adMatch=p.match(/^\/api\/ad-earnings\/([\w-]+)\/paypal-status$/);
- if(req.method==='POST'&&adMatch){
-  if(me.role!=='admin')err('Somente administração.',403);
-  const earning=(d.adEarnings||[]).find(x=>x.id===adMatch[1]);if(!earning||earning.payoutProvider!=='paypal'||!earning.paypalBatchId)err('Lote PayPal não encontrado.',404);
-  const result=await Paypal.getBatch(earning.paypalBatchId),header=result.batch_header||{};earning.paypalBatchStatus=header.batch_status||earning.paypalBatchStatus;earning.paypalCheckedAt=new Date().toISOString();
-  const item=(result.items||[])[0],itemStatus=String(item?.transaction_status||'').toUpperCase();
-  if(['SUCCESS','SUCCESS_WITH_WARNING'].includes(earning.paypalBatchStatus)&&itemStatus==='SUCCESS'){earning.status='paid';earning.paidAt=earning.paypalCheckedAt;earning.paymentReference=item.payout_item_id||earning.paypalBatchId}
-  else if(['DENIED','CANCELED','RETURNED'].includes(earning.paypalBatchStatus)||['FAILED','BLOCKED','RETURNED','REFUNDED','ONHOLD','UNCLAIMED'].includes(itemStatus)){earning.status='approved_unpaid';earning.payoutError='PayPal: '+(itemStatus||earning.paypalBatchStatus);earning.payoutProvider=null;earning.paypalBatchId=null}
-  await save(d);return send(res,200,{ok:true,status:earning.status,batchStatus:earning.paypalBatchStatus});
- }
  if(req.method==='GET'&&p==='/api/ad-report.csv'){
   if(me.role!=='admin')err('Relatório restrito à administração.',403);
   const campaigns=d.adCampaigns||[],reviews=d.adReviews||[];
@@ -612,13 +549,13 @@ async function handler(req,res){
  const levelMatch=p.match(/^\/api\/participants\/([\w-]+)\/level$/);if(req.method==='POST'&&levelMatch){if(me.role!=='admin')err('Somente administrador pode alterar níveis.',403);const b=await body(req),person=D.advanceParticipantLevel(d,me,levelMatch[1],b.direction||'next');await save(d);return send(res,200,person)}
  if(req.method==='POST'&&p==='/api/participants/approve'){const b=await body(req);if(me.role!=='admin')err('Somente administrador pode liberar participantes e definir cargos.',403);const person=D.approveParticipant(d,me,String(b.participantId||''),b.role||'participant');await save(d);return send(res,200,person)}
  if(req.method==='POST'&&p==='/api/programs'){const x=D.createProgram(d,me,await body(req));await save(d);return send(res,201,x)}
- const fundingMatch=p.match(/^\/api\/programs\/([^/]+)\/funding$/);if(req.method==='POST'&&fundingMatch){const b=await body(req),x=D.confirmProgramFunding(d,me,fundingMatch[1],b.reference,b.evidenceUrl);await save(d);return send(res,200,x)}
+ const fundingMatch=p.match(/^\/api\/programs\/([^/]+)\/funding$/);if(req.method==='POST'&&fundingMatch)return send(res,410,{error:'Confirmação manual de financiamento desativada. Use o checkout Stripe.'})
  const requestMatch=p.match(/^\/api\/programs\/([^/]+)\/request$/);if(req.method==='POST'&&requestMatch){const x=D.requestProgram(d,me,requestMatch[1]);await save(d);return send(res,201,x)}
  const acceptMatch=p.match(/^\/api\/assignments\/([^/]+)\/accept$/);if(req.method==='POST'&&acceptMatch){const x=D.approveProgramRequest(d,me,acceptMatch[1]);await save(d);return send(res,200,x)}
  let m=p.match(/^\/api\/programs\/([\w-]+)\/assign$/);if(req.method==='POST'&&m){const b=await body(req),x=D.assignProgram(d,me,m[1],String(b.participantId||''));await save(d);return send(res,201,x)}
  m=p.match(/^\/api\/assignments\/([\w-]+)\/submit$/);if(req.method==='POST'&&m){const b=await body(req),x=D.submitAssignment(d,me,m[1],b.proof);await save(d);return send(res,200,x)}
  m=p.match(/^\/api\/assignments\/([\w-]+)\/review$/);if(req.method==='POST'&&m){const b=await body(req),x=D.reviewAssignment(d,me,m[1],b.decision,b.note);await save(d);return send(res,200,x)}
- m=p.match(/^\/api\/assignments\/([\w-]+)\/payment$/);if(req.method==='POST'&&m){return send(res,503,{error:'Pagamento Pix indisponível: nenhum provedor de pagamentos está conectado. O WYNCORE não registrará um pagamento sem confirmação real do provedor.'})}
+ m=p.match(/^\/api\/assignments\/([\w-]+)\/payment$/);if(req.method==='POST'&&m)return send(res,410,{error:'Baixa manual desativada. Use o repasse Stripe Connect.'})
  if(req.method==='POST'&&p==='/api/referrals'){const b=await body(req),x=D.addReferral(d,me,b.email);await save(d);return send(res,201,x)}
  if(req.method==='GET'&&p==='/api/report.csv'){if(me.role==='participant')err('Relatório restrito à equipe.',403);const rows=[['Participante','Atividade','Estado','Valor registrado','Referência','Data'],...(d.tasks||[]).map(t=>['',t.title,t.status,t.value,'',t.updatedAt||t.createdAt]),...(d.assignments||[]).map(a=>[(d.participants||[]).find(x=>x.id===a.participantId)?.email||'',(d.programs||[]).find(x=>x.id===a.programId)?.title||'',a.state,a.reward,a.paymentReference||'',a.paidAt||a.createdAt])];res.writeHead(200,{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="wyncore-relatorio.csv"','Cache-Control':'no-store'});return res.end('\ufeff'+rows.map(r=>r.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(';')).join('\r\n'))}
  return send(res,404,{error:'Rota não encontrada.'});
