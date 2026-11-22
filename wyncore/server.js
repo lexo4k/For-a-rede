@@ -36,20 +36,20 @@ async function load(){
   if(!d){
    try{d=JSON.parse(await fs.readFile(DATA_FILE,'utf8'))}catch(e){if(e.code!=='ENOENT')throw e;}
   }
-  d||={opportunities:[],tasks:[],events:[],users:[],workAccounts:[],workTasks:[],workLedger:[],adCampaigns:[],adReviews:[],adEarnings:[],advertiserInquiries:[],asaasWebhookEvents:[],adscendOfferSnapshots:[],adscendConversions:[]};
-  d=D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],workAccounts:d.workAccounts||[],workTasks:d.workTasks||[],workLedger:d.workLedger||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[],adEarnings:d.adEarnings||[],advertiserInquiries:d.advertiserInquiries||[],asaasWebhookEvents:d.asaasWebhookEvents||[],adscendOfferSnapshots:d.adscendOfferSnapshots||[],adscendConversions:d.adscendConversions||[]});
+  d||={opportunities:[],tasks:[],events:[],users:[],adCampaigns:[],adReviews:[],adEarnings:[],advertiserInquiries:[],adscendOfferSnapshots:[],adscendConversions:[]};
+  d=D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[],adEarnings:d.adEarnings||[],advertiserInquiries:d.advertiserInquiries||[],adscendOfferSnapshots:d.adscendOfferSnapshots||[],adscendConversions:d.adscendConversions||[]});
   if(!stored.state)await Storage.writeState(d);
   return d;
  }
  if(process.env.BLOB_READ_WRITE_TOKEN){
   const {get}=require('@vercel/blob');
   const found=await get('wyncore/data.json',{access:'private',useCache:false});
-  if(!found)return D.ensureState({opportunities:[],tasks:[],events:[],users:[],workAccounts:[],workTasks:[],workLedger:[],adCampaigns:[],adReviews:[],adEarnings:[],advertiserInquiries:[],asaasWebhookEvents:[]});
+  if(!found)return D.ensureState({opportunities:[],tasks:[],events:[],users:[],adCampaigns:[],adReviews:[],adEarnings:[],advertiserInquiries:[]});
   const raw=await new Response(found.stream).text();
   const d=JSON.parse(raw);
   return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],workAccounts:d.workAccounts||[],workTasks:d.workTasks||[],workLedger:d.workLedger||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[],adEarnings:d.adEarnings||[],advertiserInquiries:d.advertiserInquiries||[],asaasWebhookEvents:d.asaasWebhookEvents||[]});
  }
- try{const d=JSON.parse(await fs.readFile(DATA_FILE,'utf8'));return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],workAccounts:d.workAccounts||[],workTasks:d.workTasks||[],workLedger:d.workLedger||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[],advertiserInquiries:d.advertiserInquiries||[]})}catch(e){if(e.code!=='ENOENT')throw e;return D.ensureState({opportunities:[],tasks:[],events:[],users:[],workAccounts:[],workTasks:[],workLedger:[],adCampaigns:[],adReviews:[],adEarnings:[],advertiserInquiries:[],asaasWebhookEvents:[]})}
+ try{const d=JSON.parse(await fs.readFile(DATA_FILE,'utf8'));return D.ensureState({...d,opportunities:d.opportunities||[],tasks:d.tasks||[],events:d.events||[],users:d.users||[],workAccounts:d.workAccounts||[],workTasks:d.workTasks||[],workLedger:d.workLedger||[],adCampaigns:d.adCampaigns||[],adReviews:d.adReviews||[],advertiserInquiries:d.advertiserInquiries||[]})}catch(e){if(e.code!=='ENOENT')throw e;return D.ensureState({opportunities:[],tasks:[],events:[],users:[],adCampaigns:[],adReviews:[],adEarnings:[],advertiserInquiries:[]})}
 }
 async function notifyAdvertiserLead(lead){
  const apiKey=process.env.RESEND_API_KEY||'',from=process.env.WYNCORE_LEADS_FROM||'',to=process.env.WYNCORE_LEADS_TO||'';
