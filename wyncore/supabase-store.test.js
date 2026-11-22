@@ -11,7 +11,7 @@ test('Supabase adapter loads the existing JSON state through the protected RPC',
  const state={participants:[],workTasks:[{id:'existing-task'}]};
  const store=createSupabaseStore({...config,fetchImpl:async(url,options)=>{call={url,options};return response(200,{state,updated_at:'2026-11-21T15:34:46.580042+00:00'})}});
  const loaded=await store.load();
- assert.equal(loaded,state);
+ assert.deepEqual(loaded,state);
  assert.equal(call.url,'https://project.supabase.co/rest/v1/rpc/wyncore_state_read');
  assert.equal(call.options.method,'POST');
  assert.equal(call.options.headers.apikey,'public-anon-key');
