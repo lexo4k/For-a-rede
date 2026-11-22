@@ -34,7 +34,13 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.equal(healthData.signupAvailable,true);
  assert.equal(healthData.googleEnabled,true,'Google login should expose its configured client id');
  const appAssets=await Promise.all(['/','/index.html','/app.js','/styles.css','/sw.js','/manifest.webmanifest','/work','/work.js','/work.css'].map(path=>fetch(base+path)));
+
  for(const asset of appAssets){assert.equal(asset.status,200);assert.equal(asset.headers.get('cache-control'),'no-cache','application shell assets must revalidate after deployment')}
+ const workPage=await (await fetch(base+'/work.html')).text();
+ assert.ok(workPage.includes('id="providers"'),'work page must include verified provider directory');
+ assert.ok(workPage.includes('id="record-consent"'),'recording flow must require explicit consent');
+ assert.ok(!workPage.includes('income-target'),'the product must not substitute an income calculator for real opportunities');
+
  const publicPage=await fetch(base+'/sobre.html');
  assert.equal(publicPage.status,200,'public institutional pages should be served');
  assert.equal((await fetch(base+'/privacidade.html')).status,200);
@@ -87,11 +93,11 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  const appsBefore=await fetch(base+'/api/work/applications',{headers:{cookie:trackerCookie}});
  assert.equal(appsBefore.status,200);
  assert.equal((await appsBefore.json()).applications.length,0);
- const appCreate=await fetch(base+'/api/work/applications',{method:'POST',headers:{cookie:trackerCookie,'content-type':'application/json'},body:JSON.stringify({providerId:'telus-ads-br'})});
+ const appCreate=await fetch(base+'/api/work/applications',{method:'POST',headers:{cookie:trackerCookie,'content-type':'application/json'},body:JSON.stringify({providerId:'crowdgen-poliwag'})});
  assert.equal(appCreate.status,201);
  const appData=await appCreate.json();
  assert.equal(appData.application.status,'interested');
- const appDuplicate=await fetch(base+'/api/work/applications',{method:'POST',headers:{cookie:trackerCookie,'content-type':'application/json'},body:JSON.stringify({providerId:'telus-ads-br'})});
+ const appDuplicate=await fetch(base+'/api/work/applications',{method:'POST',headers:{cookie:trackerCookie,'content-type':'application/json'},body:JSON.stringify({providerId:'crowdgen-poliwag'})});
  assert.equal(appDuplicate.status,200,'duplicate provider interest should reuse existing record');
  const appUpdate=await fetch(base+'/api/work/applications/'+appData.application.id,{method:'PATCH',headers:{cookie:trackerCookie,'content-type':'application/json'},body:JSON.stringify({status:'applied'})});
  assert.equal(appUpdate.status,200);
