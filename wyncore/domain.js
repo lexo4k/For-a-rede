@@ -42,8 +42,14 @@ function recordPartnerConversion(s,event){
  }
  c.eventIds ||= [];
  c.eventIds.push(eventId);c.lastEventAt=new Date().toISOString();
- // A settled or reversed transaction is terminal: stale partner events cannot reopen it.
- if(c.status==='settled'||c.status==='reversed')return {duplicate:false,conversion:c};
+ // Reversals remain valid after settlement; stale events cannot reopen a reversed transaction.
+ if(c.status==='reversed')return {duplicate:false,conversion:c};
+ if(status==='reversed'){
+  if(c.status==='settled')s.ledger.unshift({id:id(),participantId:c.participantId,conversionId:c.id,kind:'earning_reversed',amount:-c.reward,reference:transactionId,at:new Date().toISOString()});
+  c.status='reversed';c.reversedAt=new Date().toISOString();
+  return {duplicate:false,conversion:c};
+ }
+ if(c.status==='settled')return {duplicate:false,conversion:c};
  if(status==='approved')c.status='approved';
  if(status==='settled'){
   const pct=Math.max(1,Math.min(90,Number(process.env.WYNCORE_REWARD_SHARE_PERCENT)||60));
