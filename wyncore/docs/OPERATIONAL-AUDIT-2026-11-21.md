@@ -34,8 +34,9 @@ O segredo RPC e as chaves do projeto não são reproduzidos neste relatório.
 
 - Não foram encontradas variáveis `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` ou `STRIPE_CONNECT_ENABLED` na configuração Vercel examinada. Portanto, não há cobrança ou repasse real habilitado.
 - Não foram encontradas credenciais Adscend de publisher; não há inventário de ofertas confirmado.
-- O limite Vercel gratuito de 100 deployments por dia foi atingido. A criação de um novo preview retornou HTTP 402 e retry de 24 horas.
-- O domínio de produção não foi alterado.
+- Existe preview Vercel READY em https://wyncore-77eqkt62s-unk-studio.vercel.app, commit 0a907023d7129a74fb381a8f652f376acd6a3805. O smoke test retornou HTTP 200 para a página principal, Ads, JS/CSS, página de anunciantes, privacidade, termos e manifest; /api/health retornou 200 com armazenamento Supabase ativo; /api/dashboard sem sessão retornou 401; /work.html retornou 404 e /api/work retornou 410.
+- O preview READY corresponde ao commit 0a907, anterior ao último lote de limpeza documental/remoção de módulos sem uso. Tentativas adicionais de deployment manual retornaram HTTP 402 pelo limite de 100 deployments/dia (retry em 24 horas). A branch mais recente ainda não foi publicada.
+- O domínio de produção não foi alterado; a validação foi feita somente no preview.
 - PR #7 permanece em rascunho, sem merge.
 
 ## Resultado
