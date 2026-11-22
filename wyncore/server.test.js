@@ -98,6 +98,9 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  const credited=await fetch(base+'/api/ads/offerwallme/postback',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:offerwallPayload});
  assert.equal(credited.status,200,'signed Offerwall.me video postback should credit an active participant: '+await credited.clone().text());
  assert.equal(await credited.text(),'ok');
+ const invalidSignaturePayload=new URLSearchParams({subId:participant.id,transId:'offerwall-invalid-signature',reward:'5.00',reward_name:'BRL',status:'1',signature:'00000000000000000000000000000000'});
+ const invalidSignatureResponse=await fetch(base+'/api/ads/offerwallme/postback',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:invalidSignaturePayload});
+ assert.equal(invalidSignatureResponse.status,401,'invalid provider signature must never credit a participant');
  const offerwallDuplicate=await fetch(base+'/api/ads/offerwallme/postback',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body:offerwallPayload});
  assert.equal(offerwallDuplicate.status,200,'duplicate postback should be idempotent');
  const beforeChargeback=(await (await fetch(base+'/api/dashboard',{headers:{cookie}})).json()).ledger.filter(x=>x.reference===offerwallTrans);
