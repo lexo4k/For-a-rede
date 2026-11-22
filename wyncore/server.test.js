@@ -101,7 +101,15 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  assert.equal(appDuplicate.status,200,'duplicate provider interest should reuse existing record');
  const appUpdate=await fetch(base+'/api/work/applications/'+appData.application.id,{method:'PATCH',headers:{cookie:trackerCookie,'content-type':'application/json'},body:JSON.stringify({status:'applied'})});
  assert.equal(appUpdate.status,200);
+
  assert.equal((await appUpdate.json()).application.status,'applied');
+ const paymentStage=await fetch(base+'/api/work/applications/'+appData.application.id,{method:'PATCH',headers:{cookie:trackerCookie,'content-type':'application/json'},body:JSON.stringify({status:'payment_pending'})});
+ assert.equal(paymentStage.status,200);
+ assert.equal((await paymentStage.json()).application.status,'payment_pending');
+ const paidStage=await fetch(base+'/api/work/applications/'+appData.application.id,{method:'PATCH',headers:{cookie:trackerCookie,'content-type':'application/json'},body:JSON.stringify({status:'paid'})});
+ assert.equal(paidStage.status,200);
+ assert.equal((await paidStage.json()).application.status,'paid');
+
  const invalidApp=await fetch(base+'/api/work/applications',{method:'POST',headers:{cookie:trackerCookie,'content-type':'application/json'},body:JSON.stringify({providerId:'fake-provider'})});
  assert.equal(invalidApp.status,400,'unknown providers must not be registered');
  const adminApp=await fetch(base+'/api/work/applications',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({providerId:'telus-qa-br'})});
