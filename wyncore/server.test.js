@@ -83,20 +83,20 @@ test('WYNCORE authenticated API end-to-end',async t=>{
  const sharedSecretMe=await (await fetch(base+'/api/me',{headers:{cookie:sharedSecretLogin.headers.get('set-cookie').split(';')[0]}})).json();
 
  assert.equal(sharedSecretMe.role,'participant','participant with same password text must still receive an isolated participant session');
- const participantCookie=sharedSecretLogin.headers.get('set-cookie').split(';')[0];
- const appsBefore=await fetch(base+'/api/work/applications',{headers:{cookie:participantCookie}});
+ const trackerCookie=sharedSecretLogin.headers.get('set-cookie').split(';')[0];
+ const appsBefore=await fetch(base+'/api/work/applications',{headers:{cookie:trackerCookie}});
  assert.equal(appsBefore.status,200);
  assert.equal((await appsBefore.json()).applications.length,0);
- const appCreate=await fetch(base+'/api/work/applications',{method:'POST',headers:{cookie:participantCookie,'content-type':'application/json'},body:JSON.stringify({providerId:'telus-ads-br'})});
+ const appCreate=await fetch(base+'/api/work/applications',{method:'POST',headers:{cookie:trackerCookie,'content-type':'application/json'},body:JSON.stringify({providerId:'telus-ads-br'})});
  assert.equal(appCreate.status,201);
  const appData=await appCreate.json();
  assert.equal(appData.application.status,'interested');
- const appDuplicate=await fetch(base+'/api/work/applications',{method:'POST',headers:{cookie:participantCookie,'content-type':'application/json'},body:JSON.stringify({providerId:'telus-ads-br'})});
+ const appDuplicate=await fetch(base+'/api/work/applications',{method:'POST',headers:{cookie:trackerCookie,'content-type':'application/json'},body:JSON.stringify({providerId:'telus-ads-br'})});
  assert.equal(appDuplicate.status,200,'duplicate provider interest should reuse existing record');
- const appUpdate=await fetch(base+'/api/work/applications/'+appData.application.id,{method:'PATCH',headers:{cookie:participantCookie,'content-type':'application/json'},body:JSON.stringify({status:'applied'})});
+ const appUpdate=await fetch(base+'/api/work/applications/'+appData.application.id,{method:'PATCH',headers:{cookie:trackerCookie,'content-type':'application/json'},body:JSON.stringify({status:'applied'})});
  assert.equal(appUpdate.status,200);
  assert.equal((await appUpdate.json()).application.status,'applied');
- const invalidApp=await fetch(base+'/api/work/applications',{method:'POST',headers:{cookie:participantCookie,'content-type':'application/json'},body:JSON.stringify({providerId:'fake-provider'})});
+ const invalidApp=await fetch(base+'/api/work/applications',{method:'POST',headers:{cookie:trackerCookie,'content-type':'application/json'},body:JSON.stringify({providerId:'fake-provider'})});
  assert.equal(invalidApp.status,400,'unknown providers must not be registered');
  const adminApp=await fetch(base+'/api/work/applications',{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({providerId:'telus-qa-br'})});
  assert.equal(adminApp.status,403,'admin account cannot register participant applications');
