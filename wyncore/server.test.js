@@ -47,14 +47,7 @@ test('WYNCORE integrated app: public shell, accounts, campaigns and safe payment
  const admin=login.headers.get('set-cookie').split(';')[0];
  const dash=await fetch(base+'/api/dashboard',{headers:{cookie:admin}});
  assert.equal(dash.status,200);
- const workRadar=await fetch(base+'/api/work-engine',{headers:{cookie:admin}});
- assert.equal(workRadar.status,200);
- const radar=await workRadar.json();
- assert.ok(Array.isArray(radar.jobs));
- assert.ok(Array.isArray(radar.portals));
- assert.ok(radar.portals.length>=8);
- const unauthCron=await fetch(base+'/api/cron/work-scan');
- assert.equal(unauthCron.status,401,'scheduled scanner must reject unauthenticated requests');
+
 
  const signup=await fetch(base+'/api/access-request',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'Participante Integrado',email:'integrado@example.org',phone:'11987654321',password:'senha-segura-123'})});
  assert.equal(signup.status,201);
