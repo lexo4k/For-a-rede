@@ -292,3 +292,31 @@ input,select,textarea,.form-grid input,.auth-card input{background:#0a130e;borde
 .preview-wallet b{display:block;margin:8px 0;color:#e4f4e8;font:700 9px Manrope}
 .preview-wallet i{display:block;padding:5px 0;border-top:1px solid #273c2d;color:#a9c4af;font-size:7px;font-style:normal}
 @media(max-width:760px){.public-hero{display:flex;flex-direction:column;align-items:stretch;min-height:0}.public-dashboard-preview{width:100%;max-width:none;min-height:245px;transform:none;grid-template-columns:39px minmax(0,1fr)}.preview-sidebar{gap:10px}.preview-main{padding:6px 7px}.preview-welcome{padding:10px}.preview-lower{grid-template-columns:1.2fr .8fr}}
+
+
+/* Autonomous work radar */
+.work-engine{margin:0 0 18px;padding:clamp(17px,2.5vw,26px);border:1px solid #294434;background:linear-gradient(150deg,#111f17,#0d1711)}
+.work-engine-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
+.work-engine-heading h3,.work-engine-subhead h4{margin:5px 0 7px;font:750 19px Manrope;color:#e9f8ed;letter-spacing:-.35px}
+.work-engine-heading .muted{max-width:700px;line-height:1.6}
+.work-engine-heading button{flex:0 0 auto}
+.work-engine-status{margin:17px 0 12px;padding:10px 13px;border:1px solid #31543d;border-radius:9px;background:#12241a;color:#a9d9b7;font-size:10px;line-height:1.6}
+.work-source-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.work-source{display:grid;grid-template-columns:1fr auto;gap:5px 8px;padding:11px;border:1px solid #2a4032;border-radius:9px;background:#101a14}
+.work-source strong{font-size:10px;color:#dceee1}.work-source small{grid-column:1/-1;color:#819889;font-size:9px}
+.source-ok,.source-error{font-size:8px;font-weight:700;white-space:nowrap}.source-ok{color:#83e0a4}.source-error{color:#f0a09a}
+.work-engine-subhead{display:flex;align-items:end;justify-content:space-between;gap:10px;margin:22px 0 11px}
+.work-engine-subhead h4{font-size:15px;margin:3px 0 0}.work-count{color:#8ca494;font-size:9px}
+.work-opportunity-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.work-opportunity-card{min-width:0;padding:14px;border:1px solid #2a4032;border-radius:11px;background:linear-gradient(145deg,#142119,#101a14)}
+.work-job-top{display:flex;align-items:center;justify-content:space-between;gap:8px}.work-job-company{color:#8eb99a;font-size:9px;font-weight:700;overflow-wrap:anywhere}.work-job-score{color:#8ce0a6;font-size:8px;white-space:nowrap}
+.work-opportunity-card h4{margin:10px 0 5px;color:#edf8ef;font:700 13px/1.35 Manrope}
+.work-job-location{margin:0;color:#a6b9aa;font-size:9px}.work-job-description{min-height:48px;margin:9px 0;color:#879b8d;font-size:9px;line-height:1.6}
+.work-job-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:10px;border-top:1px solid #293c30}
+.work-open{color:#8ce0a6;font-size:9px;font-weight:800;text-decoration:none}.work-open:hover{text-decoration:underline}
+.work-track{max-width:155px;padding:7px 8px;border:1px solid #355341;border-radius:7px;background:#0d1711;color:#c4d8c9;font-size:9px}
+.work-portal-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.work-portal{display:grid;gap:6px;min-width:0;padding:12px;border:1px solid #2a4032;border-radius:9px;background:#101a14;text-decoration:none}
+.work-portal strong{color:#e1f2e5;font:700 11px Manrope}.work-portal small{min-height:27px;color:#829789;font-size:9px;line-height:1.5}.work-portal span{color:#80dda0;font-size:8px;font-weight:700}
+.work-engine-footnote{margin:15px 0 0;color:#74897a;font-size:9px;line-height:1.65}
+@media(max-width:760px){.work-engine-heading{display:grid}.work-engine-heading button{justify-self:start}.work-source-grid{grid-template-columns:1fr}.work-opportunity-grid{grid-template-columns:1fr}.work-portal-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.work-job-description{min-height:0}}
