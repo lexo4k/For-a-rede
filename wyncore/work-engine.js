@@ -1,14 +1,14 @@
 'use strict';
 
 const PORTALS = [
-  {id:'oneforma',name:'OneForma',kind:'portal',url:'https://www.oneforma.com/jobs/',focus:'Dados, idiomas, coleta e avaliação de IA'},
-  {id:'welodata',name:'Welo Data',kind:'portal',url:'https://www.welocalize.com/welo-data/',focus:'Dados linguísticos e avaliação de IA'},
-  {id:'rws',name:'RWS TrainAI',kind:'portal',url:'https://www.rws.com/artificial-intelligence/train-ai-data/',focus:'Treinamento e anotação de dados'},
+  {id:'oneforma',name:'OneForma',kind:'portal',url:'https://www.oneforma.com/projects/',focus:'Dados, idiomas, coleta e avaliação de IA'},
+  {id:'welodata',name:'Welo Data',kind:'portal',url:'https://jobs.lever.co/weloglobal?department=Welo+Data',focus:'Dados linguísticos e avaliação de IA'},
+  {id:'rws',name:'RWS TrainAI',kind:'portal',url:'https://app.tai.rws.com/opportunities',focus:'Treinamento e anotação de dados'},
   {id:'prolific',name:'Prolific',kind:'portal',url:'https://www.prolific.com/participants',focus:'Pesquisas acadêmicas remuneradas'},
-  {id:'crowdgen',name:'CrowdGen',kind:'portal',url:'https://crowdgen.com/',focus:'Projetos de dados e IA'},
+  {id:'crowdgen',name:'CrowdGen',kind:'portal',url:'https://crowdgen.com/experts/',focus:'Projetos de dados e IA'},
   {id:'telus',name:'TELUS Digital AI Community',kind:'portal',url:'https://www.telusdigital.com/careers/ai-community',focus:'Avaliação de busca, anúncios e dados'},
   {id:'outlier',name:'Outlier',kind:'portal',url:'https://outlier.ai/',focus:'Treinamento e avaliação de modelos de IA'},
-  {id:'dataforce',name:'DataForce',kind:'portal',url:'https://www.dataforce.ai/',focus:'Coleta de dados, voz e anotação'},
+  {id:'dataforce',name:'DataForce',kind:'portal',url:'https://dataforcecommunity.transperfect.com/',focus:'Coleta de dados, voz e anotação'},
   {id:'clickworker',name:'Clickworker',kind:'portal',url:'https://www.clickworker.com/clickworker/',focus:'Microtarefas e dados'}
 ];
 
@@ -35,7 +35,7 @@ function scoreJob(job){
   if(EXCLUDE.some(x=>title.includes(x)))return 0;
   let score=0;for(const [term,weight] of TERMS)if(text.includes(term))score+=weight;
   if(/remote|worldwide|anywhere|brasil|brazil|portuguese/i.test(String(job.location||'')))score+=1;
-  return score;
+  return Math.min(10,score);
 }
 function normalizeJob(raw,source){
   const title=clean(raw.title||raw.position,180),company=clean(raw.company||raw.company_name||raw.companyName||source,120);
