@@ -98,7 +98,7 @@ function render(){
  const adPaid=adEarnings.filter(e=>e.status==='paid').reduce((n,e)=>n+Number(e.amount||0),0);
  const estimated=Number(state.wallet.pending||0),confirmed=Number(state.adWorkspace?.earningSummary?.availableForPix||0),received=adPaid;
  [['overview-estimated',estimated],['overview-confirmed',confirmed],['overview-paid',received],['wallet-estimated',estimated],['wallet-confirmed',confirmed],['wallet-paid',received]].forEach(([id,v])=>$(id).textContent=money(v));
- $('active-count').textContent=mine.filter(a=>!['paid','rejected'].includes(a.state)).length;
+ $('active-count').textContent=String((state.adWorkspace?.campaigns||[]).length);
  $('report-summary').textContent=state.programs.length+' atividades · '+mine.length+' atribuições · '+adEarnings.length+' recompensas de campanhas · '+state.ledger.length+' registros financeiros.';
  $('stage-estimated').textContent=money(estimated);$('stage-confirmed').textContent=money(confirmed);$('stage-paid').textContent=money(received);$('stage-count').textContent=String(mine.filter(a=>a.state!=='rejected').length+adEarnings.length);
  const earned=mine.filter(a=>['approved','payout_requested','payout_pending','paid'].includes(a.state)).length,level=Math.min(9,1+Math.floor(earned/3));
