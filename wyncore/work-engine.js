@@ -65,7 +65,7 @@ async function scanSources(fetchImpl=fetch){
     }},
     {id:'arbeitnow',name:'Arbeitnow',run:async()=>{
       const x=await getJson('https://www.arbeitnow.com/api/job-board-api',fetchImpl);
-      return (x.data||[]).map(j=>normalizeJob(j,'Arbeitnow')).filter(Boolean);
+      return (x.data||[]).filter(j=>j.remote===true||/remote/i.test(String(j.location||''))).map(j=>normalizeJob(j,'Arbeitnow')).filter(Boolean);
     }},
     {id:'remoteok',name:'Remote OK',run:async()=>{
       const x=await getJson('https://remoteok.com/api',fetchImpl);
@@ -85,7 +85,7 @@ function mergeJobs(existing,incoming){
     if(old){byId.set(item.id,{...old,...item,firstSeenAt:old.firstSeenAt||item.firstSeenAt,status:old.status||'discovered'});updated++}
     else{byId.set(item.id,item);added++}
   }
-  const jobs=[...byId.values()].sort((a,b)=>String(b.lastSeenAt||'').localeCompare(String(a.lastSeenAt||''))).slice(0,1500);
+  const jobs=[...byId.values()].sort((a,b)=>(Number(b.score)||0)-(Number(a.score)||0)||String(b.lastSeenAt||'').localeCompare(String(a.lastSeenAt||''))).slice(0,1500);
   return {jobs,added,updated};
 }
 module.exports={PORTALS,TERMS,clean,safeUrl,scoreJob,normalizeJob,dedupe,scanSources,mergeJobs};
