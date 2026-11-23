@@ -9,6 +9,13 @@ const MIME={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8',
 const rate=new Map();
 const operationLocks=new Map();
 async function withLock(key,work){const previous=operationLocks.get(key)||Promise.resolve();let release;const current=new Promise(resolve=>{release=resolve});operationLocks.set(key,current);await previous;try{return await work()}finally{release();if(operationLocks.get(key)===current)operationLocks.delete(key)}}
+async function getUsdBrlRate(){
+ const response=await fetch('https://open.er-api.com/v6/latest/USD',{headers:{accept:'application/json'},signal:AbortSignal.timeout(7000)});
+ if(!response.ok)throw new Error('Cotação USD/BRL indisponível.');
+ const data=await response.json(),rate=Number(data?.rates?.BRL);
+ if(data?.result!=='success'||!Number.isFinite(rate)||rate<2||rate>20)throw new Error('Cotação USD/BRL inválida.');
+ return {rate,asOf:data.time_last_update_utc||new Date().toISOString()};
+}
 function payoutStorageSafe(){return Storage.payoutStorageSafe(process.env,path.join(ROOT,'data'))}
 function normalizePhone(value){let digits=String(value||'').replace(/\D/g,'');if(digits.startsWith('55')&&(digits.length===12||digits.length===13))digits=digits.slice(2);return digits;}
 function isPlayableAdMedia(value){try{const u=new URL(String(value||''));if(u.protocol!=='https:'||u.username||u.password)return false;const host=u.hostname.toLowerCase();if(host==='youtu.be'||host==='youtube.com'||host.endsWith('.youtube.com')){const id=host==='youtu.be'?u.pathname.split('/').filter(Boolean)[0]:(u.pathname.startsWith('/embed/')?u.pathname.split('/')[2]:u.searchParams.get('v'));return /^[A-Za-z0-9_-]{11}$/.test(id||'')}if(host==='vimeo.com'||host.endsWith('.vimeo.com'))return /^\d+$/.test(u.pathname.split('/').filter(Boolean).pop()||'');return ['mp4','webm','ogg'].includes(u.pathname.toLowerCase().split('.').pop())}catch{return false}}
@@ -380,6 +387,8 @@ async function handler(req,res){
    const params=req.method==='POST'?await body(req):Object.fromEntries(url.searchParams.entries());
    const participantId=String(params.user||params.userid||params.sub1||'').trim(),offerId=String(params.offer||params.offer_id||params.sub2||'').trim(),watchTime=String(params.time||params.uts||'').trim(),ip=String(params.ip||'').trim();
    if(!participantId||!offerId||!watchTime||watchTime.length>80)return send(res,400,{error:'Postback sem participante, oferta ou horário de conclusão.'});
+   const reportedPayout=Number(params.pay||params.payout),currency=String(params.cur||'').trim().toUpperCase();
+   let fx=null;if(Number.isFinite(reportedPayout)&&reportedPayout>0&&currency==='USD'){try{fx=await getUsdBrlRate()}catch(error){console.error('WYNCORE USD/BRL conversion unavailable:',error.message)}}
    return await withLock('wallet',async()=>{
     const state=await load();state.adscendConversions||=[];state.adscendOfferSnapshots||=[];
     const participant=(state.participants||[]).find(x=>x.id===participantId&&x.status==='active'&&x.role==='participant');
@@ -389,16 +398,15 @@ async function handler(req,res){
     const suppliedId=String(params.transaction_id||params.transactionId||params.txid||'').trim();
     const transactionId=suppliedId?suppliedId.slice(0,180):crypto.createHash('sha256').update([participantId,offerId,watchTime,ip].join(':')).digest('hex');
     if(state.adscendConversions.some(x=>x.transactionId===transactionId))return send(res,200,{ok:true,duplicate:true});
-    const reportedPayout=Number(params.pay||params.payout);
-    const currency=String(params.cur||'').trim().toUpperCase();
-    const conversion={id:crypto.randomUUID(),provider:'adscend',participantId,offerId,transactionId,watchTime,ipHash:ip?crypto.createHash('sha256').update(ip).digest('hex'):null,publisherPayoutUsd:snapshot.publisherPayoutUsd??null,participantEstimateUsd:snapshot.participantEstimateUsd??null,reportedPayout:Number.isFinite(reportedPayout)&&reportedPayout>0?reportedPayout:null,currency,status:'video_completed_pending_partner_reconciliation',receivedAt:new Date().toISOString(),creditIssued:false};
-    // PAY is the commission reported by Adscend. Only an explicit BRL amount can
-    // enter the Pix wallet; USD/points remain pending rather than being misread as BRL.
-    if(Number.isFinite(reportedPayout)&&reportedPayout>0&&currency==='BRL'){
+    const conversion={id:crypto.randomUUID(),provider:'adscend',participantId,offerId,transactionId,watchTime,ipHash:ip?crypto.createHash('sha256').update(ip).digest('hex'):null,publisherPayoutUsd:snapshot.publisherPayoutUsd??null,participantEstimateUsd:snapshot.participantEstimateUsd??null,reportedPayout:Number.isFinite(reportedPayout)&&reportedPayout>0?reportedPayout:null,currency,usdBrlRate:fx?.rate||null,fxAsOf:fx?.asOf||null,status:'video_completed_pending_partner_reconciliation',receivedAt:new Date().toISOString(),creditIssued:false};
+    // O crédito só é liberado após o postback do parceiro. USD é convertido
+    // pela cotação consultada no momento do evento; sem cotação válida, fica pendente.
+    if(Number.isFinite(reportedPayout)&&reportedPayout>0&&(currency==='BRL'||currency==='USD'&&fx?.rate)){
      const share=Math.min(0.9,Math.max(0.1,Number(process.env.ADSCEND_USER_SHARE||70)))/100;
-     const amount=Math.round(reportedPayout*share*100)/100;
+     const grossBrl=currency==='USD'?reportedPayout*fx.rate:reportedPayout;
+     const amount=Math.round(grossBrl*share*100)/100;
      if(amount>0){
-      const earning={id:crypto.randomUUID(),participantId,campaignId:null,provider:'adscend',providerTransactionId:transactionId,providerConfirmed:true,publisherPayout:reportedPayout,currency:'BRL',amount,status:'approved_unpaid',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+      const earning={id:crypto.randomUUID(),participantId,campaignId:null,provider:'adscend',providerTransactionId:transactionId,publisherPayout:reportedPayout,publisherCurrency:currency,usdBrlRate:fx?.rate||null,fxAsOf:fx?.asOf||null,providerConfirmed:true,currency:'BRL',amount,status:'approved_unpaid',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
       state.adEarnings||=[];state.adEarnings.unshift(earning);
       conversion.status='credited';conversion.creditIssued=true;conversion.earningId=earning.id;conversion.participantRewardBrl=amount;
      }
