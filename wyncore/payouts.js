@@ -3,7 +3,7 @@
 function cents(value){
  const n=Number(value);if(!Number.isFinite(n)||n<0)throw new Error('Valor monetário inválido.');return Math.round(n*100);
 }
-function reserveWithdrawal(state,{participantId,amountCents,withdrawalId,now}){
+function reserveWithdrawal(state,{participantId,amountCents,withdrawalId,now,payoutProvider='stripe_connect',payoutDestinationEncrypted=null,pixKeyType=null}){
  if(!Number.isInteger(amountCents)||amountCents<100)throw new Error('Saque mínimo de R$ 1,00.');
  state.adEarnings||=[];
  const active=state.adEarnings.some(e=>e.participantId===participantId&&e.selfServiceWithdrawal&&['payout_requested','payout_pending','payout_review_required'].includes(e.status));
@@ -16,7 +16,7 @@ function reserveWithdrawal(state,{participantId,amountCents,withdrawalId,now}){
  for(const source of eligible){if(remaining<=0)break;const take=Math.min(cents(source.amount||0),remaining);if(take>0){allocations.push({source,take});remaining-=take}}
  if(remaining!==0){const error=new Error('Não foi possível reservar o saldo solicitado. Atualize a carteira e tente novamente.');error.status=409;throw error}
  for(const allocation of allocations){const left=cents(allocation.source.amount||0)-allocation.take;allocation.source.amount=left/100;if(left===0)allocation.source.status='allocated';allocation.source.updatedAt=now}
- const earning={id:withdrawalId,participantId,campaignId:allocations[0]?.source.campaignId||null,amount:amountCents/100,status:'payout_requested',payoutProvider:'stripe_connect',stripeTransferId:null,payoutRequestedAt:now,createdAt:now,updatedAt:now,selfServiceWithdrawal:true,allocations:allocations.map(a=>({earningId:a.source.id,amount:a.take/100}))};
+ const earning={id:withdrawalId,participantId,campaignId:allocations[0]?.source.campaignId||null,amount:amountCents/100,status:'payout_requested',payoutProvider,stripeTransferId:null,payoutRequestedAt:now,createdAt:now,updatedAt:now,selfServiceWithdrawal:true,payoutDestinationEncrypted,pixKeyType,allocations:allocations.map(a=>({earningId:a.source.id,amount:a.take/100}))};
  state.adEarnings.unshift(earning);return earning;
 }
 function attachTransfer(earning,transfer,now){
