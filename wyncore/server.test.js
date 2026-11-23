@@ -80,8 +80,24 @@ test('WYNCORE integrated app: public shell, accounts, campaigns and safe payment
  assert.equal(manualFunding.status,410,'manual funding confirmations are disabled');
  const manualPayment=await fetch(base+'/api/assignments/fake-assignment/payment',{method:'POST',headers:{cookie:admin,'content-type':'application/json'},body:JSON.stringify({reference:'MANUAL-FAKE'})});
  assert.equal(manualPayment.status,410,'manual payment confirmations are disabled');
+ const pixProfile=await fetch(base+'/api/pix-key',{headers:{cookie:participant}});
+ assert.equal(pixProfile.status,200);
+ assert.equal((await pixProfile.json()).hasPixKey,false);
+ const savePix=await fetch(base+'/api/pix-key',{method:'POST',headers:{cookie:participant,'content-type':'application/json'},body:JSON.stringify({type:'email',key:'recebimento@example.org'})});
+ assert.equal(savePix.status,200);
+ const savedPix=await savePix.json();
+ assert.equal(savedPix.hasPixKey,true);
+ assert.equal(savedPix.keyType,'email');
+ assert.ok(savedPix.masked.includes('@'));
+ assert.equal(JSON.stringify(savedPix).includes('recebimento@example.org'),false,'raw Pix key must not be returned');
+ const pixAgain=await (await fetch(base+'/api/pix-key',{headers:{cookie:participant}})).json();
+ assert.equal(pixAgain.hasPixKey,true);
+ assert.equal(pixAgain.masked,savedPix.masked);
  const pix=await fetch(base+'/api/my-pix-withdrawal',{method:'POST',headers:{cookie:participant,'content-type':'application/json'},body:JSON.stringify({amount:10})});
- assert.equal(pix.status,410,'Pix withdrawals are retired');
+ assert.notEqual(pix.status,410,'Pix withdrawal route must no longer be retired');
+ const pixAdmin=await fetch(base+'/api/admin/pix-withdrawals',{headers:{cookie:admin}});
+ assert.equal(pixAdmin.status,200);
+ assert.ok(Array.isArray((await pixAdmin.json()).requests));
 
  const advertiser=await fetch(base+'/api/advertiser-inquiries',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({company:'Empresa de Teste',contact:'Responsável',email:'contato@empresa.com',phone:'11912345678',budget:500,channel:'digital',objective:'Avaliar percepção e clareza de campanha com participantes reais.'})});
  assert.equal(advertiser.status,201);
