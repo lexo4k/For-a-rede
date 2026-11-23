@@ -1,7 +1,7 @@
 'use strict';
 const $=id=>document.getElementById(id);
 const money=n=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(n)||0);
-const state={programs:[],assignments:[],participants:[],ledger:[],conversions:[],adEarnings:[],wallet:{confirmed:0,pending:0},referrals:[],audit:[],companyLeads:[],companyCosts:[],workOpportunities:[],workTracking:[],workEngineMeta:{},workPortals:[],adWorkspace:{},adscendOffers:[],adscendError:'',pixProfile:{},pixRequests:[]};
+const state={programs:[],assignments:[],participants:[],ledger:[],conversions:[],adEarnings:[],wallet:{confirmed:0,pending:0},referrals:[],audit:[],companyLeads:[],companyCosts:[],adWorkspace:{},adscendOffers:[],adscendError:'',pixProfile:{},pixRequests:[]};
 let me=null;
 async function api(path,options={}){const r=await fetch('/api'+path,{credentials:'same-origin',cache:'no-store',...options,headers:{...(options.body?{'Content-Type':'application/json'}:{}),...(options.headers||{})}});if(!r.ok){let m='Falha HTTP '+r.status+' ao acessar '+path+'.';try{const data=await r.json();m=data.error||m}catch{}if(r.status===401)showLogin();throw Error(m)}return r.headers.get('content-type')?.includes('text/csv')?r.blob():r.status===204?null:r.json()}
 function node(tag,cls='',text=''){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n}
@@ -63,32 +63,6 @@ function renderLedger(){
  conversions.forEach(item=>{const row=node('div','list-row');row.append(node('strong','',item.creditIssued?'Recompensa confirmada · '+money(item.participantRewardBrl||0):'Conclusão aguardando confirmação do parceiro'),node('small','',item.currency==='USD'?'Pagamento informado em USD · conversão BRL pendente ou registrada':'Parceiro Adscend · '+(item.status||'em análise')));panel.append(row)});
 }
 
-function refreshWorkEngine(silent=false){return api('/work-engine/scan',{method:'POST',body:'{}'}).then(async result=>{const w=await api('/work-engine');state.workOpportunities=w.jobs||[];state.workTracking=w.tracking||[];state.workEngineMeta=w.meta||{};state.workPortals=w.portals||[];renderWorkEngine();if(!silent)$('work-engine-status').textContent='Varredura concluída: '+result.added+' novas oportunidades, '+result.total+' no radar.';return result}).catch(error=>{if(!silent)$('work-engine-status').textContent=error.message;throw error})}
-function renderWorkEngine(){
- const list=$('work-engine-list'),sources=$('work-engine-sources'),portals=$('work-engine-portals'),scan=$('work-engine-scan');if(!list||!sources||!portals)return;
- if(scan)scan.classList.toggle('hidden',me?.role!=='admin');
- const meta=state.workEngineMeta||{},jobs=state.workOpportunities||[],tracking=state.workTracking||[];
- $('work-engine-count').textContent=jobs.length+' encontradas';
- const last=meta.lastScanAt?new Date(meta.lastScanAt).toLocaleString('pt-BR'):'ainda não executada';
- $('work-engine-status').textContent='Última varredura: '+last+' · '+(meta.total??jobs.length)+' oportunidades catalogadas. O radar atualiza automaticamente quando a administração abre o painel e por agendamento no servidor.';
- sources.replaceChildren();
- (meta.sources||[]).forEach(source=>{const item=node('div','work-source'),name=node('strong','',source.name),stateLabel=node('span',source.ok?'source-ok':'source-error',source.ok?'Consultado':'Falha na consulta'),count=node('small','',source.ok?source.count+' oportunidades relevantes':'Não foi possível consultar esta fonte');item.append(name,stateLabel,count);sources.append(item)});
- if(!(meta.sources||[]).length)sources.append(node('p','muted','As fontes serão consultadas na primeira varredura.'));
- list.replaceChildren();
- if(!jobs.length)list.append(node('p','empty','Nenhuma oportunidade compatível encontrada nesta varredura. O radar continuará consultando as fontes.'));
- const labels={interested:'Tenho interesse',applied:'Candidatura enviada',interview:'Em entrevista',closed:'Encerrada'};
- jobs.forEach(job=>{
-  const card=node('article','work-opportunity-card'),top=node('div','work-job-top'),company=node('span','work-job-company',job.company+' · '+job.source),score=node('span','work-job-score','Compatibilidade '+job.score+'/10'),title=node('h4','',job.title),location=node('p','work-job-location',(job.location||'Remoto; elegibilidade a confirmar')+(job.salary?' · Remuneração informada pela fonte: '+job.salary:'')),desc=node('p','work-job-description',job.description||'Consulte os requisitos no portal oficial.'),actions=node('div','work-job-actions'),link=node('a','work-open','Ver oportunidade ↗');
-  top.append(company,score);link.href=job.url;link.target='_blank';link.rel='noopener noreferrer';
-  let current=tracking.find(x=>x.jobId===job.id)?.status||'';const select=node('select','work-track');
-  const initial=node('option','','Acompanhar…');initial.value='';initial.selected=!current;select.append(initial);
-  Object.entries(labels).forEach(([value,label])=>{const option=node('option','',label);option.value=value;option.selected=current===value;select.append(option)});
-  select.addEventListener('change',async()=>{if(!select.value)return;select.disabled=true;try{const saved=await api('/work-engine/'+encodeURIComponent(job.id)+'/track',{method:'POST',body:JSON.stringify({status:select.value})});current=select.value;const idx=tracking.findIndex(x=>x.jobId===job.id);if(idx>=0)state.workTracking[idx]=saved;else state.workTracking.push(saved)}catch(error){alert(error.message);select.value=current}finally{select.disabled=false}});
-  actions.append(link,select);card.append(top,title,location,desc,actions);list.append(card);
- });
- portals.replaceChildren();
- (state.workPortals||[]).forEach(portal=>{const item=node('a','work-portal');item.href=portal.url;item.target='_blank';item.rel='noopener noreferrer';item.append(node('strong','',portal.name),node('small','',portal.focus),node('span','', 'Abrir portal oficial ↗'));portals.append(item)});
-}
 function render(){
  renderPrograms();renderTasks();
  const mine=state.assignments,adEarnings=state.adWorkspace?.earnings||state.adEarnings||[];
