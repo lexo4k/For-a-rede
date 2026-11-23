@@ -1,25 +1,26 @@
-# ForçaRede ⚡
+# WYNCORE — Work & Ads
 
-**Painel para acompanhar computação distribuída e recompensas verificadas.**
+Plataforma web responsiva para organizar projetos de trabalho, campanhas patrocinadas, avaliações e carteira financeira.
 
-O ForçaRede está sendo desenvolvido para reunir, em uma interface simples, integrações legítimas com redes de computação distribuída e serviços que forneçam dados reais.
+## Módulos
+- **Work:** catálogo de plataformas externas e acompanhamento de candidaturas/projetos.
+- **Ads:** campanhas patrocinadas, vídeos, briefings e avaliações; recompensas somente após confirmação do parceiro.
+- **Carteira:** saldo confirmado, lançamentos e extrato.
+- **Pix:** cadastro de chave, depósitos e solicitações de saque.
+- **Empresas:** propostas comerciais para campanhas.
+- **Relatórios:** acompanhamento de atividade e movimentações.
+- **Configurações:** estado das integrações e transparência operacional.
 
-## Estado atual
+## Regras financeiras
+- Nenhum saldo é criado por estimativa, clique, cadastro ou visualização sem confirmação do provedor.
+- Não há promessa de renda ou pagamento automático sem contrato e liquidação real.
+- Mercado Pago não faz parte da arquitetura.
+- Stripe está conectado à sessão do ChatGPT, mas a conta consultada ainda informa `charges_enabled=false`, `payouts_enabled=false` e `details_submitted=false`.
+- Adscend Media exige credenciais e aprovação de publisher antes de oferecer campanhas remuneradas.
+- Pix depende de um provedor de cobrança/transferência habilitado e webhooks verificados.
 
-- [x] Interface web responsiva, pensada primeiro para celular.
-- [x] Campo para endereço público de recebimento, salvo apenas neste navegador.
-- [x] Painel de status, atividade, confirmações e eventos.
-- [x] Indicadores deixam claro quando uma integração ainda não está conectada.
-- [ ] Conector real de provedor: ainda precisa ser implementado e configurado.
-- [ ] Leitura de saldo/recompensas por API oficial ou explorador compatível.
-- [ ] Testes com dados reais antes de declarar qualquer operação ativa.
+## Estado desta branch
+A interface WYNCORE foi reconstruída e publicada em Preview na Vercel. Os formulários que dependem de APIs estão explicitamente identificados como não conectados; não simulam salvamento, cobrança, recompensa ou transferência. Esta branch ainda não deve ser promovida a produção até concluir e testar backend, autenticação, persistência, pagamentos e webhooks.
 
-**Importante:** o painel não minera sozinho e não gera recompensas por abrir a página. Não mostra hashrate, ganhos ou confirmações inventadas. Um endereço de recebimento é específico para uma moeda/rede; um endereço público não serve necessariamente para todas elas.
-
-### Segurança
-- Nunca cole frase-semente, chave privada, senha ou token secreto no painel.
-- Use somente APIs oficiais e serviços para os quais você tenha autorização.
-- A versão atual salva o endereço público localmente no navegador e não o envia a um servidor.
-
-## Abrir
-Abra `index.html` no navegador ou publique o repositório com GitHub Pages. A interface atual é uma base visual; integrações reais ainda não estão ativas.
+## Segurança
+Nunca colocar chaves privadas, tokens secretos ou credenciais de provedor no frontend. Usar variáveis de ambiente server-side e validar webhooks antes de alterar a carteira.
