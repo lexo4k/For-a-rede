@@ -33,3 +33,18 @@ test('official work portals are direct links and explicitly marked as portals',(
  assert.ok(W.PORTALS.length>=8);
  for(const p of W.PORTALS){assert.equal(p.kind,'portal');assert.match(p.url,/^https:\/\//);assert.ok(p.name&&p.focus)}
 });
+
+test('parallel public feeds are scanned independently and merged without duplicates',async()=>{
+ const fakeFetch=async url=>{
+  let payload;
+  if(url.includes('remotive.com'))payload={jobs:[{title:'Portuguese AI Data Annotator',company_name:'Remotive Co',url:'https://remotive.com/remote-jobs/1',description:'Annotate Portuguese AI training data'}]};
+  else if(url.includes('arbeitnow.com'))payload={data:[{title:'Portuguese Data Annotator',company_name:'Arbeit Co',url:'https://arbeitnow.com/jobs/1',description:'Data annotation project',remote:true}]};
+  else payload=[{position:'AI Data Annotator',company_name:'Remote OK Co',apply_url:'https://remoteok.com/remote-jobs/1',description:'Label data for AI models'}];
+  return {ok:true,json:async()=>payload};
+ };
+ const result=await W.scanSources(fakeFetch);
+ assert.equal(result.sources.length,3);
+ assert.ok(result.sources.every(x=>x.ok));
+ assert.ok(result.jobs.length>=3);
+ assert.ok(result.jobs.every(x=>x.url.startsWith('https://')&&x.score>=3));
+});
