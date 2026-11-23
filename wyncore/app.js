@@ -58,11 +58,12 @@ function renderWorkEngine(){
  if(!jobs.length)list.append(node('p','empty','Nenhuma oportunidade compatível encontrada nesta varredura. O radar continuará consultando as fontes.'));
  const labels={interested:'Tenho interesse',applied:'Candidatura enviada',interview:'Em entrevista',closed:'Encerrada'};
  jobs.forEach(job=>{
-  const card=node('article','work-opportunity-card'),top=node('div','work-job-top'),company=node('span','work-job-company',job.company+' · '+job.source),score=node('span','work-job-score','Compatibilidade '+job.score+'/10+'),title=node('h4','',job.title),location=node('p','work-job-location',job.location||'Remoto; elegibilidade a confirmar'),desc=node('p','work-job-description',job.description||'Consulte os requisitos no portal oficial.'),actions=node('div','work-job-actions'),link=node('a','work-open','Ver oportunidade ↗');
+  const card=node('article','work-opportunity-card'),top=node('div','work-job-top'),company=node('span','work-job-company',job.company+' · '+job.source),score=node('span','work-job-score','Compatibilidade '+job.score+'/10'),title=node('h4','',job.title),location=node('p','work-job-location',job.location||'Remoto; elegibilidade a confirmar'),desc=node('p','work-job-description',job.description||'Consulte os requisitos no portal oficial.'),actions=node('div','work-job-actions'),link=node('a','work-open','Ver oportunidade ↗');
   top.append(company,score);link.href=job.url;link.target='_blank';link.rel='noopener noreferrer';
-  const current=tracking.find(x=>x.jobId===job.id)?.status||'interested',select=node('select','work-track');
+  const current=tracking.find(x=>x.jobId===job.id)?.status||'',select=node('select','work-track');
+  const initial=node('option','','Acompanhar…');initial.value='';initial.selected=!current;select.append(initial);
   Object.entries(labels).forEach(([value,label])=>{const option=node('option','',label);option.value=value;option.selected=current===value;select.append(option)});
-  select.addEventListener('change',async()=>{select.disabled=true;try{const saved=await api('/work-engine/'+encodeURIComponent(job.id)+'/track',{method:'POST',body:JSON.stringify({status:select.value})});const idx=tracking.findIndex(x=>x.jobId===job.id);if(idx>=0)state.workTracking[idx]=saved;else state.workTracking.push(saved)}catch(error){alert(error.message);select.value=current}finally{select.disabled=false}});
+  select.addEventListener('change',async()=>{if(!select.value)return;select.disabled=true;try{const saved=await api('/work-engine/'+encodeURIComponent(job.id)+'/track',{method:'POST',body:JSON.stringify({status:select.value})});const idx=tracking.findIndex(x=>x.jobId===job.id);if(idx>=0)state.workTracking[idx]=saved;else state.workTracking.push(saved)}catch(error){alert(error.message);select.value=current}finally{select.disabled=false}});
   actions.append(link,select);card.append(top,title,location,desc,actions);list.append(card);
  });
  portals.replaceChildren();
