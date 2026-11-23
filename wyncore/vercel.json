@@ -2,6 +2,9 @@
   "functions": {
     "api/[...path].js": {
       "maxDuration": 10
+    },
+    "api/cron/work-scan.js": {
+      "maxDuration": 10
     }
   },
   "crons": [
