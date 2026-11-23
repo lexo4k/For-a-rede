@@ -262,3 +262,33 @@ input,select,textarea,.form-grid input,.auth-card input{background:#0a130e;borde
 
 .empty-chart{position:absolute;inset:12px 12px 30px;opacity:.42;background-image:linear-gradient(#33544055 1px,transparent 1px),linear-gradient(90deg,#33544055 1px,transparent 1px);background-size:100% 32px,10% 100%;border-bottom:1px solid #35533f}
 .empty-chart svg{display:none}
+
+
+/* WYNCORE visual preview: make the actual landing screen show the intended product UI */
+.public-hero{align-items:stretch;gap:clamp(22px,4vw,48px);min-height:390px}
+.public-hero-copy{align-self:center;flex:1 1 48%;min-width:0}
+.public-dashboard-preview{position:relative;align-self:center;display:grid;grid-template-columns:48px minmax(0,1fr);flex:1 1 52%;min-width:0;max-width:570px;min-height:290px;padding:9px;border:1px solid #345744;border-radius:17px;background:#09120d;box-shadow:0 24px 65px #0008,0 0 0 5px #7ce3a00b;transform:perspective(1100px) rotateY(-5deg) rotateX(2deg)}
+.preview-sidebar{display:flex;flex-direction:column;align-items:center;gap:13px;padding:8px 5px;border-right:1px solid #24392c}
+.preview-brand{width:29px;height:29px;display:grid;place-items:center;border:1px solid #4e9d6c;border-radius:9px;background:#173c27;color:#c8f5d6;font:800 16px Manrope;margin-bottom:8px}
+.preview-sidebar i{display:block;width:22px;height:7px;border-radius:5px;background:#294434}
+.preview-sidebar i.selected{height:23px;background:#327b4d;box-shadow:0 0 16px #4bd47a33}
+.preview-main{min-width:0;padding:7px 10px 6px 12px}
+.preview-top{display:flex;align-items:center;justify-content:space-between;color:#effaf1;font-size:11px}
+.preview-top b,.preview-top small{display:block}.preview-top small{margin-top:3px;color:#82988a;font-size:8px}
+.preview-avatar{width:24px;height:24px;display:grid;place-items:center;border:1px solid #3d6c4c;border-radius:8px;background:#1b3b27;color:#c7f4d4;font-weight:800}
+.preview-welcome{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:12px;padding:13px;border:1px solid #31553b;border-radius:10px;background:linear-gradient(110deg,#173824,#1b4a30)}
+.preview-welcome small,.preview-stats small,.preview-chart>small,.preview-wallet>small{display:block;color:#8fdaa8;font-size:7px;letter-spacing:1.3px;font-weight:800}
+.preview-welcome b{display:block;margin-top:6px;color:#f0fff4;font:800 clamp(13px,2vw,19px)/1.15 Manrope}
+.preview-welcome em{display:block;margin-top:5px;color:#b0d4ba;font-size:7px;font-style:normal}
+.preview-mark{display:grid;place-items:center;flex:0 0 48px;width:48px;height:48px;border:1px solid #64bd7e;border-radius:14px;background:linear-gradient(145deg,#2c7545,#17432b);color:#d7ffe2;font:800 27px Manrope}
+.preview-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:8px}
+.preview-stats span{min-width:0;padding:9px;border:1px solid #2a4032;border-radius:8px;background:#111d15}
+.preview-stats small{font-size:6px;color:#91aa98;letter-spacing:.8px}
+.preview-stats b{display:block;margin-top:7px;color:#e6f7e9;font:700 15px Manrope;letter-spacing:2px}
+.preview-lower{display:grid;grid-template-columns:1.35fr .9fr;gap:8px;margin-top:8px}
+.preview-chart,.preview-wallet{min-width:0;padding:9px;border:1px solid #2a4032;border-radius:8px;background:#101b14}
+.preview-chart svg{display:block;width:100%;height:58px;margin-top:6px}
+.preview-chart em{display:block;color:#758d7b;font-size:6px;font-style:normal}
+.preview-wallet b{display:block;margin:8px 0;color:#e4f4e8;font:700 9px Manrope}
+.preview-wallet i{display:block;padding:5px 0;border-top:1px solid #273c2d;color:#a9c4af;font-size:7px;font-style:normal}
+@media(max-width:760px){.public-hero{display:flex;flex-direction:column;align-items:stretch;min-height:0}.public-dashboard-preview{width:100%;max-width:none;min-height:245px;transform:none;grid-template-columns:39px minmax(0,1fr)}.preview-sidebar{gap:10px}.preview-main{padding:6px 7px}.preview-welcome{padding:10px}.preview-lower{grid-template-columns:1.2fr .8fr}}
