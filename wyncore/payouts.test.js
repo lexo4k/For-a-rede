@@ -78,3 +78,12 @@ test('recompensa Adscend só entra no repasse após postback confirmado em BRL',
  const p=reserveWithdrawal(s,{participantId:'p1',amountCents:425,withdrawalId:'wa1',now:'now'});
  assert.equal(p.amount,4.25);assert.equal(s.adEarnings.find(x=>x.id==='a1').status,'allocated');assert.equal(s.adEarnings.find(x=>x.id==='a2').status,'approved_unpaid');
 });
+
+test('Pix withdrawal stores provider and encrypted destination snapshot',()=>{
+ const s=state(),p=reserveWithdrawal(s,{participantId:'p1',amountCents:500,withdrawalId:'pix1',now:'now',payoutProvider:'pix',payoutDestinationEncrypted:'iv.tag.cipher',pixKeyType:'email'});
+ assert.equal(p.payoutProvider,'pix');
+ assert.equal(p.payoutDestinationEncrypted,'iv.tag.cipher');
+ assert.equal(p.pixKeyType,'email');
+ assert.equal(p.status,'payout_requested');
+ assert.equal(s.adEarnings.find(x=>x.id==='e1').amount,3);
+});
