@@ -72,3 +72,13 @@ Na revisão de 22/11/2026:
 - Stripe: variáveis de chave privada, segredo de webhook e Connect não aparecem na configuração Vercel examinada; Checkout e repasses permanecem bloqueados.
 - Adscend: credenciais de publisher não aparecem na configuração Vercel examinada; ofertas permanecem indisponíveis.
 - Vercel: limite de 100 deployments por dia atingido; a nova versão não pôde ser publicada nesta janela.
+
+## 8. Radar autônomo WYNCORE Work
+
+O módulo `work-engine.js` consulta três fontes públicas de vagas remotas: Remotive, Arbeitnow e Remote OK. Os resultados são normalizados, limitados a HTTPS, classificados por termos relacionados a anotação de dados, avaliação de IA, idioma, pesquisa e tarefas remotas, e deduplicados pela URL. A cada varredura, o sistema preserva a primeira data de descoberta e o estado individual de acompanhamento.
+
+A Cron Job `/api/cron/work-scan` está programada para executar a cada seis horas. O endpoint exige `CRON_SECRET` no cabeçalho Bearer. A administração também pode iniciar uma varredura manual; o primeiro acesso administrativo executa uma varredura se não houver uma recente.
+
+OneForma, Welo Data, RWS TrainAI, Prolific, CrowdGen, TELUS Digital AI Community, Outlier, DataForce e Clickworker são exibidos como links oficiais de acesso. Não existe integração autenticada com as contas dessas plataformas nem API pública de candidaturas. O WYNCORE não envia candidaturas, não resolve avaliações, não grava áudio, não simula cliques e não realiza tarefas que exigem julgamento humano. A pessoa acompanha os resultados e decide candidatar-se no site oficial.
+
+O radar não informa salário garantido. Localização, idioma, equipamento, identidade, disponibilidade e aprovação são verificados por cada parceiro. A ausência de resultados em uma fonte é registrada como falha de consulta, nunca como prova de que não existem projetos.
