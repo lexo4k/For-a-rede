@@ -347,7 +347,7 @@ async function handler(req,res){
    });
   }
 
- if(req.method==='GET'&&p==='/api/cron/work-scan'){
+ if((req.method==='GET'||req.method==='POST')&&p==='/api/cron/work-scan'){
   const expected=String(process.env.CRON_SECRET||''),provided=String(req.headers.authorization||'');
   if(expected.length<32||!safeEqual(provided,'Bearer '+expected))return send(res,401,{error:'Cron não autenticado.'});
   const d=await load();const result=await runWorkScan(d);return send(res,200,result);
