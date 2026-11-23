@@ -1,6 +1,6 @@
 'use strict';
 const http=require('node:http'),fs=require('node:fs/promises'),path=require('node:path'),crypto=require('node:crypto');
-const D=require('./domain'),Adscend=require('./adscend'),Payouts=require('./payouts'),Storage=require('./storage'),Stripe=require('./stripe');
+const D=require('./domain'),Adscend=require('./adscend'),Payouts=require('./payouts'),Storage=require('./storage'),Stripe=require('./stripe'),WorkEngine=require('./work-engine');
 const ROOT=__dirname,DATA_DIR=process.env.DATA_DIR||path.join(ROOT,'data'),DATA_FILE=path.join(DATA_DIR,'wyncore.json');
 const PORT=Number(process.env.PORT||3000),PASSWORD=process.env.WYNCORE_OWNER_PASSWORD||'',SECRET=process.env.WYNCORE_SESSION_SECRET||'',PARTNER_SECRET=process.env.WYNCORE_PARTNER_WEBHOOK_SECRET||'',GOOGLE_CLIENT_ID=process.env.WYNCORE_GOOGLE_CLIENT_ID||'',PROD=process.env.NODE_ENV==='production';
 const COOKIE='wyncore_session',SESSION_MS=8*60*60*1000;
@@ -85,6 +85,17 @@ async function save(d){
 function err(message,status=400){throw Object.assign(Error(message),{status})}
 const STATUSES=['Em análise','Inscrito','Em execução','Concluída, aguardando aprovação','Confirmada pelo contratante','Recebido','Descartada'];
 function validateOpportunity(v){const title=String(v.title||'').trim().slice(0,90),source=String(v.source||'').trim().slice(0,90),value=Number(v.value),url=String(v.url||'').trim();if(!title||!source||!Number.isFinite(value)||value<0||value>10000000)err('Confira nome, fonte e valor.');if(url){let u;try{u=new URL(url)}catch{}if(!u||u.protocol!=='https:')err('O link precisa ser HTTPS válido.')}return{id:crypto.randomUUID(),title,source,value,url,status:'Registrada',createdAt:new Date().toISOString()}}
+async function runWorkScan(d){
+ const scan=await WorkEngine.scanSources();
+ d.workOpportunities||=[];
+ const merged=WorkEngine.mergeJobs(d.workOpportunities,scan.jobs);
+ d.workOpportunities=merged.jobs;
+ d.workEngineMeta={lastScanAt:scan.checkedAt,sources:scan.sources,added:merged.added,updated:merged.updated,total:d.workOpportunities.length};
+ d.events||=[];d.events.unshift({id:crypto.randomUUID(),type:'work_opportunity_scan',at:scan.checkedAt,details:{added:merged.added,updated:merged.updated,sources:scan.sources.length}});
+ if(d.events.length>5000)d.events=d.events.slice(0,5000);
+ await save(d);
+ return {ok:true,added:merged.added,updated:merged.updated,total:d.workOpportunities.length,meta:d.workEngineMeta};
+}
 function originAllowed(req){const o=req.headers.origin;return !o||o===((PROD?'https':'http')+'://'+req.headers.host)}
 function limited(req,scope,identity,limit=10,windowMs=900000){const forwarded=String(req.headers?.['x-forwarded-for']||'').split(',')[0].trim(),socket=req.socket||{},ip=socket.remoteAddress||req.ip||forwarded||'unknown',now=Date.now(),id=String(identity||'').trim().toLowerCase()||'unknown',ipKey='ip:'+scope+':'+ip,idKey='id:'+scope+':'+ip+':'+crypto.createHash('sha256').update(id).digest('hex').slice(0,20);if(rate.size>5000)for(const[k,v]of rate)if(now-v.t>windowMs*2)rate.delete(k);const bump=(key,max)=>{const x=rate.get(key)||{n:0,t:now};if(now-x.t>windowMs){x.n=0;x.t=now}x.n++;rate.set(key,x);return x.n>max};return bump(ipKey,120)||bump(idKey,limit);}
 function hashPassword(p,salt=crypto.randomBytes(16).toString('hex')){return new Promise((resolve,reject)=>crypto.scrypt(String(p),salt,64,(e,k)=>e?reject(e):resolve(salt+':'+k.toString('hex'))))}
@@ -336,10 +347,34 @@ async function handler(req,res){
    });
   }
 
+ if(req.method==='GET'&&p==='/api/cron/work-scan'){
+  const expected=String(process.env.CRON_SECRET||''),provided=String(req.headers.authorization||'');
+  if(expected.length<32||!safeEqual(provided,'Bearer '+expected))return send(res,401,{error:'Cron não autenticado.'});
+  const d=await load();const result=await runWorkScan(d);return send(res,200,result);
+ }
  if(p==='/api/work'||p.startsWith('/api/work/'))return send(res,410,{error:'Rota antiga desativada. Utilize as atividades do painel principal.'});
  if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
  const session=readSession(req);if(!session)return send(res,401,{error:'Sessão expirada.'});
  const d=await load(),me=actor(session,d);if(!me)return send(res,403,{error:'Conta inativa ou sem permissão.'});
+ d.workOpportunities||=[];d.workTracking||=[];
+ if(req.method==='GET'&&p==='/api/work-engine'){
+  const mine=d.workTracking.filter(x=>x.userId===me.id);
+  return send(res,200,{jobs:d.workOpportunities.slice(0,300),tracking:mine,meta:d.workEngineMeta||{lastScanAt:null,sources:[],total:d.workOpportunities.length},portals:WorkEngine.PORTALS});
+ }
+ if(req.method==='POST'&&p==='/api/work-engine/scan'){
+  if(me.role!=='admin')err('Somente administração pode iniciar a varredura.',403);
+  if(limited(req,'work-engine-scan',me.id,1,300000))return send(res,429,{error:'A varredura foi executada recentemente. Aguarde cinco minutos.'});
+  const result=await runWorkScan(d);return send(res,200,result);
+ }
+ const workTrack=p.match(/^\/api\/work-engine\/([\w-]+)\/track$/);
+ if(req.method==='POST'&&workTrack){
+  const job=d.workOpportunities.find(x=>x.id===workTrack[1]);if(!job)return send(res,404,{error:'Oportunidade não encontrada.'});
+  const b=await body(req),status=String(b.status||'interested');
+  if(!['interested','applied','interview','closed'].includes(status))err('Etapa de acompanhamento inválida.');
+  let item=d.workTracking.find(x=>x.userId===me.id&&x.jobId===job.id);
+  if(!item){item={id:crypto.randomUUID(),userId:me.id,jobId:job.id,createdAt:new Date().toISOString()};d.workTracking.unshift(item)}
+  item.status=status;item.updatedAt=new Date().toISOString();await save(d);return send(res,200,item);
+ }
  if(req.method==='GET'&&p==='/api/me')return send(res,200,{id:me.id,role:me.role,email:me.email,name:me.name||'Administrador'});
  if(req.method==='GET'&&p==='/api/integrations/status'){
   if(me.role!=='admin')err('Somente administração.',403);
