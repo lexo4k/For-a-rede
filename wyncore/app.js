@@ -50,6 +50,7 @@ function renderPixWallet(){
  const profile=state.pixProfile||{},current=$('pix-key-current'),available=Number(state.adWorkspace?.earningSummary?.availableForPix||0),label=$('pix-withdrawable-label'),amount=$('pix-withdrawal-amount'),submit=$('pix-withdrawal-submit');
  if(current)current.textContent=profile.hasPixKey?'Chave cadastrada: '+profile.keyType.toUpperCase()+' · '+profile.masked:'Nenhuma chave cadastrada.';
  if(label)label.textContent='Disponível para saque: '+money(available);
+ const shortcut=$('wallet-pix-summary');if(shortcut)shortcut.textContent=profile.hasPixKey?'Chave '+profile.keyType.toUpperCase()+' cadastrada ('+profile.masked+'). Consulte o fluxo de saque em Pagamentos Pix.':'Sua chave ainda não foi cadastrada. Abra Pagamentos Pix para informar a chave de recebimento.';
  if(amount)amount.max=String(available);
  if(submit)submit.disabled=me?.role!=='participant'||!profile.hasPixKey||available<1;
 }
