@@ -77,6 +77,6 @@ A WYNCORE usa Vercel e Supabase para hospedagem/persistência e Stripe para paga
 
 ## Radar autônomo de oportunidades
 
-O radar consulta fontes públicas a cada seis horas pela Cron Job do Vercel e também pode ser executado pela administração. Configure `CRON_SECRET` como variável sensível em Production e Preview. A rota `/api/cron/work-scan` valida o cabeçalho `Authorization: Bearer` antes de executar. O estado e o histórico ficam no armazenamento WYNCORE.
+O radar consulta fontes públicas uma vez por dia às 11:00 UTC pela Cron Job do Vercel e também pode ser executado pela administração. Configure `CRON_SECRET` como variável sensível em Production e Preview. A rota `/api/cron/work-scan` valida o cabeçalho `Authorization: Bearer` antes de executar. O estado e o histórico ficam no armazenamento WYNCORE.
 
 Fontes automáticas: Remotive, Arbeitnow e Remote OK. A lista de portais de projetos é mantida separada e abre os domínios oficiais. Não há scraping autenticado, uso de credenciais de terceiros ou candidatura automática. A compatibilidade é uma triagem por palavras-chave, não garantia de elegibilidade nem estimativa de renda.
