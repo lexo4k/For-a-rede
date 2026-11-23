@@ -107,6 +107,66 @@ async function resolveRequestActor(req){
  return Storage.withTransaction(()=>withLock('state',async()=>{const state=await load();return actor(session,state)}));
 }
 function publicOrigin(req){const host=String(req?.headers?.['x-forwarded-host']||req?.headers?.host||'').split(',')[0].trim();const proto=String(req?.headers?.['x-forwarded-proto']||'https').split(',')[0].trim();if(host&&proto==='https'&&(/\.vercel\.app$/i.test(host)||host==='wyncore.vercel.app'))return 'https://'+host;return String(process.env.WYNCORE_PUBLIC_URL||'https://wyncore.vercel.app').replace(/\/$/,'')}
+
+function validCpf(value){
+ const d=String(value||'').replace(/\\D/g,'');if(!/^\\d{11}$/.test(d)||/^([0-9])\\1+$/.test(d))return false;
+ for(let t=9;t<=10;t++){let sum=0;for(let i=0;i<t;i++)sum+=Number(d[i])*(t+1-i);let check=(sum*10)%11;if(check===10)check=0;if(check!==Number(d[t]))return false}return true;
+}
+function validCnpj(value){
+ const d=String(value||'').replace(/\\D/g,'');if(!/^\\d{14}$/.test(d)||/^([0-9])\\1+$/.test(d))return false;
+ const digit=(base,weights)=>{let sum=0;for(let i=0;i<weights.length;i++)sum+=Number(base[i])*weights[i];const r=sum%11;return r<2?0:11-r};
+ return digit(d.slice(0,12),[5,4,3,2,9,8,7,6,5,4,3,2])===Number(d[12])&&digit(d.slice(0,13),[6,5,4,3,2,9,8,7,6,5,4,3,2])===Number(d[13]);
+}
+function normalizePixKey(type,value){
+ const raw=String(value||'').trim();if(!raw||raw.length>180)throw Object.assign(Error('Informe uma chave Pix válida.'),{status:400});
+ if(type==='cpf'){const key=raw.replace(/\\D/g,'');if(!validCpf(key))throw Object.assign(Error('CPF inválido. Confira os 11 dígitos.'),{status:400});return key}
+ if(type==='cnpj'){const key=raw.replace(/\\D/g,'');if(!validCnpj(key))throw Object.assign(Error('CNPJ inválido. Confira os 14 dígitos.'),{status:400});return key}
+ if(type==='email'){const key=raw.toLowerCase();if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(key))throw Object.assign(Error('E-mail Pix inválido.'),{status:400});return key}
+ if(type==='phone'){const key=normalizePhone(raw);if(!/^\\d{10,11}$/.test(key))throw Object.assign(Error('Telefone Pix inválido. Informe DDD e número.'),{status:400});return '+55'+key}
+ if(type==='random'){const key=raw.toLowerCase();if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(key))throw Object.assign(Error('Chave aleatória Pix deve ser um UUID válido.'),{status:400});return key}
+ throw Object.assign(Error('Tipo de chave Pix inválido.'),{status:400});
+}
+function maskPixKey(type,key){
+ const v=String(key||'');if(type==='cpf'||type==='cnpj')return '••••••••'+v.slice(-2);
+ if(type==='phone')return '+55 ••••••'+v.slice(-4);
+ if(type==='email'){const [name,domain]=v.split('@');return (name.slice(0,2)||'••')+'•••@'+domain}
+ return v.slice(0,4)+'••••••••'+v.slice(-4);
+}
+async function handlePixKey(req,res){
+ if(!['GET','POST'].includes(req.method))return send(res,405,{error:'Método não permitido.'});
+ if(req.method==='POST'&&!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
+ const me=await resolveRequestActor(req);if(!me)return send(res,401,{error:'Sessão expirada.'});
+ return Storage.withTransaction(()=>withLock('state',async()=>{
+  const d=await load();d.pixPayoutProfiles||=[];
+  let profile=d.pixPayoutProfiles.find(x=>x.userId===me.id);
+  if(req.method==='GET')return send(res,200,{hasPixKey:Boolean(profile?.keyEncrypted),keyType:profile?.keyType||'',masked:profile?.masked||'',updatedAt:profile?.updatedAt||null});
+  const b=await body(req),type=String(b.type||''),key=normalizePixKey(type,b.key);
+  if(!profile){profile={userId:me.id};d.pixPayoutProfiles.push(profile)}
+  profile.keyType=type;profile.keyEncrypted=encryptSecret(key);profile.masked=maskPixKey(type,key);profile.updatedAt=new Date().toISOString();
+  await save(d);return send(res,200,{ok:true,hasPixKey:true,keyType:type,masked:profile.masked,updatedAt:profile.updatedAt,message:'Chave Pix salva com criptografia no servidor.'});
+ }));
+}
+async function handlePixWithdrawal(req,res){
+ if(req.method!=='POST')return send(res,405,{error:'Método não permitido.'});
+ if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
+ const me=await resolveRequestActor(req);if(!me)return send(res,401,{error:'Sessão expirada.'});
+ if(me.role!=='participant')return send(res,403,{error:'Somente participantes podem solicitar saque de recompensas.'});
+ if(limited(req,'pix-withdrawal',me.id,3,60000))return send(res,429,{error:'Aguarde um minuto antes de solicitar outro saque.'});
+ if(!payoutStorageSafe())return send(res,503,{error:'O armazenamento atual não garante reserva transacional para saques.'});
+ const b=await body(req),raw=String(b.amount??'').trim().replace(',','.'),amount=Number(raw);
+ if(!/^\\d+(?:\\.\\d{1,2})?$/.test(raw)||!Number.isFinite(amount)||amount<1)return send(res,400,{error:'Informe um valor a partir de R$ 1,00.'});
+ const amountCents=Math.round(amount*100),withdrawalId=crypto.randomUUID(),now=new Date().toISOString();
+ try{
+  const request=await Storage.withTransaction(()=>withLock('state',async()=>{
+   const d=await load();d.pixPayoutProfiles||=[];const profile=d.pixPayoutProfiles.find(x=>x.userId===me.id);
+   if(!profile?.keyEncrypted)throw Object.assign(Error('Cadastre sua chave Pix antes de solicitar o saque.'),{status:409});
+   const earning=Payouts.reserveWithdrawal(d,{participantId:me.id,amountCents,withdrawalId,now,payoutProvider:'pix',payoutDestinationEncrypted:profile.keyEncrypted,pixKeyType:profile.keyType});
+   earning.pixKeyMasked=profile.masked;earning.payoutError='Aguardando envio por um provedor Pix habilitado. A solicitação ainda não é comprovante de transferência.';
+   await save(d);return {id:earning.id,status:earning.status,amount:earning.amount,masked:profile.masked,message:'Solicitação registrada. O envio Pix ainda depende da ativação de um provedor de pagamentos habilitado.'};
+  }));
+  return send(res,202,{ok:true,...request});
+ }catch(error){return send(res,error.status||503,{error:error.message||'Não foi possível registrar o saque Pix.'})}
+}
 async function handleStripeConnect(req,res){
  if(req.method!=='POST')return send(res,405,{error:'Método não permitido.'});
  if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
@@ -254,6 +314,8 @@ async function handler(req,res){
   let requestPath='/';
   try{requestPath=new URL(req.url,'http://localhost').pathname}catch{}
   const apiRequest=requestPath.startsWith('/api/')||(!PUBLIC_FILES.has(requestPath)&&requestPath!=='/'&&requestPath!=='/health'&&!/\.[a-z0-9]+$/i.test(requestPath));
+  if(apiRequest&&(requestPath==='/api/pix-key')){req.__wyncoreStateLock=true;return handlePixKey(req,res).catch(error=>{console.error('WYNCORE Pix profile error:',error);if(!res.headersSent)send(res,error.status||503,{error:error.message||'Falha ao salvar chave Pix.'})})}
+  if(apiRequest&&requestPath==='/api/my-pix-withdrawal'){req.__wyncoreStateLock=true;return handlePixWithdrawal(req,res).catch(error=>{console.error('WYNCORE Pix withdrawal error:',error);if(!res.headersSent)send(res,error.status||503,{error:error.message||'Falha ao solicitar saque Pix.'})})}
   if(apiRequest&&requestPath==='/api/my-stripe-withdrawal'){req.__wyncoreStateLock=true;return handleStripeWithdrawal(req,res).catch(error=>{console.error('WYNCORE Stripe withdrawal error:',error);if(!res.headersSent)send(res,error.status||503,{error:error.status?error.message:'Não foi possível concluir a solicitação com segurança. Confira a carteira antes de tentar novamente.'})})}
   if(apiRequest&&requestPath==='/api/stripe/connect'){req.__wyncoreStateLock=true;return handleStripeConnect(req,res).catch(error=>{console.error('WYNCORE Stripe connect error:',error);if(!res.headersSent)send(res,error.status||503,{error:error.message||'Não foi possível conectar o Stripe.'})})}
   if(apiRequest&&requestPath==='/api/webhooks/stripe'){req.__wyncoreStateLock=true;return handleStripeWebhook(req,res).catch(error=>{console.error('WYNCORE Stripe webhook error:',error);if(!res.headersSent)send(res,error.status||503,{error:'Falha ao processar webhook Stripe.'})})}
@@ -264,7 +326,6 @@ async function handler(req,res){
  }
  try{
  const url=new URL(req.url,'http://localhost');let p=url.pathname;if(p!=='/'&&!p.startsWith('/api/')&&!PUBLIC_FILES.has(p)&&p!=='/health'&&!/\.[a-z0-9]+$/i.test(p))p='/api'+p;
- if(req.method==='POST'&&p==='/api/my-pix-withdrawal')return send(res,410,{error:'Saque Pix desativado. Use Stripe Connect.'});
  if(req.method==='GET'&&(p==='/health'||p==='/api/health'))return send(res,200,{ok:true,service:'WYNCORE',storage:process.env.DATABASE_URL?'postgres-transactional':Storage.rpcConfigured()?'supabase-rest-cas':process.env.BLOB_READ_WRITE_TOKEN?'vercel-blob-private':'single-writer-json',supabaseConfigured:Storage.rpcConfigured(),authConfigured:Boolean(PASSWORD&&SECRET.length>=32),ownerLoginConfigured:Boolean(PASSWORD),participantLoginConfigured:SECRET.length>=32,phoneLoginEnabled:SECRET.length>=32,googleEnabled:Boolean(GOOGLE_CLIENT_ID),googleClientId:GOOGLE_CLIENT_ID||null,integrations:{adscend:{configured:Adscend.configured(),postbackConfigured:Adscend.postbackConfigured()},stripe:{configured:Stripe.configured(),webhookConfigured:Stripe.webhookConfigured(),connectEnabled:Stripe.connectEnabled(),payoutStorageSafe:payoutStorageSafe()},payoutStorageSafe:payoutStorageSafe()},signupAvailable:true,publicAccess:true});
  if(req.method==='POST'&&p==='/api/access-request'){
   if(!originAllowed(req))return send(res,403,{error:'Origem não permitida.'});
@@ -376,6 +437,12 @@ async function handler(req,res){
   item.status=status;item.updatedAt=new Date().toISOString();await save(d);return send(res,200,item);
  }
  if(req.method==='GET'&&p==='/api/me')return send(res,200,{id:me.id,role:me.role,email:me.email,name:me.name||'Administrador'});
+ if(req.method==='GET'&&p==='/api/admin/pix-withdrawals'){
+  if(me.role!=='admin')err('Somente administração.',403);
+  const names=new Map((d.participants||[]).map(x=>[x.id,x.name||x.email||x.id]));
+  const requests=(d.adEarnings||[]).filter(x=>x.payoutProvider==='pix'&&x.selfServiceWithdrawal).map(x=>({id:x.id,participantId:x.participantId,participant:names.get(x.participantId)||x.participantId,amount:x.amount,status:x.status,pixKeyType:x.pixKeyType||'',pixKey:x.payoutDestinationEncrypted?decryptSecret(x.payoutDestinationEncrypted):'',masked:x.pixKeyMasked||'',requestedAt:x.payoutRequestedAt||x.createdAt,error:x.payoutError||''}));
+  return send(res,200,{requests});
+ }
  if(req.method==='GET'&&p==='/api/integrations/status'){
   if(me.role!=='admin')err('Somente administração.',403);
   const stripe={provider:'Stripe',configured:Stripe.configured(),webhookConfigured:Stripe.webhookConfigured(),connectEnabled:Stripe.connectEnabled(),storageSafe:payoutStorageSafe(),ready:Stripe.configured()&&Stripe.webhookConfigured()&&Stripe.connectEnabled()&&payoutStorageSafe()};
