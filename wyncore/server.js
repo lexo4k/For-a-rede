@@ -116,20 +116,20 @@ async function resolveRequestActor(req){
 function publicOrigin(req){const host=String(req?.headers?.['x-forwarded-host']||req?.headers?.host||'').split(',')[0].trim();const proto=String(req?.headers?.['x-forwarded-proto']||'https').split(',')[0].trim();if(host&&proto==='https'&&(/\.vercel\.app$/i.test(host)||host==='wyncore.vercel.app'))return 'https://'+host;return String(process.env.WYNCORE_PUBLIC_URL||'https://wyncore.vercel.app').replace(/\/$/,'')}
 
 function validCpf(value){
- const d=String(value||'').replace(/\\D/g,'');if(!/^\\d{11}$/.test(d)||/^([0-9])\\1+$/.test(d))return false;
+ const d=String(value||'').replace(/\D/g,'');if(!/^\d{11}$/.test(d)||/^([0-9])\1+$/.test(d))return false;
  for(let t=9;t<=10;t++){let sum=0;for(let i=0;i<t;i++)sum+=Number(d[i])*(t+1-i);let check=(sum*10)%11;if(check===10)check=0;if(check!==Number(d[t]))return false}return true;
 }
 function validCnpj(value){
- const d=String(value||'').replace(/\\D/g,'');if(!/^\\d{14}$/.test(d)||/^([0-9])\\1+$/.test(d))return false;
+ const d=String(value||'').replace(/\D/g,'');if(!/^\d{14}$/.test(d)||/^([0-9])\1+$/.test(d))return false;
  const digit=(base,weights)=>{let sum=0;for(let i=0;i<weights.length;i++)sum+=Number(base[i])*weights[i];const r=sum%11;return r<2?0:11-r};
  return digit(d.slice(0,12),[5,4,3,2,9,8,7,6,5,4,3,2])===Number(d[12])&&digit(d.slice(0,13),[6,5,4,3,2,9,8,7,6,5,4,3,2])===Number(d[13]);
 }
 function normalizePixKey(type,value){
  const raw=String(value||'').trim();if(!raw||raw.length>180)throw Object.assign(Error('Informe uma chave Pix válida.'),{status:400});
- if(type==='cpf'){const key=raw.replace(/\\D/g,'');if(!validCpf(key))throw Object.assign(Error('CPF inválido. Confira os 11 dígitos.'),{status:400});return key}
- if(type==='cnpj'){const key=raw.replace(/\\D/g,'');if(!validCnpj(key))throw Object.assign(Error('CNPJ inválido. Confira os 14 dígitos.'),{status:400});return key}
- if(type==='email'){const key=raw.toLowerCase();if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(key))throw Object.assign(Error('E-mail Pix inválido.'),{status:400});return key}
- if(type==='phone'){const key=normalizePhone(raw);if(!/^\\d{10,11}$/.test(key))throw Object.assign(Error('Telefone Pix inválido. Informe DDD e número.'),{status:400});return '+55'+key}
+ if(type==='cpf'){const key=raw.replace(/\D/g,'');if(!validCpf(key))throw Object.assign(Error('CPF inválido. Confira os 11 dígitos.'),{status:400});return key}
+ if(type==='cnpj'){const key=raw.replace(/\D/g,'');if(!validCnpj(key))throw Object.assign(Error('CNPJ inválido. Confira os 14 dígitos.'),{status:400});return key}
+ if(type==='email'){const key=raw.toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(key))throw Object.assign(Error('E-mail Pix inválido.'),{status:400});return key}
+ if(type==='phone'){const key=normalizePhone(raw);if(!/^\d{10,11}$/.test(key))throw Object.assign(Error('Telefone Pix inválido. Informe DDD e número.'),{status:400});return '+55'+key}
  if(type==='random'){const key=raw.toLowerCase();if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(key))throw Object.assign(Error('Chave aleatória Pix deve ser um UUID válido.'),{status:400});return key}
  throw Object.assign(Error('Tipo de chave Pix inválido.'),{status:400});
 }
