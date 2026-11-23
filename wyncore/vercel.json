@@ -3,5 +3,11 @@
     "api/[...path].js": {
       "maxDuration": 10
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/work-scan",
+      "schedule": "0 */6 * * *"
+    }
+  ]
 }
